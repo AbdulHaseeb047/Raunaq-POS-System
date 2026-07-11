@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name pos-test-pg \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=pos_test \
+            -p 5432:5432 \
+            postgres:16
+          for i in $(seq 1 30); do
+            docker exec pos-test-pg pg_isready -U postgres && break
+            sleep 1
+          done
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=shared
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build --workspace=front
+
+      - name: Build backend
+        run: npm run build --workspace=backend
+
+      - name: Test backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pos_test?schema=public
+          JWT_SECRET: test-jwt-secret
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret
+        run: |
+          npm run db:generate --workspace=backend
+          npx prisma migrate deploy --schema=backend/prisma/schema.prisma
+          npm run test --workspace=backend

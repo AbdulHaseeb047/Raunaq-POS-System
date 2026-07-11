@@ -1,0 +1,163 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+
+import { ProductListPanel } from '@/components/catalog/ProductListPanel';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageLoader } from '@/components/ui/Spinner';
+import { api } from '@/lib/api-client';
+import type { Category } from '@/types/api';
+
+export function CategoriesPage() {
+  const queryClient = useQueryClient();
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState<Category | null>(null);
+  const [name, setName] = useState('');
+  const [selected, setSelected] = useState<Category | null>(null);
+  const [search, setSearch] = useState('');
+
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
+  const { data, isLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.categories.list(),
+  });
+
+  const { data: productsPage } = useQuery({
+    queryKey: ['products', 'category-counts'],
+    queryFn: () => api.products.list({ pageSize: 500 }),
+  });
+
+  const productCountByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of productsPage?.data ?? []) {
+      const id = p.category?.id;
+      if (id) map.set(id, (map.get(id) ?? 0) + 1);
+    }
+    return map;
+  }, [productsPage]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (data ?? []).filter((c) => !term || c.name.toLowerCase().includes(term));
+  }, [data, search]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      editing ? api.categories.update(editing.id, { name }) : api.categories.create({ name }),
+    onSuccess: () => {
+      setModal(false);
+      setEditing(null);
+      setName('');
+      void queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+
+  const currency = settings?.currency ?? 'PKR';
+
+  if (isLoading) return <PageLoader />;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-5">
+      <div className="lg:col-span-2">
+        <PageHeader
+          title="Categories"
+          subtitle="Click a category to view all linked products"
+          action={
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setName('');
+                setModal(true);
+              }}
+            >
+              Add category
+            </Button>
+          }
+        />
+        <Input
+          className="mb-3"
+          placeholder="Search categories..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto">
+          {filtered.map((cat) => {
+            const count = productCountByCategory.get(cat.id) ?? 0;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelected(cat)}
+                className={`flex w-full items-center justify-between rounded-xl border p-4 text-left transition ${
+                  selected?.id === cat.id
+                    ? 'border-brand-400 bg-brand-50 shadow-sm'
+                    : 'border-border bg-surface hover:border-brand-200'
+                }`}
+              >
+                <div>
+                  <p className="font-semibold text-text">{cat.name}</p>
+                  <p className="text-xs text-text-muted">{count} products</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={cat.isActive ? 'brand' : 'default'}>
+                    {cat.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(cat);
+                      setName(cat.name);
+                      setModal(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </button>
+            );
+          })}
+          {filtered.length === 0 && (
+            <Card className="text-center text-sm text-text-muted">No categories found.</Card>
+          )}
+        </div>
+      </div>
+
+      <div className="lg:col-span-3">
+        {!selected ? (
+          <Card className="flex h-64 items-center justify-center text-text-muted">
+            Select a category to browse its products
+          </Card>
+        ) : (
+          <ProductListPanel
+            title={selected.name}
+            subtitle={`Products in ${selected.name}`}
+            categoryId={selected.id}
+            currency={currency}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </div>
+
+      <Modal
+        open={modal}
+        onClose={() => setModal(false)}
+        title={editing ? 'Edit category' : 'New category'}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModal(false)}>Cancel</Button>
+            <Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button>
+          </>
+        }
+      >
+        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
+      </Modal>
+    </div>
+  );
+}

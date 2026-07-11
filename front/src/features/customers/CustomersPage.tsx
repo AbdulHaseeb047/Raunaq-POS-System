@@ -1,0 +1,455 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+
+import { ReceiptView } from '@/components/billing/ReceiptView';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card, CardHeader } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageLoader } from '@/components/ui/Spinner';
+import { api } from '@/lib/api-client';
+import { FEATURES, hasFeature } from '@/lib/features';
+import { useAuth } from '@/lib/auth';
+import { formatDate, formatMoney } from '@/lib/format';
+import { printSaleReceipt } from '@/lib/print-receipt';
+import type { Customer, LedgerEntry, SaleDetail } from '@/types/api';
+
+function printStatement(customer: Customer, ledger: Array<{ entryType: string; amount: string; balanceAfter: string; createdAt: string }>, currency: string) {
+  const rows = ledger
+    .map(
+      (e) =>
+        `<tr><td>${formatDate(e.createdAt)}</td><td>${e.entryType}</td><td style="text-align:right">${formatMoney(e.amount, currency)}</td><td style="text-align:right">${formatMoney(e.balanceAfter, currency)}</td></tr>`,
+    )
+    .join('');
+  const html = `<!DOCTYPE html><html><head><title>Statement - ${customer.name}</title></head><body>
+    <h2>${customer.name}</h2><p>Phone: ${customer.phone ?? '—'}</p><p>Balance: ${formatMoney(customer.balance, currency)}</p>
+    <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th></tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    w.print();
+  }
+}
+
+export function CustomersPage() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [sortByBalance, setSortByBalance] = useState(true);
+  const [selected, setSelected] = useState<Customer | null>(null);
+  const [modal, setModal] = useState<'create' | 'edit' | 'payment' | null>(null);
+  const [form, setForm] = useState({ name: '', phone: '', creditLimit: '', address: '' });
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [voidReason, setVoidReason] = useState('');
+  const [voidEntryId, setVoidEntryId] = useState<string | null>(null);
+  const [receiptSale, setReceiptSale] = useState<SaleDetail | null>(null);
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+
+  const canEdit = hasFeature(user, FEATURES.CUSTOMERS_EDIT);
+  const canLedger = hasFeature(user, FEATURES.CUSTOMERS_LEDGER_VIEW);
+  const canPay = hasFeature(user, FEATURES.CUSTOMERS_LEDGER_RECORD);
+  const canVoid = hasFeature(user, FEATURES.CUSTOMERS_LEDGER_EDIT);
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['customers', search, sortByBalance],
+    queryFn: () => api.customers.list(search || undefined, 1, 100, sortByBalance ? 'balance' : 'name'),
+  });
+
+  const { data: aging } = useQuery({
+    queryKey: ['reports', 'aging'],
+    queryFn: () => api.reports.udhaarAging(),
+  });
+
+  const { data: ledger, isLoading: ledgerLoading } = useQuery({
+    queryKey: ['ledger', selected?.id],
+    queryFn: () => api.customers.ledger(selected!.id),
+    enabled: !!selected && canLedger,
+  });
+
+  const overdueMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of aging ?? []) {
+      if (parseFloat(row.bucket30_plus) > 0) map.set(row.customerId, row.bucket30_plus);
+    }
+    return map;
+  }, [aging]);
+
+  const customerAging = useMemo(
+    () => (selected ? aging?.find((a) => a.customerId === selected.id) : null),
+    [aging, selected],
+  );
+
+  const saveCustomer = useMutation({
+    mutationFn: () => {
+      const body = {
+        name: form.name,
+        phone: form.phone || null,
+        address: form.address || null,
+        creditLimit: form.creditLimit ? parseFloat(form.creditLimit) : null,
+      };
+      return modal === 'edit' && selected
+        ? api.customers.update(selected.id, body)
+        : api.customers.create(body);
+    },
+    onSuccess: (c) => {
+      setModal(null);
+      setSelected(c);
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+
+  const recordPayment = useMutation({
+    mutationFn: () =>
+      api.customers.payment(selected!.id, {
+        amount: parseFloat(paymentAmount),
+        paymentMethod: 'cash',
+      }),
+    onSuccess: (c) => {
+      setModal(null);
+      setPaymentAmount('');
+      setSelected(c);
+      void queryClient.invalidateQueries({ queryKey: ['ledger', c.id] });
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports', 'aging'] });
+    },
+  });
+
+  const voidEntry = useMutation({
+    mutationFn: () => api.customers.voidLedger(selected!.id, voidEntryId!, voidReason),
+    onSuccess: () => {
+      setVoidEntryId(null);
+      setVoidReason('');
+      void queryClient.invalidateQueries({ queryKey: ['ledger', selected?.id] });
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+
+  const currency = settings?.currency ?? 'PKR';
+
+  const openLedgerReceipt = async (entry: LedgerEntry) => {
+    if (!entry.saleId) return;
+    setLoadingReceipt(true);
+    try {
+      setReceiptSale(await api.sales.get(entry.saleId));
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  if (isLoading) return <PageLoader />;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-5">
+      <div className="lg:col-span-2">
+        <PageHeader
+          title="Udhaar accounts"
+          subtitle="All customers with credit balances — select to view trades"
+          action={
+            canEdit ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setForm({ name: '', phone: '', creditLimit: '', address: '' });
+                  setModal('create');
+                }}
+              >
+                Add customer
+              </Button>
+            ) : undefined
+          }
+        />
+        <div className="mb-3 flex gap-2">
+          <Input
+            className="flex-1"
+            placeholder="Search name or phone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setSortByBalance((v) => !v)}
+          >
+            {sortByBalance ? 'By balance' : 'By name'}
+          </Button>
+        </div>
+        <div className="max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto">
+          {(data?.data ?? []).map((c) => {
+            const overdue = overdueMap.get(c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelected(c)}
+                className={`w-full rounded-xl border p-4 text-left transition-all ${
+                  selected?.id === c.id
+                    ? 'border-brand-400 bg-brand-50 shadow-sm'
+                    : 'border-border bg-surface hover:border-brand-200'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-text">{c.name}</p>
+                    {c.phone && <p className="text-xs text-text-muted">{c.phone}</p>}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {parseFloat(c.balance) > 0 && (
+                      <Badge variant="warning">{formatMoney(c.balance, currency)}</Badge>
+                    )}
+                    {overdue && (
+                      <Badge variant="danger">Overdue {formatMoney(overdue, currency)}</Badge>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="lg:col-span-3">
+        {!selected ? (
+          <Card className="flex h-64 items-center justify-center text-text-muted">
+            Select a customer to view ledger statement
+          </Card>
+        ) : (
+          <>
+            <Card className="mb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-text">{selected.name}</h2>
+                  <p className="text-sm text-text-muted">{selected.phone || 'No phone'}</p>
+                  {selected.creditLimit && (
+                    <p className="mt-1 text-xs text-text-muted">
+                      Credit limit: {formatMoney(selected.creditLimit, currency)}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-text-muted">Outstanding</p>
+                  <p className="text-3xl font-black text-brand-700">
+                    {formatMoney(selected.balance, currency)}
+                  </p>
+                </div>
+              </div>
+
+              {customerAging && parseFloat(customerAging.total) > 0 && (
+                <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-surface-muted p-3 text-sm">
+                  <div>
+                    <p className="text-xs text-text-muted">0–7 days</p>
+                    <p className="font-semibold">{formatMoney(customerAging.bucket0_7, currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-text-muted">8–30 days</p>
+                    <p className="font-semibold">{formatMoney(customerAging.bucket8_30, currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-text-muted">30+ days</p>
+                    <p className="font-semibold text-danger">{formatMoney(customerAging.bucket30_plus, currency)}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {canEdit && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setForm({
+                        name: selected.name,
+                        phone: selected.phone ?? '',
+                        creditLimit: selected.creditLimit ?? '',
+                        address: selected.address ?? '',
+                      });
+                      setModal('edit');
+                    }}
+                  >
+                    Edit / limit
+                  </Button>
+                )}
+                {canPay && parseFloat(selected.balance) > 0 && (
+                  <Button size="sm" onClick={() => setModal('payment')}>
+                    Record payment
+                  </Button>
+                )}
+                {canLedger && ledger && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => printStatement(selected, ledger, currency)}
+                  >
+                    Print statement
+                  </Button>
+                )}
+              </div>
+            </Card>
+
+            {canLedger && (
+              <Card>
+                <CardHeader title="Trade history" subtitle="Click a sale row to view the original receipt" />
+                {ledgerLoading ? (
+                  <PageLoader />
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Description</th>
+                          <th className="px-4 py-3">Due / Age</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3 text-right">Balance</th>
+                          <th className="px-4 py-3" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(ledger ?? []).map((e) => (
+                          <tr
+                            key={e.id}
+                            className={`border-t border-border/60 ${e.saleId ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${e.voidedAt ? 'opacity-50' : ''}`}
+                            onClick={() => e.saleId && void openLedgerReceipt(e)}
+                          >
+                            <td className="px-4 py-3 text-text-muted">{formatDate(e.createdAt)}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium">{e.description}</p>
+                              {e.saleNumber && (
+                                <p className="text-[10px] text-text-muted">Bill {e.saleNumber}</p>
+                              )}
+                              {e.recordedBy && (
+                                <p className="text-[10px] text-text-muted">By {e.recordedBy.fullName}</p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-text-muted">
+                              {e.dueDate && <p>Since {formatDate(e.dueDate)}</p>}
+                              {e.daysOutstanding != null && e.daysOutstanding > 0 && (
+                                <Badge variant={e.daysOutstanding > 30 ? 'danger' : 'warning'}>
+                                  {e.daysOutstanding}d outstanding
+                                </Badge>
+                              )}
+                              {e.remainingAmount && parseFloat(e.remainingAmount) > 0 && (
+                                <p className="mt-1">Due {formatMoney(e.remainingAmount, currency)}</p>
+                              )}
+                            </td>
+                            <td className={`px-4 py-3 text-right font-semibold ${parseFloat(e.amount) < 0 ? 'text-brand-700' : ''}`}>
+                              {formatMoney(e.amount, currency)}
+                            </td>
+                            <td className="px-4 py-3 text-right">{formatMoney(e.balanceAfter, currency)}</td>
+                            <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
+                              {e.saleId && (
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-brand-700 hover:underline"
+                                  onClick={() => void openLedgerReceipt(e)}
+                                >
+                                  Receipt
+                                </button>
+                              )}
+                              {canVoid && e.entryType === 'PAYMENT' && !e.voidedAt && (
+                                <button
+                                  type="button"
+                                  className="ml-2 text-xs text-danger hover:underline"
+                                  onClick={() => setVoidEntryId(e.id)}
+                                >
+                                  Void
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+
+      <Modal
+        open={modal === 'create' || modal === 'edit'}
+        onClose={() => setModal(null)}
+        title={modal === 'edit' ? 'Edit customer' : 'New customer'}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
+            <Button loading={saveCustomer.isPending} onClick={() => saveCustomer.mutate()}>Save</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <Input label="Credit limit" type="number" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: e.target.value })} />
+          <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </div>
+      </Modal>
+
+      <Modal
+        open={modal === 'payment'}
+        onClose={() => setModal(null)}
+        title="Record payment"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
+            <Button loading={recordPayment.isPending} onClick={() => recordPayment.mutate()}>Record</Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-text-muted">
+          Partial payments auto-allocate FIFO to oldest udhaar first.
+        </p>
+        <Input label="Amount" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+      </Modal>
+
+      <Modal
+        open={!!receiptSale}
+        onClose={() => setReceiptSale(null)}
+        title={receiptSale ? `Receipt ${receiptSale.saleNumber}` : 'Receipt'}
+        size="lg"
+        footer={
+          receiptSale ? (
+            <>
+              <Button variant="ghost" onClick={() => setReceiptSale(null)}>Close</Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!receiptSale || !settings) return;
+                  void printSaleReceipt(receiptSale, settings, currency);
+                }}
+              >
+                Print
+              </Button>
+            </>
+          ) : undefined
+        }
+      >
+        {loadingReceipt ? <PageLoader /> : receiptSale ? <ReceiptView sale={receiptSale} currency={currency} /> : null}
+      </Modal>
+
+      <Modal
+        open={!!voidEntryId}
+        onClose={() => setVoidEntryId(null)}
+        title="Void payment"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setVoidEntryId(null)}>Cancel</Button>
+            <Button variant="danger" loading={voidEntry.isPending} onClick={() => voidEntry.mutate()}>Void</Button>
+          </>
+        }
+      >
+        <Input label="Reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+      </Modal>
+    </div>
+  );
+}

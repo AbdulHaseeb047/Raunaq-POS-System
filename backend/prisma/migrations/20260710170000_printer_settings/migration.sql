@@ -1,0 +1,5 @@
+ALTER TABLE "business_settings"
+  ADD COLUMN "printer_mode" VARCHAR(20) NOT NULL DEFAULT 'BROWSER',
+  ADD COLUMN "printer_host" VARCHAR(255),
+  ADD COLUMN "printer_port" INTEGER NOT NULL DEFAULT 9100,
+  ADD COLUMN "printer_paper_width" INTEGER NOT NULL DEFAULT 80;

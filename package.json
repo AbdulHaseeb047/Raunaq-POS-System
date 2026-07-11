@@ -1,0 +1,33 @@
+{
+  "name": "pos-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first POS for SMBs in Pakistan",
+  "workspaces": [
+    "shared",
+    "front",
+    "admin",
+    "backend",
+    "electron"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=front",
+    "dev:admin": "npm run dev --workspace=admin",
+    "dev:api": "npm run dev --workspace=backend",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "dev:platform": "npm run dev:all",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
