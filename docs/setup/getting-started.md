@@ -33,6 +33,7 @@ npm run db:seed --workspace=backend
 ```
 
 Default Super Admin (override via env):
+
 - Email: `admin@pos.local`
 - Password: `ChangeMe123!`
 

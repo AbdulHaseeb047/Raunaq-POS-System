@@ -137,7 +137,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new ApiError('Request timed out. The server is slow or unreachable — try again.', 0, 'TIMEOUT');
+      throw new ApiError(
+        'Request timed out. The server is slow or unreachable — try again.',
+        0,
+        'TIMEOUT',
+      );
     }
     const hint =
       !import.meta.env.DEV && (API_BASE === '/api' || API_BASE.startsWith('/'))
@@ -205,9 +209,7 @@ export const api = {
 
   reports: {
     dashboard: (branchId?: string) =>
-      apiRequest<DashboardSummary>(
-        `/reports/dashboard${branchId ? `?branchId=${branchId}` : ''}`,
-      ),
+      apiRequest<DashboardSummary>(`/reports/dashboard${branchId ? `?branchId=${branchId}` : ''}`),
     dailySales: (date?: string, branchId?: string) => {
       const params = new URLSearchParams();
       if (date) params.set('date', date);
@@ -305,12 +307,14 @@ export const api = {
       }>;
       updateExisting?: boolean;
     }) =>
-      apiRequest<{ created: number; updated: number; skipped: number; errors: Array<{ row: number; message: string }>; total: number }>(
-        '/products/import',
-        { method: 'POST', body: JSON.stringify(body) },
-      ),
-    purgeAll: () =>
-      apiRequest<{ deleted: number }>('/products?confirm=true', { method: 'DELETE' }),
+      apiRequest<{
+        created: number;
+        updated: number;
+        skipped: number;
+        errors: Array<{ row: number; message: string }>;
+        total: number;
+      }>('/products/import', { method: 'POST', body: JSON.stringify(body) }),
+    purgeAll: () => apiRequest<{ deleted: number }>('/products?confirm=true', { method: 'DELETE' }),
   },
 
   brands: {
@@ -319,8 +323,7 @@ export const api = {
       apiRequest<Brand>('/brands', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       apiRequest<Brand>(`/brands/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    delete: (id: string) =>
-      apiRequest<{ success: boolean }>(`/brands/${id}`, { method: 'DELETE' }),
+    delete: (id: string) => apiRequest<{ success: boolean }>(`/brands/${id}`, { method: 'DELETE' }),
   },
 
   suppliers: {
@@ -333,9 +336,15 @@ export const api = {
       apiRequest<{ success: boolean }>(`/suppliers/${id}`, { method: 'DELETE' }),
     ledger: (id: string) => apiRequest<SupplierLedgerEntry[]>(`/suppliers/${id}/ledger`),
     stockIn: (id: string, body: Record<string, unknown>) =>
-      apiRequest<Supplier>(`/suppliers/${id}/stock-in`, { method: 'POST', body: JSON.stringify(body) }),
+      apiRequest<Supplier>(`/suppliers/${id}/stock-in`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
     payment: (id: string, body: Record<string, unknown>) =>
-      apiRequest<Supplier>(`/suppliers/${id}/payments`, { method: 'POST', body: JSON.stringify(body) }),
+      apiRequest<Supplier>(`/suppliers/${id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 
   categories: {
@@ -400,9 +409,7 @@ export const api = {
 
   discounts: {
     list: (includeInactive = false) =>
-      apiRequest<DiscountRule[]>(
-        `/discounts${includeInactive ? '?includeInactive=true' : ''}`,
-      ),
+      apiRequest<DiscountRule[]>(`/discounts${includeInactive ? '?includeInactive=true' : ''}`),
     create: (body: Record<string, unknown>) =>
       apiRequest<DiscountRule>('/discounts', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
@@ -547,7 +554,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
-    updateTenantUser: (tenantId: string, userId: string, body: { isActive?: boolean; fullName?: string }) =>
+    updateTenantUser: (
+      tenantId: string,
+      userId: string,
+      body: { isActive?: boolean; fullName?: string },
+    ) =>
       apiRequest<TenantUser>(`/tenants/${tenantId}/users/${userId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),

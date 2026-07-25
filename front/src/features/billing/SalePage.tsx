@@ -15,7 +15,12 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
-import { calcSaleTotals, canAddToCart, filterAndRankProducts, getStockStatus } from '@/lib/sale-utils';
+import {
+  calcSaleTotals,
+  canAddToCart,
+  filterAndRankProducts,
+  getStockStatus,
+} from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useSaleCatalog } from '@/lib/use-sale-catalog';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
@@ -81,7 +86,9 @@ export function SalePage() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [discountInput, setDiscountInput] = useState('');
   const [selectedRuleId, setSelectedRuleId] = useState('');
-  const [appliedDiscounts, setAppliedDiscounts] = useState<Array<{ ruleId: string; amount: number }>>([]);
+  const [appliedDiscounts, setAppliedDiscounts] = useState<
+    Array<{ ruleId: string; amount: number }>
+  >([]);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
@@ -98,8 +105,14 @@ export function SalePage() {
   const canDiscountUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
   const canPrint = hasFeature(user, FEATURES.BILLING_PRINT_RECEIPT);
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
-  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.categories.list() });
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.categories.list(),
+  });
   const { data: discountRules } = useQuery({
     queryKey: ['discounts', 'active'],
     queryFn: () => api.discounts.list(false),
@@ -200,9 +213,7 @@ export function SalePage() {
         }
         const ex = prev.find((l) => l.product.id === product.id && !l.customName);
         if (ex) {
-          return prev.map((l) =>
-            l.key === ex.key ? { ...l, quantity: l.quantity + qty } : l,
-          );
+          return prev.map((l) => (l.key === ex.key ? { ...l, quantity: l.quantity + qty } : l));
         }
         return [
           ...prev,
@@ -235,8 +246,7 @@ export function SalePage() {
           return;
         }
         const val = parseFloat(rule.value);
-        const disc =
-          rule.discountType === 'PERCENTAGE' ? (totals.subtotal * val) / 100 : val;
+        const disc = rule.discountType === 'PERCENTAGE' ? (totals.subtotal * val) / 100 : val;
         setBillDiscount(Math.round(disc * 100) / 100);
         setDiscountInput('');
         setAppliedDiscounts((prev) => {
@@ -276,7 +286,9 @@ export function SalePage() {
     if (!canDiscountUnlimited && maxDiscountPercent != null) {
       const maxAllowed = (totals.subtotal * maxDiscountPercent) / 100;
       if (disc > maxAllowed) {
-        setError(`Max discount allowed: ${maxDiscountPercent}% (${formatMoney(maxAllowed, currency)})`);
+        setError(
+          `Max discount allowed: ${maxDiscountPercent}% (${formatMoney(maxAllowed, currency)})`,
+        );
         disc = maxAllowed;
       }
     }
@@ -453,9 +465,12 @@ export function SalePage() {
           });
         }
       } else {
-        void api.sales.get(result.sale.id).then(setReceiptSale).catch(() => {
-          setError('Sale saved, but receipt failed to load');
-        });
+        void api.sales
+          .get(result.sale.id)
+          .then(setReceiptSale)
+          .catch(() => {
+            setError('Sale saved, but receipt failed to load');
+          });
       }
 
       window.setTimeout(() => {
@@ -585,9 +600,7 @@ export function SalePage() {
     const q = search.trim();
     if (!q && !categoryId) return [];
 
-    const inCategory = categoryId
-      ? rows.filter((p) => p.category?.id === categoryId)
-      : rows;
+    const inCategory = categoryId ? rows.filter((p) => p.category?.id === categoryId) : rows;
 
     // Keep all matches that contain the keyword, but put "starts with" first.
     const ranked = q ? filterAndRankProducts(inCategory, q) : inCategory;
@@ -640,7 +653,9 @@ export function SalePage() {
 
   const openHoldModal = () => {
     if (cart.length === 0) return;
-    const defaultName = customer?.name ?? `Hold ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const defaultName =
+      customer?.name ??
+      `Hold ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     setHoldLabel(defaultName);
     setShowHoldModal(true);
   };
@@ -664,9 +679,9 @@ export function SalePage() {
           {cart.length > 0 && (
             <>
               {canHoldBills && (
-              <Button size="sm" variant="secondary" onClick={openHoldModal}>
-                Hold bill
-              </Button>
+                <Button size="sm" variant="secondary" onClick={openHoldModal}>
+                  Hold bill
+                </Button>
               )}
               <Button size="sm" variant="danger" onClick={cancelSale}>
                 Cancel
@@ -710,7 +725,9 @@ export function SalePage() {
                 }}
               />
               {showDropdown && search.length >= 1 && (
-                <div className={`absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-white shadow-lg ${productsFetching ? 'opacity-80' : ''}`}>
+                <div
+                  className={`absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-white shadow-lg ${productsFetching ? 'opacity-80' : ''}`}
+                >
                   {searchResults.length === 0 && (
                     <p className="px-3 py-2 text-xs text-text-muted">
                       {productsFetching ? 'Loading products…' : 'No products found'}
@@ -733,9 +750,19 @@ export function SalePage() {
                           </p>
                         </div>
                         <div className="ml-3 text-right">
-                          <p className="text-sm font-semibold text-brand-700">{formatMoney(p.sellPrice, currency)}</p>
+                          <p className="text-sm font-semibold text-brand-700">
+                            {formatMoney(p.sellPrice, currency)}
+                          </p>
                           {p.trackStock && (
-                            <Badge variant={status === 'low' ? 'warning' : status === 'out' ? 'danger' : 'default'}>
+                            <Badge
+                              variant={
+                                status === 'low'
+                                  ? 'warning'
+                                  : status === 'out'
+                                    ? 'danger'
+                                    : 'default'
+                              }
+                            >
                               {p.stockQuantity}
                             </Badge>
                           )}
@@ -752,7 +779,9 @@ export function SalePage() {
                 type="button"
                 onClick={() => setCategoryId('')}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  !categoryId ? 'border-brand-600 bg-brand-600 text-white' : 'border-border bg-white text-text'
+                  !categoryId
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-border bg-white text-text'
                 }`}
               >
                 All
@@ -763,7 +792,9 @@ export function SalePage() {
                   type="button"
                   onClick={() => setCategoryId(c.id)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    categoryId === c.id ? 'border-brand-600 bg-brand-600 text-white' : 'border-border bg-white text-text'
+                    categoryId === c.id
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-border bg-white text-text'
                   }`}
                 >
                   {c.name}
@@ -794,7 +825,9 @@ export function SalePage() {
                     <span className="mt-2 line-clamp-2 text-sm font-semibold">{p.name}</span>
                     <div className="mt-auto flex items-end justify-between gap-2 pt-3 text-xs">
                       <div>
-                        <span className="block font-semibold text-brand-700">{formatMoney(p.sellPrice, currency)}</span>
+                        <span className="block font-semibold text-brand-700">
+                          {formatMoney(p.sellPrice, currency)}
+                        </span>
                         <span className="text-[11px] text-text-muted">/ {p.unit}</span>
                       </div>
                       {p.trackStock && (
@@ -828,7 +861,11 @@ export function SalePage() {
                 <Badge variant="brand">{cart.length}</Badge>
               </div>
               {cart.length > 0 && (
-                <button type="button" className="text-xs font-medium text-danger hover:underline" onClick={cancelSale}>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-danger hover:underline"
+                  onClick={cancelSale}
+                >
                   Clear
                 </button>
               )}
@@ -869,7 +906,9 @@ export function SalePage() {
                     </button>
                   ))}
                   {(customers?.data ?? []).length === 0 && (
-                    <p className="px-3 py-2 text-xs text-text-muted">No customer found. Add from Udhaar page.</p>
+                    <p className="px-3 py-2 text-xs text-text-muted">
+                      No customer found. Add from Udhaar page.
+                    </p>
                   )}
                 </div>
               )}
@@ -879,12 +918,17 @@ export function SalePage() {
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
             {cart.length === 0 ? (
               <div className="flex h-full min-h-[120px] items-center justify-center">
-                <p className="text-center text-xs text-text-muted">Add products from the register</p>
+                <p className="text-center text-xs text-text-muted">
+                  Add products from the register
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
                 {cart.map((line) => (
-                  <div key={line.key} className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5">
+                  <div
+                    key={line.key}
+                    className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <p className="line-clamp-2 text-sm font-medium leading-tight">
                         {line.customName ?? line.product.name}
@@ -908,14 +952,18 @@ export function SalePage() {
                         onClick={() =>
                           setCart((c) =>
                             c.map((l) =>
-                              l.key === line.key ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l,
+                              l.key === line.key
+                                ? { ...l, quantity: Math.max(1, l.quantity - 1) }
+                                : l,
                             ),
                           )
                         }
                       >
                         −
                       </button>
-                      <span className="min-w-[24px] text-center text-sm font-semibold">{line.quantity}</span>
+                      <span className="min-w-[24px] text-center text-sm font-semibold">
+                        {line.quantity}
+                      </span>
                       <button
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
@@ -932,7 +980,10 @@ export function SalePage() {
                         +
                       </button>
                       <span className="ml-auto text-sm font-bold text-brand-700">
-                        {formatMoney(line.quantity * line.unitPrice - line.discountAmount, currency)}
+                        {formatMoney(
+                          line.quantity * line.unitPrice - line.discountAmount,
+                          currency,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -993,8 +1044,12 @@ export function SalePage() {
             </div>
 
             <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
-              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Grand Total</span>
-              <span className="text-2xl font-black text-brand-800">{formatMoney(totals.grandTotal, currency)}</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                Grand Total
+              </span>
+              <span className="text-2xl font-black text-brand-800">
+                {formatMoney(totals.grandTotal, currency)}
+              </span>
             </div>
 
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
@@ -1043,23 +1098,31 @@ export function SalePage() {
       >
         <div className="space-y-5">
           <div className="rounded-2xl bg-slate-700 px-5 py-5 text-white">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">Invoice Total</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
+              Invoice Total
+            </p>
             <div className="mt-2 flex items-end justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-slate-200">Customer: {selectedCustomerLabel}</p>
+                <p className="text-sm font-medium text-slate-200">
+                  Customer: {selectedCustomerLabel}
+                </p>
               </div>
               <p className="text-4xl font-bold">{formatMoney(totals.grandTotal, currency)}</p>
             </div>
           </div>
 
           <div>
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">Select Payment Mode</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
+              Select Payment Mode
+            </p>
             {!customer && (
               <p className="mb-3 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-muted">
                 Walk-in sale — cash only. Select an udhaar customer to enable credit options.
               </p>
             )}
-            <div className={`grid gap-3 ${availablePaymentModes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            <div
+              className={`grid gap-3 ${availablePaymentModes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}
+            >
               {availablePaymentModes.map((mode) => (
                 <button
                   key={mode}
@@ -1075,9 +1138,13 @@ export function SalePage() {
                   }`}
                 >
                   <div className="mb-2 flex justify-center">
-                    <IconWallet className={`h-5 w-5 ${paymentMode === mode ? 'text-brand-700' : 'text-text-muted'}`} />
+                    <IconWallet
+                      className={`h-5 w-5 ${paymentMode === mode ? 'text-brand-700' : 'text-text-muted'}`}
+                    />
                   </div>
-                  <p className={`text-sm font-semibold ${paymentMode === mode ? 'text-brand-800' : 'text-text'}`}>
+                  <p
+                    className={`text-sm font-semibold ${paymentMode === mode ? 'text-brand-800' : 'text-text'}`}
+                  >
                     {paymentModeLabels[mode]}
                   </p>
                 </button>
@@ -1100,7 +1167,12 @@ export function SalePage() {
                 autoFocus
               />
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" type="button" onClick={() => setQuickTender(cashDue)}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setQuickTender(cashDue)}
+                >
                   Exact
                 </Button>
                 {[500, 1000, 5000].map((note) => (
@@ -1179,7 +1251,12 @@ export function SalePage() {
                     placeholder={`Cash due: ${formatMoney(cashDue, currency)}`}
                   />
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" type="button" onClick={() => setQuickTender(cashDue)}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      type="button"
+                      onClick={() => setQuickTender(cashDue)}
+                    >
                       Exact cash
                     </Button>
                   </div>
@@ -1194,7 +1271,12 @@ export function SalePage() {
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input className="sm:col-span-2" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Input
+              className="sm:col-span-2"
+              label="Notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </div>
 
           {creditLimitWarning && (
@@ -1216,17 +1298,17 @@ export function SalePage() {
               Skip receipt
             </Button>
             {canPrint && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                if (!receiptSale || !settings) return;
-                void printSaleReceipt(receiptSale, settings, currency).catch((err) => {
-                  setError(err instanceof Error ? err.message : 'Receipt print failed');
-                });
-              }}
-            >
-              Print receipt
-            </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!receiptSale || !settings) return;
+                  void printSaleReceipt(receiptSale, settings, currency).catch((err) => {
+                    setError(err instanceof Error ? err.message : 'Receipt print failed');
+                  });
+                }}
+              >
+                Print receipt
+              </Button>
             )}
             <Button onClick={() => setReceiptSale(null)}>Done</Button>
           </>
@@ -1300,8 +1382,12 @@ export function SalePage() {
                   <p className="mt-0.5 text-xs text-text-muted">
                     {summary.customerName} · {summary.lineCount} items ({summary.itemCount} pcs)
                   </p>
-                  <p className="text-xs text-text-muted">{new Date(h.updatedAt).toLocaleString()}</p>
-                  <p className="mt-1 text-sm font-bold text-brand-700">{formatMoney(summary.total, currency)}</p>
+                  <p className="text-xs text-text-muted">
+                    {new Date(h.updatedAt).toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-brand-700">
+                    {formatMoney(summary.total, currency)}
+                  </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Button size="sm" onClick={() => resumeHeld(h)}>
@@ -1342,8 +1428,9 @@ export function SalePage() {
         message={
           deleteHeldTarget ? (
             <>
-              Delete held bill <strong className="text-text">{deleteHeldTarget.name ?? 'Untitled'}</strong>?
-              This cannot be recovered.
+              Delete held bill{' '}
+              <strong className="text-text">{deleteHeldTarget.name ?? 'Untitled'}</strong>? This
+              cannot be recovered.
             </>
           ) : null
         }

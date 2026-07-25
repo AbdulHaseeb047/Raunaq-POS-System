@@ -214,7 +214,9 @@ function PlanCard({
 
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-800">{plan.name}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-800">
+            {plan.name}
+          </p>
           {isCurrentPlan && (
             <span className="mt-1 inline-flex rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
               Your plan · {billingCycleLabel(currentCycle)}
@@ -263,7 +265,11 @@ function PlanCard({
             Switch to {billingCycleLabel(cycle)}
           </Button>
         ) : relation === 'upgrade' ? (
-          <Button className="w-full" variant={plan.popular ? 'primary' : 'secondary'} onClick={onUpgrade}>
+          <Button
+            className="w-full"
+            variant={plan.popular ? 'primary' : 'secondary'}
+            onClick={onUpgrade}
+          >
             Upgrade to {plan.name}
           </Button>
         ) : (
@@ -278,7 +284,12 @@ function PlanCard({
 
 function CheckIcon() {
   return (
-    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <svg
+      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden
+    >
       <path
         d="M3.5 8.5l3 3 6-7"
         stroke="currentColor"
@@ -292,7 +303,12 @@ function CheckIcon() {
 
 function DashIcon() {
   return (
-    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted/50" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <svg
+      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted/50"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden
+    >
       <path d="M4 8h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );

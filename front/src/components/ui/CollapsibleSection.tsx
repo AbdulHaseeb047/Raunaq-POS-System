@@ -25,7 +25,9 @@ export function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className={`overflow-hidden rounded-2xl border shadow-[var(--shadow-card)] ${accentStyles[accent]}`}>
+    <section
+      className={`overflow-hidden rounded-2xl border shadow-[var(--shadow-card)] ${accentStyles[accent]}`}
+    >
       <button
         type="button"
         className="flex w-full items-center gap-3 px-5 py-4 text-left transition hover:bg-black/[0.02]"
@@ -42,9 +44,13 @@ export function CollapsibleSection({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-text">{title}</span>
-          {summary && !open && <span className="mt-0.5 block truncate text-xs text-text-muted">{summary}</span>}
+          {summary && !open && (
+            <span className="mt-0.5 block truncate text-xs text-text-muted">{summary}</span>
+          )}
         </span>
-        {summary && open && <span className="hidden shrink-0 text-xs text-text-muted sm:block">{summary}</span>}
+        {summary && open && (
+          <span className="hidden shrink-0 text-xs text-text-muted sm:block">{summary}</span>
+        )}
       </button>
       {open && <div className="border-t border-border/60 px-5 py-4">{children}</div>}
     </section>

@@ -20,8 +20,14 @@ export function TenantDetailPage() {
     enabled: !!tenantId,
   });
 
-  const { data: registry } = useQuery({ queryKey: ['features'], queryFn: () => api.features.list() });
-  const { data: salesReps } = useQuery({ queryKey: ['sales-reps'], queryFn: () => api.admin.salesReps() });
+  const { data: registry } = useQuery({
+    queryKey: ['features'],
+    queryFn: () => api.features.list(),
+  });
+  const { data: salesReps } = useQuery({
+    queryKey: ['sales-reps'],
+    queryFn: () => api.admin.salesReps(),
+  });
   const { data: users } = useQuery({
     queryKey: ['tenant-users', tenantId],
     queryFn: () => api.tenants.users(tenantId!),
@@ -96,17 +102,24 @@ export function TenantDetailPage() {
 
   if (isLoading || !tenant) return <PageLoader />;
 
-  const groupedFeatures = (registry ?? []).reduce<Record<string, NonNullable<typeof registry>>>((acc, f) => {
-    (acc[f.module] ??= []).push(f);
-    return acc;
-  }, {});
+  const groupedFeatures = (registry ?? []).reduce<Record<string, NonNullable<typeof registry>>>(
+    (acc, f) => {
+      (acc[f.module] ??= []).push(f);
+      return acc;
+    },
+    {},
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/clients" className="text-sm text-indigo-600 hover:underline">← Back to clients</Link>
+        <Link to="/clients" className="text-sm text-indigo-600 hover:underline">
+          ← Back to clients
+        </Link>
         <h1 className="mt-2 text-2xl font-bold">{tenant.name}</h1>
-        <p className="text-slate-500">{tenant.slug} · {tenant.tier}</p>
+        <p className="text-slate-500">
+          {tenant.slug} · {tenant.tier}
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -114,18 +127,43 @@ export function TenantDetailPage() {
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-medium">Name</label>
-              <Input value={edit.name || tenant.name} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, name: e.target.value })); }} onFocus={syncEdit} />
+              <Input
+                value={edit.name || tenant.name}
+                onChange={(e) => {
+                  syncEdit();
+                  setEdit((x) => ({ ...x, name: e.target.value }));
+                }}
+                onFocus={syncEdit}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium">Tier</label>
-                <Select value={edit.tier || tenant.tier} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, tier: e.target.value })); }} onFocus={syncEdit}>
-                  {Object.values(TENANT_TIERS).map((t) => <option key={t} value={t}>{t}</option>)}
+                <Select
+                  value={edit.tier || tenant.tier}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, tier: e.target.value }));
+                  }}
+                  onFocus={syncEdit}
+                >
+                  {Object.values(TENANT_TIERS).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">Account status</label>
-                <Select value={edit.isActive ? 'active' : 'inactive'} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, isActive: e.target.value === 'active' })); }} onFocus={syncEdit}>
+                <Select
+                  value={edit.isActive ? 'active' : 'inactive'}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, isActive: e.target.value === 'active' }));
+                  }}
+                  onFocus={syncEdit}
+                >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </Select>
@@ -134,30 +172,70 @@ export function TenantDetailPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium">Fee status</label>
-                <Select value={edit.feeStatus || tenant.feeStatus} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, feeStatus: e.target.value })); }} onFocus={syncEdit}>
-                  {['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => <option key={s} value={s}>{s}</option>)}
+                <Select
+                  value={edit.feeStatus || tenant.feeStatus}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, feeStatus: e.target.value }));
+                  }}
+                  onFocus={syncEdit}
+                >
+                  {['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">Monthly fee</label>
-                <Input type="number" value={edit.monthlyFee} onFocus={syncEdit} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, monthlyFee: e.target.value })); }} />
+                <Input
+                  type="number"
+                  value={edit.monthlyFee}
+                  onFocus={syncEdit}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, monthlyFee: e.target.value }));
+                  }}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium">Fee due date</label>
-                <Input type="date" value={edit.feeDueDate} onFocus={syncEdit} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, feeDueDate: e.target.value })); }} />
+                <Input
+                  type="date"
+                  value={edit.feeDueDate}
+                  onFocus={syncEdit}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, feeDueDate: e.target.value }));
+                  }}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">Sales rep</label>
-                <Select value={edit.acquiredById} onFocus={syncEdit} onChange={(e) => { syncEdit(); setEdit((x) => ({ ...x, acquiredById: e.target.value })); }}>
+                <Select
+                  value={edit.acquiredById}
+                  onFocus={syncEdit}
+                  onChange={(e) => {
+                    syncEdit();
+                    setEdit((x) => ({ ...x, acquiredById: e.target.value }));
+                  }}
+                >
                   <option value="">None</option>
-                  {(salesReps ?? []).map((r) => <option key={r.id} value={r.id}>{r.fullName}</option>)}
+                  {(salesReps ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.fullName}
+                    </option>
+                  ))}
                 </Select>
               </div>
             </div>
             {error && <p className="text-sm text-rose-600">{error}</p>}
-            <Button onClick={() => updateTenant.mutate()} disabled={updateTenant.isPending}>Save changes</Button>
+            <Button onClick={() => updateTenant.mutate()} disabled={updateTenant.isPending}>
+              Save changes
+            </Button>
           </div>
         </Card>
 
@@ -170,7 +248,10 @@ export function TenantDetailPage() {
                   {items!.map((f) => {
                     const on = tenantFeatureSet.has(f.key);
                     return (
-                      <label key={f.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                      <label
+                        key={f.key}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50"
+                      >
                         <input
                           type="checkbox"
                           checked={on}
@@ -194,7 +275,16 @@ export function TenantDetailPage() {
 
       <Card
         title="Users"
-        action={<Button onClick={() => { setUserOpen(true); setError(''); }}>Add user</Button>}
+        action={
+          <Button
+            onClick={() => {
+              setUserOpen(true);
+              setError('');
+            }}
+          >
+            Add user
+          </Button>
+        }
       >
         <table className="w-full text-sm">
           <thead>
@@ -211,7 +301,11 @@ export function TenantDetailPage() {
                 <td className="py-2 font-medium">{u.fullName}</td>
                 <td className="py-2">{u.email}</td>
                 <td className="py-2">{u.role}</td>
-                <td className="py-2"><Badge tone={u.isActive ? 'success' : 'danger'}>{u.isActive ? 'Active' : 'Inactive'}</Badge></td>
+                <td className="py-2">
+                  <Badge tone={u.isActive ? 'success' : 'danger'}>
+                    {u.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -220,25 +314,41 @@ export function TenantDetailPage() {
 
       <Modal open={userOpen} title="Add client user" onClose={() => setUserOpen(false)}>
         <div className="space-y-3">
-          <Input placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} />
-          <Input type="email" placeholder="Email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
-          <Input type="password" placeholder="Password (min 8)" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} />
+          <Input
+            placeholder="Full name"
+            value={userForm.fullName}
+            onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+          />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={userForm.email}
+            onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+          />
+          <Input
+            type="password"
+            placeholder="Password (min 8)"
+            value={userForm.password}
+            onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+          />
           <p className="text-xs font-semibold uppercase text-slate-500">Permissions</p>
           <div className="max-h-40 space-y-1 overflow-y-auto">
-            {(registry ?? []).filter((f) => tenantFeatureSet.has(f.key)).map((f) => (
-              <label key={f.key} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selectedFeatures.includes(f.key)}
-                  onChange={(e) =>
-                    setSelectedFeatures((prev) =>
-                      e.target.checked ? [...prev, f.key] : prev.filter((k) => k !== f.key),
-                    )
-                  }
-                />
-                {f.label}
-              </label>
-            ))}
+            {(registry ?? [])
+              .filter((f) => tenantFeatureSet.has(f.key))
+              .map((f) => (
+                <label key={f.key} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedFeatures.includes(f.key)}
+                    onChange={(e) =>
+                      setSelectedFeatures((prev) =>
+                        e.target.checked ? [...prev, f.key] : prev.filter((k) => k !== f.key),
+                      )
+                    }
+                  />
+                  {f.label}
+                </label>
+              ))}
           </div>
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button

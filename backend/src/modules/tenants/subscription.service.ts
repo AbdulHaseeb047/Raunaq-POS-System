@@ -235,7 +235,9 @@ export async function restoreTenantAccess(
   });
 }
 
-export function startSubscriptionInterval(logger: { info: (obj: unknown, msg?: string) => void }): NodeJS.Timeout {
+export function startSubscriptionInterval(logger: {
+  info: (obj: unknown, msg?: string) => void;
+}): NodeJS.Timeout {
   // Soft-lock needs no sweep; keep a light heartbeat for ops visibility.
   const run = () => {
     logger.info('Subscription soft-lock mode active (no auto hard-expire)');

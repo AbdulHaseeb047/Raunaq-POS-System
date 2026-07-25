@@ -105,7 +105,10 @@ function textLine(text: string): Buffer {
   return Buffer.from(`${text}\n`, 'utf8');
 }
 
-export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: PrinterPaperWidth = 80): Buffer {
+export function buildEscPosReceipt(
+  input: EscPosReceiptInput,
+  paperWidth: PrinterPaperWidth = 80,
+): Buffer {
   const width = lineWidth(paperWidth);
   const r = input.receipt;
   const currency = r.currency || 'PKR';
@@ -159,7 +162,9 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   chunks.push(textLine('PAYMENT SUMMARY'));
   chunks.push(textLine(padLine('Subtotal', formatMoney(input.subtotal, currency), width)));
   if (parseFloat(input.discountTotal) > 0) {
-    chunks.push(textLine(padLine('Discount', `-${formatMoney(input.discountTotal, currency)}`, width)));
+    chunks.push(
+      textLine(padLine('Discount', `-${formatMoney(input.discountTotal, currency)}`, width)),
+    );
   }
   if (parseFloat(input.taxTotal) > 0) {
     chunks.push(textLine(padLine(r.taxLabel, formatMoney(input.taxTotal, currency), width)));
@@ -172,7 +177,11 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   chunks.push(esc(0x1b, 0x45, 1));
   chunks.push(
     textLine(
-      padLine(hasReturns ? 'ORIGINAL TOTAL' : 'GRAND TOTAL', formatMoney(input.grandTotal, currency), width),
+      padLine(
+        hasReturns ? 'ORIGINAL TOTAL' : 'GRAND TOTAL',
+        formatMoney(input.grandTotal, currency),
+        width,
+      ),
     ),
   );
   chunks.push(esc(0x1b, 0x45, 0));
@@ -184,7 +193,9 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
     chunks.push(esc(0x1b, 0x45, 0));
     chunks.push(textLine('Original slip superseded'));
     for (const ret of returns) {
-      chunks.push(textLine(padLine(ret.returnNumber, `-${formatMoney(ret.totalAmount, currency)}`, width)));
+      chunks.push(
+        textLine(padLine(ret.returnNumber, `-${formatMoney(ret.totalAmount, currency)}`, width)),
+      );
       chunks.push(textLine(ret.reason));
       for (const ri of ret.items) {
         chunks.push(
@@ -194,7 +205,9 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
         );
       }
     }
-    chunks.push(textLine(padLine('Returned', `-${formatMoney(returnedTotal.toFixed(2), currency)}`, width)));
+    chunks.push(
+      textLine(padLine('Returned', `-${formatMoney(returnedTotal.toFixed(2), currency)}`, width)),
+    );
     chunks.push(esc(0x1b, 0x45, 1));
     chunks.push(textLine(padLine('NET TOTAL', formatMoney(netTotal.toFixed(2), currency), width)));
     chunks.push(esc(0x1b, 0x45, 0));
@@ -209,14 +222,20 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   chunks.push(textLine(''));
   chunks.push(textLine('PAYMENT'));
   if (isCashSale) {
-    chunks.push(textLine(padLine('Cash from customer', formatMoney(input.amountReceived!, currency), width)));
+    chunks.push(
+      textLine(padLine('Cash from customer', formatMoney(input.amountReceived!, currency), width)),
+    );
     chunks.push(textLine(padLine('Bill total', formatMoney(input.grandTotal, currency), width)));
   } else {
     for (const p of input.payments) {
-      chunks.push(textLine(padLine(paymentLabel(p.paymentMethod), formatMoney(p.amount, currency), width)));
+      chunks.push(
+        textLine(padLine(paymentLabel(p.paymentMethod), formatMoney(p.amount, currency), width)),
+      );
     }
     if (input.amountReceived != null) {
-      chunks.push(textLine(padLine('Cash tendered', formatMoney(input.amountReceived, currency), width)));
+      chunks.push(
+        textLine(padLine('Cash tendered', formatMoney(input.amountReceived, currency), width)),
+      );
     }
   }
   if (showChange) {
@@ -255,7 +274,10 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   return Buffer.concat(chunks);
 }
 
-export function buildEscPosTestReceipt(businessName: string, paperWidth: PrinterPaperWidth = 80): Buffer {
+export function buildEscPosTestReceipt(
+  businessName: string,
+  paperWidth: PrinterPaperWidth = 80,
+): Buffer {
   const width = lineWidth(paperWidth);
   const chunks: Buffer[] = [];
   chunks.push(esc(0x1b, 0x40));

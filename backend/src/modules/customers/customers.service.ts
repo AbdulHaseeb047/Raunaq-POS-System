@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { NotFoundError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
-import { getCustomerLedger, getUdhaarAging, recordPayment, voidLedgerEntry } from './ledger.service.js';
+import {
+  getCustomerLedger,
+  getUdhaarAging,
+  recordPayment,
+  voidLedgerEntry,
+} from './ledger.service.js';
 import { SYNC_TABLES, syncInsert, syncUpdate } from '../sync/sync-payload.js';
 
 export const customerSchema = z.object({
@@ -136,7 +141,9 @@ export async function recordCustomerPayment(
   input: z.infer<typeof recordPaymentSchema>,
   recordedById: string,
 ) {
-  const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId, deletedAt: null } });
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, tenantId, deletedAt: null },
+  });
   if (!customer) throw new NotFoundError('Customer not found');
 
   await prisma.$transaction((tx) =>
@@ -186,7 +193,7 @@ export async function fetchCustomerLedger(tenantId: string, customerId: string) 
           ? `Sale ${e.sale.saleNumber}`
           : e.entryType === 'PAYMENT'
             ? `Payment received${e.paymentMethod ? ` (${e.paymentMethod})` : ''}`
-            : e.notes ?? e.entryType.replaceAll('_', ' '),
+            : (e.notes ?? e.entryType.replaceAll('_', ' ')),
     };
   });
 }

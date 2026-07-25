@@ -17,10 +17,18 @@ import {
   listOutboxIssues,
   retryOutboxEntry,
 } from './outbox-issues.service.js';
-import { getConflictOutboxCount, getPendingOutboxCount, isSyncOutboxActive } from './outbox.service.js';
+import {
+  getConflictOutboxCount,
+  getPendingOutboxCount,
+  isSyncOutboxActive,
+} from './outbox.service.js';
 import { requireSyncApiKey } from './sync-auth.middleware.js';
 import { registerSyncDevice, assertSyncDeviceBinding } from './sync-device.service.js';
-import { getSyncWorkerConfig, isCloudIngestEnabled, isHybridWorkerConfigured } from './sync-config.js';
+import {
+  getSyncWorkerConfig,
+  isCloudIngestEnabled,
+  isHybridWorkerConfigured,
+} from './sync-config.js';
 import { isSyncWorkerRunning, runSyncCycle } from './worker.js';
 
 const registerDeviceSchema = z.object({
@@ -116,7 +124,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
   if (isCloudIngestEnabled()) {
     app.post('/sync/ingest', { preHandler: [requireSyncApiKey] }, async (request) => {
       const parsed = ingestRequestSchema.safeParse(request.body);
-      if (!parsed.success) throw new ValidationError('Invalid ingest payload', parsed.error.flatten());
+      if (!parsed.success)
+        throw new ValidationError('Invalid ingest payload', parsed.error.flatten());
 
       const results = await ingestRemoteChanges(parsed.data, request.syncDevice!);
       return { results };
@@ -146,7 +155,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
           recordVersion: c.recordVersion,
           createdAt: c.createdAt.toISOString(),
         })),
-        nextCursor: changes.length > 0 ? changes[changes.length - 1]!.id : q.cursor ?? null,
+        nextCursor: changes.length > 0 ? changes[changes.length - 1]!.id : (q.cursor ?? null),
       };
     });
 

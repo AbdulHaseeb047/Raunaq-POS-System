@@ -100,7 +100,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       const { prisma } = await import('../core/prisma.js');
       const { serializeSubscriptionFields } = await import('../tenants/subscription.service.js');
       const { appConfig } = await import('../../config.js');
-      const tenant = await prisma.tenant.findFirst({ where: { id: user.tenantId, deletedAt: null } });
+      const tenant = await prisma.tenant.findFirst({
+        where: { id: user.tenantId, deletedAt: null },
+      });
       if (tenant) {
         planEntitlement = {
           ...serializeSubscriptionFields(tenant),

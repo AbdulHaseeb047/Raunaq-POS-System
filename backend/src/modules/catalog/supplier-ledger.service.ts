@@ -146,7 +146,7 @@ export async function getSupplierLedger(tenantId: string, supplierId: string) {
           ? `Stock-in: ${movement.product.name}`
           : e.entryType === 'PAYMENT'
             ? `Payment${e.paymentMethod ? ` (${e.paymentMethod})` : ''}`
-            : e.notes ?? e.entryType,
+            : (e.notes ?? e.entryType),
       stockIn: movement
         ? {
             productId: movement.product.id,

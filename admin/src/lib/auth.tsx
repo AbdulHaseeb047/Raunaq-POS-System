@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { ApiError, api, clearTokens, setTokens, type AuthUser } from './api';
 
@@ -46,7 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.auth.login(email, password);
     if (!canUseAdminApp(res.user)) {
       clearTokens();
-      throw new ApiError('This portal is for Super Admin only. Use the POS app for shop login.', 403);
+      throw new ApiError(
+        'This portal is for Super Admin only. Use the POS app for shop login.',
+        403,
+      );
     }
     setTokens(res.accessToken, res.refreshToken);
     setUser(res.user);

@@ -4,10 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../core/prisma.js';
 import { applySyncChange } from './apply-change.js';
 import { appendChangelog } from './changelog.service.js';
-import {
-  assertSyncDeviceBinding,
-  type AuthenticatedSyncDevice,
-} from './sync-device.service.js';
+import { assertSyncDeviceBinding, type AuthenticatedSyncDevice } from './sync-device.service.js';
 
 const ingestEntrySchema = z.object({
   outboxId: z.string().uuid(),
@@ -74,7 +71,12 @@ export async function ingestRemoteChanges(
 
       results.push({
         outboxId: entry.outboxId,
-        status: outcome.result === 'conflict' ? 'conflict' : outcome.result === 'applied' ? 'accepted' : 'skipped',
+        status:
+          outcome.result === 'conflict'
+            ? 'conflict'
+            : outcome.result === 'applied'
+              ? 'accepted'
+              : 'skipped',
         reason: outcome.reason,
       });
     } catch (error) {

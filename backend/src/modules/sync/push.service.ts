@@ -66,7 +66,11 @@ export async function pushPendingOutbox(config: SyncWorkerConfig): Promise<PushS
         });
         summary.conflicts += 1;
       } else {
-        const next = nextFailedPushState(row.retryCount, config.maxFailedRetries, result.reason ?? 'failed');
+        const next = nextFailedPushState(
+          row.retryCount,
+          config.maxFailedRetries,
+          result.reason ?? 'failed',
+        );
         await tx.syncOutbox.update({
           where: { id: row.id },
           data: {

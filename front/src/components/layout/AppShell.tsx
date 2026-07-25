@@ -52,9 +52,19 @@ const navSections: NavSection[] = [
     title: 'Catalog',
     items: [
       { to: '/inventory', label: 'Inventory', icon: IconBox, feature: FEATURES.INVENTORY_VIEW },
-      { to: '/categories', label: 'Categories', icon: IconGrid, feature: FEATURES.INVENTORY_CATEGORIES },
+      {
+        to: '/categories',
+        label: 'Categories',
+        icon: IconGrid,
+        feature: FEATURES.INVENTORY_CATEGORIES,
+      },
       { to: '/brands', label: 'Brands', icon: IconBrand, feature: FEATURES.INVENTORY_BRANDS },
-      { to: '/suppliers', label: 'Suppliers', icon: IconSupplier, feature: FEATURES.INVENTORY_SUPPLIERS },
+      {
+        to: '/suppliers',
+        label: 'Suppliers',
+        icon: IconSupplier,
+        feature: FEATURES.INVENTORY_SUPPLIERS,
+      },
     ],
   },
   {
@@ -66,9 +76,7 @@ const navSections: NavSection[] = [
   },
   {
     title: 'Insights',
-    items: [
-      { to: '/reports', label: 'Reports', icon: IconChart, feature: FEATURES.REPORTS_VIEW },
-    ],
+    items: [{ to: '/reports', label: 'Reports', icon: IconChart, feature: FEATURES.REPORTS_VIEW }],
   },
 ];
 
@@ -128,8 +136,8 @@ export function AppShell() {
   const { user, branches, branchId, setBranchId } = useAuth();
   const { collapsed, toggle } = useSidebarCollapsed();
 
-  const assignedPlan = (user?.planEntitlement?.assignedPlan ??
-    user?.planEntitlement?.trialPlan) as TenantTier | undefined;
+  const assignedPlan = (user?.planEntitlement?.assignedPlan ?? user?.planEntitlement?.trialPlan) as
+    TenantTier | undefined;
   const assignedKeys = new Set(assignedPlan ? getTierFeaturePreset(assignedPlan) : []);
 
   const visibleSections = navSections
@@ -185,7 +193,9 @@ export function AppShell() {
             ))}
           </nav>
 
-          <div className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}>
+          <div
+            className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}
+          >
             <AccountMenu placement="sidebar" collapsed={collapsed} />
           </div>
         </aside>

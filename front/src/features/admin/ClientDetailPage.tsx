@@ -166,7 +166,11 @@ export function ClientDetailPage() {
       invalidate();
     },
     onError: (e) =>
-      setActionError(e instanceof ApiError ? e.message : 'Could not revoke access. Restart the API server if this persists.'),
+      setActionError(
+        e instanceof ApiError
+          ? e.message
+          : 'Could not revoke access. Restart the API server if this persists.',
+      ),
   });
 
   const restoreAccess = useMutation({
@@ -222,7 +226,8 @@ export function ClientDetailPage() {
     onSuccess: invalidate,
   });
 
-  const portalOpen = tenant?.isActive && tenant.accessStatus !== 'revoked' && tenant.accessStatus !== 'expired';
+  const portalOpen =
+    tenant?.isActive && tenant.accessStatus !== 'revoked' && tenant.accessStatus !== 'expired';
 
   if (isLoading || !tenant) return <PageLoader />;
 
@@ -304,7 +309,8 @@ export function ClientDetailPage() {
 
           <p className="text-xs text-text-muted">
             Trial/subscription end soft-locks the shop to Starter (sales still work). Only{' '}
-            <strong>Revoke portal access</strong> fully blocks login — use that for non-payment or abuse.
+            <strong>Revoke portal access</strong> fully blocks login — use that for non-payment or
+            abuse.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -321,9 +327,17 @@ export function ClientDetailPage() {
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Shop settings" summary={`${form.name} · ${form.tier}`} defaultOpen={false}>
+      <CollapsibleSection
+        title="Shop settings"
+        summary={`${form.name} · ${form.tier}`}
+        defaultOpen={false}
+      >
         <div className="grid gap-4 md:grid-cols-2">
-          <Input label="Shop name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input
+            label="Shop name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
           <Select
             label="Plan pack"
             value={form.tier}
@@ -411,7 +425,9 @@ export function ClientDetailPage() {
               setForm({
                 ...form,
                 subscriptionStartAt: toDatetimeLocalValue(
-                  new Date(ended.getTime() - Number(form.subscriptionDays || 30) * 86400000).toISOString(),
+                  new Date(
+                    ended.getTime() - Number(form.subscriptionDays || 30) * 86400000,
+                  ).toISOString(),
                 ),
               });
             }}
@@ -431,8 +447,8 @@ export function ClientDetailPage() {
         title="Reset features to plan defaults?"
         message={
           <>
-            Changing plan to <strong>{pendingPlanReset}</strong> will reset feature checkboxes to that pack’s
-            defaults. Custom overrides will be replaced.
+            Changing plan to <strong>{pendingPlanReset}</strong> will reset feature checkboxes to
+            that pack’s defaults. Custom overrides will be replaced.
           </>
         }
         confirmLabel="Change plan & reset features"
@@ -470,10 +486,7 @@ export function ClientDetailPage() {
           {(usersData?.data ?? []).map((u) => {
             const expanded = expandedUserId === u.id;
             return (
-              <div
-                key={u.id}
-                className="overflow-hidden rounded-xl border border-border bg-white"
-              >
+              <div key={u.id} className="overflow-hidden rounded-xl border border-border bg-white">
                 <button
                   type="button"
                   className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted/50"
@@ -595,7 +608,9 @@ export function ClientDetailPage() {
           </div>
           {newUser.role === 'STAFF' && tenant.features.length > 0 && (
             <div className="mt-3">
-              <p className="mb-2 text-xs font-medium text-text-muted">Staff features (from tenant plan)</p>
+              <p className="mb-2 text-xs font-medium text-text-muted">
+                Staff features (from tenant plan)
+              </p>
               <div className="flex flex-wrap gap-2">
                 {tenant.features.map((key) => {
                   const def = FEATURE_REGISTRY.find((f) => f.key === key);
@@ -659,7 +674,9 @@ export function ClientDetailPage() {
               variant="danger"
               loading={revokeAccess.isPending}
               onClick={() =>
-                revokeAccess.mutate(revokeReason.trim() || 'Access revoked by platform administrator')
+                revokeAccess.mutate(
+                  revokeReason.trim() || 'Access revoked by platform administrator',
+                )
               }
             >
               Revoke access
@@ -693,7 +710,11 @@ export function ClientDetailPage() {
             <Button variant="secondary" onClick={() => setRestoreOpen(false)}>
               Cancel
             </Button>
-            <Button variant="accent" loading={restoreAccess.isPending} onClick={() => restoreAccess.mutate()}>
+            <Button
+              variant="accent"
+              loading={restoreAccess.isPending}
+              onClick={() => restoreAccess.mutate()}
+            >
               Restore access
             </Button>
           </>
@@ -745,8 +766,8 @@ export function ClientDetailPage() {
             ) : (
               <>
                 Deactivate <strong className="text-text">{userModal.user.fullName}</strong> (
-                {userModal.user.email})? They will be logged out immediately and cannot sign in until
-                restored.
+                {userModal.user.email})? They will be logged out immediately and cannot sign in
+                until restored.
               </>
             )}
           </p>
@@ -764,7 +785,8 @@ export function ClientDetailPage() {
           deleteUserModal ? (
             <>
               Permanently remove <strong className="text-text">{deleteUserModal.fullName}</strong> (
-              {deleteUserModal.email})? This cannot be undone. They will lose all access immediately.
+              {deleteUserModal.email})? This cannot be undone. They will lose all access
+              immediately.
             </>
           ) : null
         }

@@ -6,7 +6,9 @@ export function Button({
   children,
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+}) {
   const styles = {
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700',
     secondary: 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50',
@@ -34,7 +36,11 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   );
 }
 
-export function Select({ className = '', children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({
+  className = '',
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 ${className}`}
@@ -45,7 +51,15 @@ export function Select({ className = '', children, ...props }: React.SelectHTMLA
   );
 }
 
-export function Card({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+export function Card({
+  title,
+  children,
+  action,
+}: {
+  title?: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       {(title || action) && (
@@ -59,14 +73,24 @@ export function Card({ title, children, action }: { title?: string; children: Re
   );
 }
 
-export function Badge({ children, tone = 'default' }: { children: ReactNode; tone?: 'default' | 'success' | 'warning' | 'danger' }) {
+export function Badge({
+  children,
+  tone = 'default',
+}: {
+  children: ReactNode;
+  tone?: 'default' | 'success' | 'warning' | 'danger';
+}) {
   const tones = {
     default: 'bg-slate-100 text-slate-700',
     success: 'bg-emerald-100 text-emerald-800',
     warning: 'bg-amber-100 text-amber-800',
     danger: 'bg-rose-100 text-rose-800',
   };
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]}`}>
+      {children}
+    </span>
+  );
 }
 
 export function PageLoader() {
@@ -77,14 +101,26 @@ export function PageLoader() {
   );
 }
 
-export function Modal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            ✕
+          </button>
         </div>
         {children}
       </div>
@@ -92,7 +128,15 @@ export function Modal({ open, title, onClose, children }: { open: boolean; title
   );
 }
 
-export function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+export function StatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>

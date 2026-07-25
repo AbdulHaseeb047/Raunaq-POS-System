@@ -42,7 +42,11 @@ export function ProductListPanel({
         subtitle={subtitle ?? `${products.length} products`}
         action={
           onClose ? (
-            <button type="button" className="text-xs font-medium text-text-muted hover:text-text" onClick={onClose}>
+            <button
+              type="button"
+              className="text-xs font-medium text-text-muted hover:text-text"
+              onClick={onClose}
+            >
               Close
             </button>
           ) : undefined
@@ -80,7 +84,11 @@ export function ProductListPanel({
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       {p.trackStock ? (
-                        <Badge variant={status === 'low' ? 'warning' : status === 'out' ? 'danger' : 'default'}>
+                        <Badge
+                          variant={
+                            status === 'low' ? 'warning' : status === 'out' ? 'danger' : 'default'
+                          }
+                        >
                           {p.stockQuantity}
                         </Badge>
                       ) : (

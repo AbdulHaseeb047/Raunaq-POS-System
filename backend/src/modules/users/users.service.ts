@@ -81,10 +81,7 @@ export async function createTenantUser(
   createdById: string,
   callerRole: UserRole,
 ) {
-  if (
-    input.role === USER_ROLES.CLIENT_ADMIN &&
-    callerRole !== USER_ROLES.SUPER_ADMIN
-  ) {
+  if (input.role === USER_ROLES.CLIENT_ADMIN && callerRole !== USER_ROLES.SUPER_ADMIN) {
     throw new ForbiddenError('Only Super Admin can create Client Admin users');
   }
 

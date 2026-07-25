@@ -21,7 +21,13 @@ import type { Customer, LedgerEntry, SaleDetail } from '@/types/api';
 
 function printStatement(
   customer: Customer,
-  ledger: Array<{ entryType: string; amount: string; balanceAfter: string; createdAt: string; description?: string }>,
+  ledger: Array<{
+    entryType: string;
+    amount: string;
+    balanceAfter: string;
+    createdAt: string;
+    description?: string;
+  }>,
   currency: string,
   businessName: string,
 ) {
@@ -190,15 +196,13 @@ export function CustomersPage() {
             autoComplete="off"
             onChange={(e) => setSearch(e.target.value)}
           />
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSortByBalance((v) => !v)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => setSortByBalance((v) => !v)}>
             {sortByBalance ? 'By balance' : 'By name'}
           </Button>
         </div>
-        <div className={`max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}>
+        <div
+          className={`max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}
+        >
           {(data?.data ?? []).map((c) => {
             const overdue = overdueMap.get(c.id);
             return (
@@ -262,15 +266,21 @@ export function CustomersPage() {
                 <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-surface-muted p-3 text-sm">
                   <div>
                     <p className="text-xs text-text-muted">0–7 days</p>
-                    <p className="font-semibold">{formatMoney(customerAging.bucket0_7, currency)}</p>
+                    <p className="font-semibold">
+                      {formatMoney(customerAging.bucket0_7, currency)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">8–30 days</p>
-                    <p className="font-semibold">{formatMoney(customerAging.bucket8_30, currency)}</p>
+                    <p className="font-semibold">
+                      {formatMoney(customerAging.bucket8_30, currency)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">30+ days</p>
-                    <p className="font-semibold text-danger">{formatMoney(customerAging.bucket30_plus, currency)}</p>
+                    <p className="font-semibold text-danger">
+                      {formatMoney(customerAging.bucket30_plus, currency)}
+                    </p>
                   </div>
                 </div>
               )}
@@ -331,7 +341,10 @@ export function CustomersPage() {
 
             {canLedger && (
               <Card>
-                <CardHeader title="Trade history" subtitle="Click a sale row to view the original receipt" />
+                <CardHeader
+                  title="Trade history"
+                  subtitle="Click a sale row to view the original receipt"
+                />
                 {ledgerLoading ? (
                   <PageLoader />
                 ) : (
@@ -360,7 +373,9 @@ export function CustomersPage() {
                                 <p className="text-[10px] text-text-muted">Bill {e.saleNumber}</p>
                               )}
                               {e.recordedBy && (
-                                <p className="text-[10px] text-text-muted">By {e.recordedBy.fullName}</p>
+                                <p className="text-[10px] text-text-muted">
+                                  By {e.recordedBy.fullName}
+                                </p>
                               )}
                             </td>
                             <td className="px-4 py-3 text-xs text-text-muted">
@@ -371,14 +386,23 @@ export function CustomersPage() {
                                 </Badge>
                               )}
                               {e.remainingAmount && parseFloat(e.remainingAmount) > 0 && (
-                                <p className="mt-1">Due {formatMoney(e.remainingAmount, currency)}</p>
+                                <p className="mt-1">
+                                  Due {formatMoney(e.remainingAmount, currency)}
+                                </p>
                               )}
                             </td>
-                            <td className={`px-4 py-3 text-right font-semibold ${parseFloat(e.amount) < 0 ? 'text-brand-700' : ''}`}>
+                            <td
+                              className={`px-4 py-3 text-right font-semibold ${parseFloat(e.amount) < 0 ? 'text-brand-700' : ''}`}
+                            >
                               {formatMoney(e.amount, currency)}
                             </td>
-                            <td className="px-4 py-3 text-right">{formatMoney(e.balanceAfter, currency)}</td>
-                            <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
+                            <td className="px-4 py-3 text-right">
+                              {formatMoney(e.balanceAfter, currency)}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-right"
+                              onClick={(ev) => ev.stopPropagation()}
+                            >
                               {e.saleId && (
                                 <button
                                   type="button"
@@ -419,16 +443,37 @@ export function CustomersPage() {
         title={modal === 'edit' ? 'Edit customer' : 'New customer'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
-            <Button loading={saveCustomer.isPending} onClick={() => saveCustomer.mutate()}>Save</Button>
+            <Button variant="ghost" onClick={() => setModal(null)}>
+              Cancel
+            </Button>
+            <Button loading={saveCustomer.isPending} onClick={() => saveCustomer.mutate()}>
+              Save
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Credit limit" type="number" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: e.target.value })} />
-          <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Input
+            label="Phone"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          />
+          <Input
+            label="Credit limit"
+            type="number"
+            value={form.creditLimit}
+            onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
+          />
+          <Input
+            label="Address"
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
         </div>
       </Modal>
 
@@ -438,15 +483,24 @@ export function CustomersPage() {
         title="Record payment"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
-            <Button loading={recordPayment.isPending} onClick={() => recordPayment.mutate()}>Record</Button>
+            <Button variant="ghost" onClick={() => setModal(null)}>
+              Cancel
+            </Button>
+            <Button loading={recordPayment.isPending} onClick={() => recordPayment.mutate()}>
+              Record
+            </Button>
           </>
         }
       >
         <p className="mb-3 text-sm text-text-muted">
           Partial payments auto-allocate FIFO to oldest udhaar first.
         </p>
-        <Input label="Amount" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+        <Input
+          label="Amount"
+          type="number"
+          value={paymentAmount}
+          onChange={(e) => setPaymentAmount(e.target.value)}
+        />
       </Modal>
 
       <Modal
@@ -457,7 +511,9 @@ export function CustomersPage() {
         footer={
           receiptSale ? (
             <>
-              <Button variant="ghost" onClick={() => setReceiptSale(null)}>Close</Button>
+              <Button variant="ghost" onClick={() => setReceiptSale(null)}>
+                Close
+              </Button>
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -471,7 +527,11 @@ export function CustomersPage() {
           ) : undefined
         }
       >
-        {loadingReceipt ? <PageLoader /> : receiptSale ? <ReceiptView sale={receiptSale} currency={currency} /> : null}
+        {loadingReceipt ? (
+          <PageLoader />
+        ) : receiptSale ? (
+          <ReceiptView sale={receiptSale} currency={currency} />
+        ) : null}
       </Modal>
 
       <Modal
@@ -480,8 +540,16 @@ export function CustomersPage() {
         title="Void payment"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setVoidEntryId(null)}>Cancel</Button>
-            <Button variant="danger" loading={voidEntry.isPending} onClick={() => voidEntry.mutate()}>Void</Button>
+            <Button variant="ghost" onClick={() => setVoidEntryId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={voidEntry.isPending}
+              onClick={() => voidEntry.mutate()}
+            >
+              Void
+            </Button>
           </>
         }
       >
@@ -505,7 +573,8 @@ export function CustomersPage() {
             parseFloat(deleteTarget.balance) > 0 ? (
               <>
                 <strong className="text-text">{deleteTarget.name}</strong> still owes{' '}
-                <strong className="text-text">{formatMoney(deleteTarget.balance, currency)}</strong>.
+                <strong className="text-text">{formatMoney(deleteTarget.balance, currency)}</strong>
+                .
                 <span className="mt-2 block text-danger">
                   You cannot delete this customer until the udhaar is fully repaid. Record a payment
                   first, then delete.
@@ -513,8 +582,8 @@ export function CustomersPage() {
               </>
             ) : (
               <>
-                Delete <strong className="text-text">{deleteTarget.name}</strong>? Past sales stay in
-                history; the customer is removed from udhaar accounts.
+                Delete <strong className="text-text">{deleteTarget.name}</strong>? Past sales stay
+                in history; the customer is removed from udhaar accounts.
                 {deleteError && <span className="mt-2 block text-danger">{deleteError}</span>}
               </>
             )

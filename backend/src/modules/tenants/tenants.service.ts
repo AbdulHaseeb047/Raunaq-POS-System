@@ -6,7 +6,11 @@ import type { FeatureKey } from '@pos/shared';
 import { ConflictError, NotFoundError, ValidationError } from '../core/errors.js';
 import { hashPassword } from '../auth/auth.service.js';
 import { prisma } from '../core/prisma.js';
-import { applyTierPreset, getTenantFeatures, setTenantFeatures } from '../permissions/permissions.service.js';
+import {
+  applyTierPreset,
+  getTenantFeatures,
+  setTenantFeatures,
+} from '../permissions/permissions.service.js';
 import { writeAuditLog } from '../audit/audit.service.js';
 import { ensureBusinessSettings } from '../settings/settings.service.js';
 import { createDefaultBranch } from '../core/branch.js';
@@ -149,7 +153,11 @@ export async function getTenantById(tenantId: string) {
     monthlyFee: tenant.monthlyFee?.toFixed(2) ?? null,
     feeDueDate: tenant.feeDueDate?.toISOString().slice(0, 10) ?? null,
     acquiredBy: tenant.acquiredBy
-      ? { id: tenant.acquiredBy.id, name: tenant.acquiredBy.fullName, email: tenant.acquiredBy.email }
+      ? {
+          id: tenant.acquiredBy.id,
+          name: tenant.acquiredBy.fullName,
+          email: tenant.acquiredBy.email,
+        }
       : null,
     createdAt: tenant.createdAt.toISOString(),
     updatedAt: tenant.updatedAt.toISOString(),
@@ -166,7 +174,9 @@ export async function createTenant(input: CreateTenantInput, createdById: string
   }
 
   const subscriptionDays = input.subscriptionDays ?? 30;
-  const subscriptionStartAt = input.subscriptionStartAt ? new Date(input.subscriptionStartAt) : new Date();
+  const subscriptionStartAt = input.subscriptionStartAt
+    ? new Date(input.subscriptionStartAt)
+    : new Date();
   const subscriptionEndsAt = computeSubscriptionEndsAt(subscriptionStartAt, subscriptionDays);
 
   const tenant = await prisma.$transaction(async (tx) => {
@@ -201,7 +211,9 @@ export async function createTenant(input: CreateTenantInput, createdById: string
 
   if (input.featureKeys && input.featureKeys.length > 0) {
     const allowed = new Set(SHIPPED_FEATURE_KEYS);
-    const keys = [...new Set(input.featureKeys.filter((k) => allowed.has(k as FeatureKey)))] as FeatureKey[];
+    const keys = [
+      ...new Set(input.featureKeys.filter((k) => allowed.has(k as FeatureKey))),
+    ] as FeatureKey[];
     if (keys.length === 0) {
       throw new ValidationError('At least one valid feature must be selected');
     }
@@ -251,13 +263,21 @@ export async function updateTenant(
       trialPlanTier:
         input.trialPlanTier === undefined
           ? undefined
-          : input.trialPlanTier ?? input.tier ?? tenant.tier,
+          : (input.trialPlanTier ?? input.tier ?? tenant.tier),
       feeStatus: input.feeStatus,
       monthlyFee: input.monthlyFee,
-      feeDueDate: input.feeDueDate ? new Date(input.feeDueDate) : input.feeDueDate === null ? null : undefined,
+      feeDueDate: input.feeDueDate
+        ? new Date(input.feeDueDate)
+        : input.feeDueDate === null
+          ? null
+          : undefined,
       acquiredById: input.acquiredById,
-      subscriptionStartAt: input.subscriptionStartAt !== undefined ? subscriptionStartAt : undefined,
-      subscriptionEndsAt: input.subscriptionStartAt !== undefined || input.subscriptionDays !== undefined ? subscriptionEndsAt : undefined,
+      subscriptionStartAt:
+        input.subscriptionStartAt !== undefined ? subscriptionStartAt : undefined,
+      subscriptionEndsAt:
+        input.subscriptionStartAt !== undefined || input.subscriptionDays !== undefined
+          ? subscriptionEndsAt
+          : undefined,
       subscriptionDays: input.subscriptionDays,
     },
   });
@@ -290,9 +310,7 @@ export async function updateTenantFeatures(
   });
 
   const allowed = new Set(SHIPPED_FEATURE_KEYS);
-  const newKeys = validKeys
-    .map((k) => k.key as FeatureKey)
-    .filter((k) => allowed.has(k));
+  const newKeys = validKeys.map((k) => k.key as FeatureKey).filter((k) => allowed.has(k));
 
   if (newKeys.length === 0) {
     throw new ValidationError('At least one feature must remain enabled');
@@ -350,7 +368,9 @@ export async function restoreTenantPortalAccess(
   await restoreTenantAccess(
     tenantId,
     {
-      subscriptionStartAt: input.subscriptionStartAt ? new Date(input.subscriptionStartAt) : new Date(),
+      subscriptionStartAt: input.subscriptionStartAt
+        ? new Date(input.subscriptionStartAt)
+        : new Date(),
       subscriptionDays: input.subscriptionDays ?? tenant.subscriptionDays ?? 30,
       feeStatus: input.feeStatus ?? 'ACTIVE',
       clearRevoke: true,

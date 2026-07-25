@@ -319,7 +319,9 @@ function ShopHeader({ receipt }: { receipt: SaleDetail['receipt'] }) {
         />
       )}
       {showName && (
-        <p className="text-sm font-extrabold uppercase tracking-wide text-text">{receipt.businessName}</p>
+        <p className="text-sm font-extrabold uppercase tracking-wide text-text">
+          {receipt.businessName}
+        </p>
       )}
       {receipt.address && <p className="mt-1 text-[9px] text-text-muted">{receipt.address}</p>}
       {receipt.phone && <p className="mt-0.5 text-[9px] text-text-muted">Tel: {receipt.phone}</p>}
@@ -441,7 +443,9 @@ export function ReceiptView({ sale, currency }: { sale: SaleDetail; currency: st
         <>
           <div className="mt-3 border border-text bg-surface-muted px-3 py-2 text-center">
             <p className="text-[11px] font-extrabold tracking-wide">ADJUSTED INVOICE</p>
-            <p className="mt-0.5 text-[9px] text-text-muted">Original slip superseded — returns applied</p>
+            <p className="mt-0.5 text-[9px] text-text-muted">
+              Original slip superseded — returns applied
+            </p>
           </div>
           <div className="mt-3">
             <SectionTitle>Returns</SectionTitle>
@@ -512,7 +516,9 @@ export function ReceiptView({ sale, currency }: { sale: SaleDetail; currency: st
                 <>
                   <div className="flex justify-between py-0.5">
                     <span className="text-text-muted">Cash tendered</span>
-                    <span className="font-semibold">{formatMoney(sale.amountReceived, currency)}</span>
+                    <span className="font-semibold">
+                      {formatMoney(sale.amountReceived, currency)}
+                    </span>
                   </div>
                   {showChange && (
                     <div className="flex justify-between border-t border-border pt-2.5 text-sm font-extrabold leading-normal text-emerald-700">

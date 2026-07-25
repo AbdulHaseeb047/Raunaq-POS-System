@@ -3,7 +3,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../modules/core/errors.js';
 
 function isHttpError(error: Error): error is Error & { statusCode: number; code?: string } {
-  return 'statusCode' in error && typeof (error as { statusCode?: unknown }).statusCode === 'number';
+  return (
+    'statusCode' in error && typeof (error as { statusCode?: unknown }).statusCode === 'number'
+  );
 }
 
 export function registerErrorHandler(app: FastifyInstance): void {
@@ -38,10 +40,16 @@ export function registerErrorHandler(app: FastifyInstance): void {
     let message = 'An unexpected error occurred';
     if (process.env.NODE_ENV !== 'production') {
       message = error.message || message;
-    } else if (prismaCode === 'P2028' || /Transaction already closed|expired transaction/i.test(error.message)) {
+    } else if (
+      prismaCode === 'P2028' ||
+      /Transaction already closed|expired transaction/i.test(error.message)
+    ) {
       message =
         'Sale timed out talking to the database. Redeploy with the latest backend (longer TX timeout) and prefer a DB region close to Railway.';
-    } else if (prismaCode.startsWith('P') || /row-level security|RLS|set_config/i.test(error.message)) {
+    } else if (
+      prismaCode.startsWith('P') ||
+      /row-level security|RLS|set_config/i.test(error.message)
+    ) {
       message =
         'Database rejected the sale (RLS/connection). Ensure migrate deploy ran and DATABASE_URL is not a transaction pooler (:6543).';
     } else if (/prepared statement|pgbouncer|40P01/i.test(error.message)) {

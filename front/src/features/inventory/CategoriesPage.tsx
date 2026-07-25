@@ -22,7 +22,10 @@ export function CategoriesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [search, setSearch] = useState('');
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
   const { data, isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.categories.list(),

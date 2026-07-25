@@ -19,7 +19,8 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'STARTER',
     name: 'Starter',
-    tagline: 'Core billing for a single counter. Best for small shops just getting started with digital billing.',
+    tagline:
+      'Core billing for a single counter. Best for small shops just getting started with digital billing.',
     monthlyPrice: 2500,
     yearlyPrice: 25000,
     included: [
@@ -131,12 +132,14 @@ export function relationToPlan(current: PlanId, target: PlanId): PlanRelation {
 }
 
 /** Prefer assigned/paid plan for “your plan”; fall back to effective. */
-export function resolveDisplayPlan(entitlement?: {
-  assignedPlan?: string;
-  trialPlan?: string;
-  effectivePlan?: string;
-  tier?: string;
-} | null): PlanId {
+export function resolveDisplayPlan(
+  entitlement?: {
+    assignedPlan?: string;
+    trialPlan?: string;
+    effectivePlan?: string;
+    tier?: string;
+  } | null,
+): PlanId {
   return toPlanId(
     entitlement?.assignedPlan ??
       entitlement?.trialPlan ??

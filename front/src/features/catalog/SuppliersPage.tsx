@@ -34,8 +34,14 @@ export function SuppliersPage() {
   const [paymentForm, setPaymentForm] = useState({ amount: '', notes: '' });
   const [slipEntry, setSlipEntry] = useState<SupplierLedgerEntry | null>(null);
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
-  const { data, isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: () => api.suppliers.list() });
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
+  const { data, isLoading } = useQuery({
+    queryKey: ['suppliers'],
+    queryFn: () => api.suppliers.list(),
+  });
 
   const { data: ledger, isLoading: ledgerLoading } = useQuery({
     queryKey: ['supplier-ledger', selected?.id],
@@ -108,9 +114,7 @@ export function SuppliersPage() {
     },
   });
 
-  const supplierProducts = (products?.data ?? []).filter(
-    (p) => p.supplier?.id === stockModal?.id,
-  );
+  const supplierProducts = (products?.data ?? []).filter((p) => p.supplier?.id === stockModal?.id);
 
   if (isLoading) return <PageLoader />;
 
@@ -170,12 +174,18 @@ export function SuppliersPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold">{selected.name}</h2>
-                  <p className="text-sm text-text-muted">{selected.phone} {selected.email && `· ${selected.email}`}</p>
-                  {selected.address && <p className="text-sm text-text-muted">{selected.address}</p>}
+                  <p className="text-sm text-text-muted">
+                    {selected.phone} {selected.email && `· ${selected.email}`}
+                  </p>
+                  {selected.address && (
+                    <p className="text-sm text-text-muted">{selected.address}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-text-muted">Outstanding payable</p>
-                  <p className="text-3xl font-black text-brand-700">{formatMoney(selected.balance, currency)}</p>
+                  <p className="text-3xl font-black text-brand-700">
+                    {formatMoney(selected.balance, currency)}
+                  </p>
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -212,7 +222,10 @@ export function SuppliersPage() {
             </Card>
 
             <Card>
-              <CardHeader title="Purchase & payment log" subtitle="Click a stock-in row to view the purchase slip" />
+              <CardHeader
+                title="Purchase & payment log"
+                subtitle="Click a stock-in row to view the purchase slip"
+              />
               {ledgerLoading ? (
                 <PageLoader />
               ) : (
@@ -244,12 +257,21 @@ export function SuppliersPage() {
                               </p>
                             )}
                             {e.recordedBy && (
-                              <p className="text-[10px] text-text-muted">By {e.recordedBy.fullName}</p>
+                              <p className="text-[10px] text-text-muted">
+                                By {e.recordedBy.fullName}
+                              </p>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold">{formatMoney(e.amount, currency)}</td>
-                          <td className="px-4 py-3 text-right">{formatMoney(e.balanceAfter, currency)}</td>
-                          <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
+                          <td className="px-4 py-3 text-right font-semibold">
+                            {formatMoney(e.amount, currency)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {formatMoney(e.balanceAfter, currency)}
+                          </td>
+                          <td
+                            className="px-4 py-3 text-right"
+                            onClick={(ev) => ev.stopPropagation()}
+                          >
                             {e.stockIn && (
                               <button
                                 type="button"
@@ -295,13 +317,42 @@ export function SuppliersPage() {
         )}
       </Modal>
 
-      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit supplier' : 'New supplier'} footer={<Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button>}>
+      <Modal
+        open={modal}
+        onClose={() => setModal(false)}
+        title={editing ? 'Edit supplier' : 'New supplier'}
+        footer={
+          <Button loading={save.isPending} onClick={() => save.mutate()}>
+            Save
+          </Button>
+        }
+      >
         <div className="space-y-3">
-          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          <Input label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Input
+            label="Phone"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          />
+          <Input
+            label="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <Input
+            label="Address"
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+          <Input
+            label="Notes"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          />
         </div>
       </Modal>
 
@@ -311,8 +362,12 @@ export function SuppliersPage() {
         title={`Stock-in — ${stockModal?.name}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStockModal(null)}>Cancel</Button>
-            <Button loading={stockIn.isPending} onClick={() => stockIn.mutate()}>Record stock-in</Button>
+            <Button variant="ghost" onClick={() => setStockModal(null)}>
+              Cancel
+            </Button>
+            <Button loading={stockIn.isPending} onClick={() => stockIn.mutate()}>
+              Record stock-in
+            </Button>
           </>
         }
       >
@@ -335,13 +390,33 @@ export function SuppliersPage() {
                 : (products?.data ?? []).map((p) => ({ value: p.id, label: p.name }))),
             ]}
           />
-          <Input label="Quantity" type="number" min={0} value={stockForm.quantity} onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })} />
-          <Input label="Cost price (per unit)" type="number" min={0} value={stockForm.costPrice} onChange={(e) => setStockForm({ ...stockForm, costPrice: e.target.value })} />
+          <Input
+            label="Quantity"
+            type="number"
+            min={0}
+            value={stockForm.quantity}
+            onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })}
+          />
+          <Input
+            label="Cost price (per unit)"
+            type="number"
+            min={0}
+            value={stockForm.costPrice}
+            onChange={(e) => setStockForm({ ...stockForm, costPrice: e.target.value })}
+          />
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={stockForm.recordPayable} onChange={(e) => setStockForm({ ...stockForm, recordPayable: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={stockForm.recordPayable}
+              onChange={(e) => setStockForm({ ...stockForm, recordPayable: e.target.checked })}
+            />
             Record payable to supplier (qty × cost)
           </label>
-          <Input label="Notes" value={stockForm.notes} onChange={(e) => setStockForm({ ...stockForm, notes: e.target.value })} />
+          <Input
+            label="Notes"
+            value={stockForm.notes}
+            onChange={(e) => setStockForm({ ...stockForm, notes: e.target.value })}
+          />
         </div>
       </Modal>
 
@@ -351,13 +426,27 @@ export function SuppliersPage() {
         title={`Pay supplier — ${paymentModal?.name}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setPaymentModal(null)}>Cancel</Button>
-            <Button loading={recordPayment.isPending} onClick={() => recordPayment.mutate()}>Record payment</Button>
+            <Button variant="ghost" onClick={() => setPaymentModal(null)}>
+              Cancel
+            </Button>
+            <Button loading={recordPayment.isPending} onClick={() => recordPayment.mutate()}>
+              Record payment
+            </Button>
           </>
         }
       >
-        <Input label="Amount" type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
-        <Input className="mt-3" label="Notes" value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
+        <Input
+          label="Amount"
+          type="number"
+          value={paymentForm.amount}
+          onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+        />
+        <Input
+          className="mt-3"
+          label="Notes"
+          value={paymentForm.notes}
+          onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+        />
       </Modal>
 
       <ConfirmDialog
@@ -370,8 +459,8 @@ export function SuppliersPage() {
         message={
           deleteTarget ? (
             <>
-              Delete supplier <strong className="text-text">{deleteTarget.name}</strong>? Purchase history
-              will remain but the supplier will be removed from active lists.
+              Delete supplier <strong className="text-text">{deleteTarget.name}</strong>? Purchase
+              history will remain but the supplier will be removed from active lists.
             </>
           ) : null
         }

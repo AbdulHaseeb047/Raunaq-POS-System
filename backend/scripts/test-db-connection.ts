@@ -34,7 +34,10 @@ console.log('  user:', envUser);
 console.log('  host:', envHost);
 console.log('  port:', envPort);
 console.log('  database:', envDb);
-console.log('  password length:', process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).password.length : 0);
+console.log(
+  '  password length:',
+  process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).password.length : 0,
+);
 
 const prisma = new PrismaClient();
 try {

@@ -13,7 +13,9 @@ export function RaunaqLogo({
     <div className={`flex min-w-0 items-center gap-1.5 ${className}`}>
       <RaunaqMark size={34} tone={tone} className="shrink-0" />
       <div className="min-w-0 leading-none">
-        <p className={`truncate text-[14px] font-bold ${tone === 'dark' ? 'text-white' : 'text-text'}`}>
+        <p
+          className={`truncate text-[14px] font-bold ${tone === 'dark' ? 'text-white' : 'text-text'}`}
+        >
           {BRAND.name}
         </p>
         <p
@@ -28,7 +30,13 @@ export function RaunaqLogo({
   );
 }
 
-export function RaunaqLogoFull({ tone = 'light', className = '' }: { tone?: 'light' | 'dark'; className?: string }) {
+export function RaunaqLogoFull({
+  tone = 'light',
+  className = '',
+}: {
+  tone?: 'light' | 'dark';
+  className?: string;
+}) {
   return (
     <img
       src={tone === 'dark' ? '/raunaq-logo-dark.png' : '/raunaq-logo-light.png'}

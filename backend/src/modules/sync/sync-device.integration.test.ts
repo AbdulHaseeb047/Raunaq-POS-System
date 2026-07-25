@@ -92,6 +92,8 @@ describeIfDb('sync device auth integration', () => {
   it('binds tenant and device ids strictly', () => {
     const device = { id: '1', tenantId: fixture.tenantId, deviceId };
     expect(() => assertSyncDeviceBinding(device, fixture.tenantId, deviceId)).not.toThrow();
-    expect(() => assertSyncDeviceBinding(device, fixture.tenantId, 'other-device')).toThrow(ForbiddenError);
+    expect(() => assertSyncDeviceBinding(device, fixture.tenantId, 'other-device')).toThrow(
+      ForbiddenError,
+    );
   });
 });

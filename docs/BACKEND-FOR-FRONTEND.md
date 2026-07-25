@@ -28,15 +28,15 @@ Complete reference for designing and building the POS frontend against the Phase
 
 ## 1. Quick start for frontend
 
-| Concern | Detail |
-|--------|--------|
-| API style | REST JSON, no GraphQL |
-| Auth | Bearer JWT in `Authorization` header |
-| Tenant scope | From JWT (`tenantId` on user) — **never** send tenant ID in body for client admin |
-| Branch context | Optional `X-Branch-Id` header on sale-creating requests |
-| State fetching | TanStack Query recommended (per ARCHITECTURE.md) |
-| Feature gating | Check `user.features[]` from login/me; hide nav items without keys |
-| Super Admin | Separate admin portal (not in Phase 1 front shell); uses `/tenants/*` routes |
+| Concern        | Detail                                                                            |
+| -------------- | --------------------------------------------------------------------------------- |
+| API style      | REST JSON, no GraphQL                                                             |
+| Auth           | Bearer JWT in `Authorization` header                                              |
+| Tenant scope   | From JWT (`tenantId` on user) — **never** send tenant ID in body for client admin |
+| Branch context | Optional `X-Branch-Id` header on sale-creating requests                           |
+| State fetching | TanStack Query recommended (per ARCHITECTURE.md)                                  |
+| Feature gating | Check `user.features[]` from login/me; hide nav items without keys                |
+| Super Admin    | Separate admin portal (not in Phase 1 front shell); uses `/tenants/*` routes      |
 
 **Health check (no auth):**
 
@@ -162,11 +162,11 @@ Default access TTL: **15m**. Refresh TTL: **7d**.
 
 ### Roles
 
-| Role | Who | Tenant in URL |
-|------|-----|---------------|
-| `SUPER_ADMIN` | Platform operator | Yes (`/tenants/:tenantId/...`) |
-| `CLIENT_ADMIN` | Shop owner/manager | No — from JWT only |
-| `STAFF` | Cashier / floor staff | No — from JWT only |
+| Role           | Who                   | Tenant in URL                  |
+| -------------- | --------------------- | ------------------------------ |
+| `SUPER_ADMIN`  | Platform operator     | Yes (`/tenants/:tenantId/...`) |
+| `CLIENT_ADMIN` | Shop owner/manager    | No — from JWT only             |
+| `STAFF`        | Cashier / floor staff | No — from JWT only             |
 
 - **Super Admin** bypasses all feature checks.
 - **Client Admin** has all features enabled for the tenant (no per-feature list on user).
@@ -174,29 +174,29 @@ Default access TTL: **15m**. Refresh TTL: **7d**.
 
 ### Feature keys (import from `@pos/shared`)
 
-| Key | UI area |
-|-----|---------|
-| `billing.create_sale` | POS / new sale, sales list |
-| `billing.void_sale` | Void sale action |
-| `billing.discount` | Line/bill discounts, discount rules page |
-| `billing.discount_unlimited` | Ignore `maxDiscountPercentStaff` cap |
-| `billing.print_receipt` | Receipt print toggle (backend stores flag; printing is client-side) |
-| `inventory.view` | Products list, barcode lookup |
-| `inventory.edit` | Create/update products |
-| `inventory.categories` | Categories page |
-| `inventory.stock_adjust` | Stock adjustment modal |
-| `customers.view` | Customers list/detail |
-| `customers.edit` | Create/update customers |
-| `customers.ledger_view` | Udhaar ledger tab |
-| `customers.ledger_record` | Record payment |
-| `customers.ledger_edit` | Void ledger payment |
-| `reports.view` | Dashboard stats, daily sales, udhaar aging |
-| `reports.analytics_dashboard` | Reserved for richer analytics (Phase 2) |
-| `users.manage` | Staff management page |
-| `settings.view` | Settings page (read) |
-| `settings.edit` | Settings page (write) |
-| `multi_branch.access` | Branch list/create, branch switcher |
-| `delivery.*`, `fbr.integration` | Not implemented in Phase 1 |
+| Key                             | UI area                                                             |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `billing.create_sale`           | POS / new sale, sales list                                          |
+| `billing.void_sale`             | Void sale action                                                    |
+| `billing.discount`              | Line/bill discounts, discount rules page                            |
+| `billing.discount_unlimited`    | Ignore `maxDiscountPercentStaff` cap                                |
+| `billing.print_receipt`         | Receipt print toggle (backend stores flag; printing is client-side) |
+| `inventory.view`                | Products list, barcode lookup                                       |
+| `inventory.edit`                | Create/update products                                              |
+| `inventory.categories`          | Categories page                                                     |
+| `inventory.stock_adjust`        | Stock adjustment modal                                              |
+| `customers.view`                | Customers list/detail                                               |
+| `customers.edit`                | Create/update customers                                             |
+| `customers.ledger_view`         | Udhaar ledger tab                                                   |
+| `customers.ledger_record`       | Record payment                                                      |
+| `customers.ledger_edit`         | Void ledger payment                                                 |
+| `reports.view`                  | Dashboard stats, daily sales, udhaar aging                          |
+| `reports.analytics_dashboard`   | Reserved for richer analytics (Phase 2)                             |
+| `users.manage`                  | Staff management page                                               |
+| `settings.view`                 | Settings page (read)                                                |
+| `settings.edit`                 | Settings page (write)                                               |
+| `multi_branch.access`           | Branch list/create, branch switcher                                 |
+| `delivery.*`, `fbr.integration` | Not implemented in Phase 1                                          |
 
 ### Feature registry (for admin UIs)
 
@@ -220,17 +220,17 @@ Returns all active features from DB:
 
 ### Frontend route gates (Phase 1 shell)
 
-| Route | Feature | Role |
-|-------|---------|------|
-| `/` (dashboard) | — | any authenticated |
-| `/sale` | `billing.create_sale` | staff+ |
-| `/inventory` | `inventory.view` | staff+ |
-| `/categories` | `inventory.categories` | staff+ |
-| `/customers` | `customers.view` | staff+ |
-| `/discounts` | `billing.discount` | staff+ |
-| `/reports` | `reports.view` | staff+ |
-| `/staff` | `users.manage` | client admin |
-| `/settings` | `settings.view` | client admin |
+| Route           | Feature                | Role              |
+| --------------- | ---------------------- | ----------------- |
+| `/` (dashboard) | —                      | any authenticated |
+| `/sale`         | `billing.create_sale`  | staff+            |
+| `/inventory`    | `inventory.view`       | staff+            |
+| `/categories`   | `inventory.categories` | staff+            |
+| `/customers`    | `customers.view`       | staff+            |
+| `/discounts`    | `billing.discount`     | staff+            |
+| `/reports`      | `reports.view`         | staff+            |
+| `/staff`        | `users.manage`         | client admin      |
+| `/settings`     | `settings.view`        | client admin      |
 
 Add a **sync issues** screen or banner when `deploymentMode === 'hybrid'` (see [§12](#12-hybrid-sync-ui-contract)).
 
@@ -240,11 +240,11 @@ Add a **sync issues** screen or banner when `deploymentMode === 'hybrid'` (see [
 
 ### Headers
 
-| Header | When | Value |
-|--------|------|-------|
-| `Authorization` | All protected routes | `Bearer <accessToken>` |
-| `Content-Type` | POST/PATCH/PUT | `application/json` |
-| `X-Branch-Id` | Creating sales (and any branch-scoped write) | UUID of active branch |
+| Header          | When                                         | Value                  |
+| --------------- | -------------------------------------------- | ---------------------- |
+| `Authorization` | All protected routes                         | `Bearer <accessToken>` |
+| `Content-Type`  | POST/PATCH/PUT                               | `application/json`     |
+| `X-Branch-Id`   | Creating sales (and any branch-scoped write) | UUID of active branch  |
 
 ### Branch resolution (`X-Branch-Id`)
 
@@ -284,15 +284,15 @@ All application errors return JSON:
 }
 ```
 
-| HTTP | Code | When |
-|------|------|------|
-| 400 | `VALIDATION_ERROR` | Zod validation; `details` has field errors |
-| 401 | `UNAUTHORIZED` | Missing/invalid token |
-| 403 | `FORBIDDEN` | Role/feature/branch denied |
-| 403 | `PASSWORD_CHANGE_REQUIRED` | Must change password first |
-| 404 | `NOT_FOUND` | Entity missing |
-| 409 | `CONFLICT` | Duplicate slug, already voided, etc. |
-| 500 | — | Unexpected server error |
+| HTTP | Code                       | When                                       |
+| ---- | -------------------------- | ------------------------------------------ |
+| 400  | `VALIDATION_ERROR`         | Zod validation; `details` has field errors |
+| 401  | `UNAUTHORIZED`             | Missing/invalid token                      |
+| 403  | `FORBIDDEN`                | Role/feature/branch denied                 |
+| 403  | `PASSWORD_CHANGE_REQUIRED` | Must change password first                 |
+| 404  | `NOT_FOUND`                | Entity missing                             |
+| 409  | `CONFLICT`                 | Duplicate slug, already voided, etc.       |
+| 500  | —                          | Unexpected server error                    |
 
 Frontend: surface `message`; use `code` for branching (e.g. force password-change modal).
 
@@ -304,7 +304,7 @@ Frontend: surface `message`; use `code` for branching (e.g. force password-chang
 
 ```json
 {
-  "data": [ /* items */ ],
+  "data": [/* items */],
   "meta": {
     "total": 120,
     "page": 1,
@@ -316,13 +316,13 @@ Frontend: surface `message`; use `code` for branching (e.g. force password-chang
 
 ### Query params
 
-| Param | Used on | Default |
-|-------|---------|---------|
-| `page` | users, customers, products, sales, tenants | 1 |
-| `pageSize` | same | 20 (users/sales/tenants) or 50 (customers/products) |
-| `search` | customers, products | — |
-| `branchId` | reports only | optional filter |
-| `date` | daily sales report | today (ISO date `YYYY-MM-DD`) |
+| Param      | Used on                                    | Default                                             |
+| ---------- | ------------------------------------------ | --------------------------------------------------- |
+| `page`     | users, customers, products, sales, tenants | 1                                                   |
+| `pageSize` | same                                       | 20 (users/sales/tenants) or 50 (customers/products) |
+| `search`   | customers, products                        | —                                                   |
+| `branchId` | reports only                               | optional filter                                     |
+| `date`     | daily sales report                         | today (ISO date `YYYY-MM-DD`)                       |
 
 ---
 
@@ -339,86 +339,86 @@ Frontend: surface `message`; use `code` for branching (e.g. force password-chang
 
 ### Dashboard (`/`)
 
-| Widget | API |
-|--------|-----|
-| Today's sales total | `GET /reports/dashboard` → `todaySalesTotal` |
-| Transaction count | → `todayTransactionCount` |
-| Low stock alerts | → `lowStockAlerts[]` |
-| Outstanding udhaar | → `outstandingUdhaar` |
-| Branch filter (optional) | `?branchId=<uuid>` |
-| Sync banner (hybrid) | `GET /sync/status` |
+| Widget                   | API                                          |
+| ------------------------ | -------------------------------------------- |
+| Today's sales total      | `GET /reports/dashboard` → `todaySalesTotal` |
+| Transaction count        | → `todayTransactionCount`                    |
+| Low stock alerts         | → `lowStockAlerts[]`                         |
+| Outstanding udhaar       | → `outstandingUdhaar`                        |
+| Branch filter (optional) | `?branchId=<uuid>`                           |
+| Sync banner (hybrid)     | `GET /sync/status`                           |
 
 ### New Sale (`/sale`)
 
-| Action | API |
-|--------|-----|
-| Product search / scan | `GET /products?search=` or `GET /products/barcode/:barcode` |
-| Customer picker | `GET /customers?search=` |
-| Active discounts (optional) | `GET /discounts` |
-| Staff discount cap | `GET /settings` → `maxDiscountPercentStaff` |
-| Complete sale | `POST /sales` + `X-Branch-Id` |
-| Recent sales sidebar | `GET /sales?page=1&pageSize=20` |
-| Void sale | `POST /sales/:saleId/void` |
+| Action                      | API                                                         |
+| --------------------------- | ----------------------------------------------------------- |
+| Product search / scan       | `GET /products?search=` or `GET /products/barcode/:barcode` |
+| Customer picker             | `GET /customers?search=`                                    |
+| Active discounts (optional) | `GET /discounts`                                            |
+| Staff discount cap          | `GET /settings` → `maxDiscountPercentStaff`                 |
+| Complete sale               | `POST /sales` + `X-Branch-Id`                               |
+| Recent sales sidebar        | `GET /sales?page=1&pageSize=20`                             |
+| Void sale                   | `POST /sales/:saleId/void`                                  |
 
 ### Inventory (`/inventory`)
 
-| Action | API |
-|--------|-----|
-| List | `GET /products` |
+| Action        | API                                     |
+| ------------- | --------------------------------------- |
+| List          | `GET /products`                         |
 | Create / edit | `POST /products`, `PATCH /products/:id` |
-| Stock adjust | `POST /products/:id/stock` |
+| Stock adjust  | `POST /products/:id/stock`              |
 
 ### Categories (`/categories`)
 
-| Action | API |
-|--------|-----|
-| List | `GET /categories` |
+| Action        | API                                         |
+| ------------- | ------------------------------------------- |
+| List          | `GET /categories`                           |
 | Create / edit | `POST /categories`, `PATCH /categories/:id` |
 
 ### Customers (`/customers`)
 
-| Action | API |
-|--------|-----|
-| List / search | `GET /customers` |
-| Detail | `GET /customers/:id` |
-| Create / edit | `POST /customers`, `PATCH /customers/:id` |
-| Ledger | `GET /customers/:id/ledger` |
-| Record payment | `POST /customers/:id/payments` |
-| Void payment | `POST /customers/:id/ledger/:entryId/void` |
+| Action         | API                                        |
+| -------------- | ------------------------------------------ |
+| List / search  | `GET /customers`                           |
+| Detail         | `GET /customers/:id`                       |
+| Create / edit  | `POST /customers`, `PATCH /customers/:id`  |
+| Ledger         | `GET /customers/:id/ledger`                |
+| Record payment | `POST /customers/:id/payments`             |
+| Void payment   | `POST /customers/:id/ledger/:entryId/void` |
 
 ### Discounts (`/discounts`)
 
-| Action | API |
-|--------|-----|
-| List | `GET /discounts` |
+| Action        | API                                       |
+| ------------- | ----------------------------------------- |
+| List          | `GET /discounts`                          |
 | Create / edit | `POST /discounts`, `PATCH /discounts/:id` |
 
 ### Reports (`/reports`)
 
-| Report | API |
-|--------|-----|
-| Dashboard summary | `GET /reports/dashboard` |
-| Daily sales | `GET /reports/daily-sales?date=YYYY-MM-DD` |
-| Udhaar aging | `GET /reports/udhaar-aging` |
+| Report            | API                                        |
+| ----------------- | ------------------------------------------ |
+| Dashboard summary | `GET /reports/dashboard`                   |
+| Daily sales       | `GET /reports/daily-sales?date=YYYY-MM-DD` |
+| Udhaar aging      | `GET /reports/udhaar-aging`                |
 
 ### Staff (`/staff`) — Client Admin only
 
-| Action | API |
-|--------|-----|
-| List staff | `GET /users` |
-| Create staff | `POST /users` (always creates `STAFF` role) |
-| Update | `PATCH /users/:userId` |
-| Assign features | `PUT /users/:userId/features` |
-| Branch assignment | `branchId` on create/update |
+| Action            | API                                         |
+| ----------------- | ------------------------------------------- |
+| List staff        | `GET /users`                                |
+| Create staff      | `POST /users` (always creates `STAFF` role) |
+| Update            | `PATCH /users/:userId`                      |
+| Assign features   | `PUT /users/:userId/features`               |
+| Branch assignment | `branchId` on create/update                 |
 
 ### Settings (`/settings`) — Client Admin
 
-| Action | API |
-|--------|-----|
-| Load | `GET /settings` |
-| Save | `PATCH /settings` |
-| Branches (if licensed) | `GET/POST/PATCH /branches` |
-| Register sync device (hybrid setup) | `POST /sync/devices` |
+| Action                              | API                        |
+| ----------------------------------- | -------------------------- |
+| Load                                | `GET /settings`            |
+| Save                                | `PATCH /settings`          |
+| Branches (if licensed)              | `GET/POST/PATCH /branches` |
+| Register sync device (hybrid setup) | `POST /sync/devices`       |
 
 ---
 
@@ -426,13 +426,13 @@ Frontend: surface `message`; use `code` for branching (e.g. force password-chang
 
 ### Auth
 
-| Method | Path | Auth | Body / query | Response |
-|--------|------|------|--------------|----------|
-| POST | `/auth/login` | — | `email`, `password` | tokens + user |
-| POST | `/auth/refresh` | — | `refreshToken` | tokens |
-| POST | `/auth/logout` | — | `refreshToken` | `{ success }` |
-| POST | `/auth/change-password` | ✓ | `currentPassword`, `newPassword` (min 8) | tokens + user |
-| GET | `/auth/me` | ✓ | — | user + tenantId |
+| Method | Path                    | Auth | Body / query                             | Response        |
+| ------ | ----------------------- | ---- | ---------------------------------------- | --------------- |
+| POST   | `/auth/login`           | —    | `email`, `password`                      | tokens + user   |
+| POST   | `/auth/refresh`         | —    | `refreshToken`                           | tokens          |
+| POST   | `/auth/logout`          | —    | `refreshToken`                           | `{ success }`   |
+| POST   | `/auth/change-password` | ✓    | `currentPassword`, `newPassword` (min 8) | tokens + user   |
+| GET    | `/auth/me`              | ✓    | —                                        | user + tenantId |
 
 ---
 
@@ -489,13 +489,13 @@ X-Branch-Id: <optional>
 }
 ```
 
-| Field | Rules |
-|-------|-------|
-| `paymentMethod` | `CASH` \| `CARD` \| `BANK_TRANSFER` \| `CREDIT` |
-| `customerId` | **Required** when `paymentMethod` is `CREDIT` |
-| `items` | Min 1; `productId` must be active; stock decremented if `trackStock` |
-| `unitPrice` | Optional; defaults to product `sellPrice` |
-| Discounts | Require `billing.discount`; capped by settings unless `billing.discount_unlimited` |
+| Field           | Rules                                                                              |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `paymentMethod` | `CASH` \| `CARD` \| `BANK_TRANSFER` \| `CREDIT`                                    |
+| `customerId`    | **Required** when `paymentMethod` is `CREDIT`                                      |
+| `items`         | Min 1; `productId` must be active; stock decremented if `trackStock`               |
+| `unitPrice`     | Optional; defaults to product `sellPrice`                                          |
+| Discounts       | Require `billing.discount`; capped by settings unless `billing.discount_unlimited` |
 
 **Response:**
 
@@ -551,10 +551,10 @@ PATCH  /discounts/:id
 }
 ```
 
-| Field | Values |
-|-------|--------|
+| Field          | Values                 |
+| -------------- | ---------------------- |
 | `discountType` | `PERCENTAGE` \| `FLAT` |
-| `appliesTo` | `ITEM` \| `BILL` |
+| `appliesTo`    | `ITEM` \| `BILL`       |
 
 **Response item:**
 
@@ -737,8 +737,9 @@ POST /customers/:id/ledger/:entryId/void
 }
 ```
 
-**Void ledger entry body:** `{ "reason": "..." }`  
-- Void **payments** via ledger void endpoint.  
+**Void ledger entry body:** `{ "reason": "..." }`
+
+- Void **payments** via ledger void endpoint.
 - Void **credit sales** only via `POST /sales/:id/void`.
 
 ---
@@ -979,14 +980,14 @@ Super admin `POST /tenants/:tenantId/users` can set `role` to `STAFF` or `CLIENT
 
 Available when `DEPLOYMENT_MODE=hybrid`. User-facing endpoints use normal JWT auth.
 
-| Method | Path | Who | Purpose |
-|--------|------|-----|---------|
-| GET | `/sync/status` | all authenticated | Banner / health |
-| GET | `/sync/outbox/issues` | all authenticated | Conflict/failed list |
-| POST | `/sync/outbox/:outboxId/retry` | client admin | Re-queue entry |
-| POST | `/sync/outbox/:outboxId/dismiss` | client admin | Accept cloud version |
-| POST | `/sync/run` | all authenticated | Manual sync cycle |
-| POST | `/sync/devices` | client admin | Register device + get API key |
+| Method | Path                             | Who               | Purpose                       |
+| ------ | -------------------------------- | ----------------- | ----------------------------- |
+| GET    | `/sync/status`                   | all authenticated | Banner / health               |
+| GET    | `/sync/outbox/issues`            | all authenticated | Conflict/failed list          |
+| POST   | `/sync/outbox/:outboxId/retry`   | client admin      | Re-queue entry                |
+| POST   | `/sync/outbox/:outboxId/dismiss` | client admin      | Accept cloud version          |
+| POST   | `/sync/run`                      | all authenticated | Manual sync cycle             |
+| POST   | `/sync/devices`                  | client admin      | Register device + get API key |
 
 #### Sync status
 
@@ -1105,11 +1106,11 @@ Response when online:
 
 ### Ledger `entryType`
 
-| Type | Meaning |
-|------|---------|
-| `CREDIT_SALE` | Udhaar charge from sale |
-| `PAYMENT` | Customer payment (negative amount) |
-| `VOID_REVERSAL` | System reversal row |
+| Type            | Meaning                            |
+| --------------- | ---------------------------------- |
+| `CREDIT_SALE`   | Udhaar charge from sale            |
+| `PAYMENT`       | Customer payment (negative amount) |
+| `VOID_REVERSAL` | System reversal row                |
 
 ### Stock `movementType`
 
@@ -1176,12 +1177,12 @@ Recommended UX for hybrid deployments:
 └─────────────────────────────────────────────────────────┘
 ```
 
-| `status` | Color / icon | Actions |
-|----------|--------------|---------|
-| `synced` | hidden or green dot | — |
-| `pending` | amber | optional "Sync now" → `POST /sync/run` |
-| `failed` | orange | link to issues |
-| `conflict` | red | link to issues — needs admin |
+| `status`   | Color / icon        | Actions                                |
+| ---------- | ------------------- | -------------------------------------- |
+| `synced`   | hidden or green dot | —                                      |
+| `pending`  | amber               | optional "Sync now" → `POST /sync/run` |
+| `failed`   | orange              | link to issues                         |
+| `conflict` | red                 | link to issues — needs admin           |
 
 **Issues screen** (client admin):
 
@@ -1195,18 +1196,18 @@ Recommended UX for hybrid deployments:
 
 ## 13. Not built yet (Phase 2+)
 
-| Area | Notes |
-|------|-------|
-| Delivery module | Feature keys exist; no routes |
-| FBR integration | Feature key only |
-| Receipt PDF/thermal | `printReceipt` flag only; no server-side render |
-| Sale detail endpoint | No `GET /sales/:id` — use list or add later |
-| Product delete | Soft delete via PATCH `isActive: false` only |
-| Customer delete | Soft delete not exposed in routes |
-| File upload (logo) | `logoUrl` is string URL; no upload endpoint |
-| WebSockets | No real-time; poll sync status |
-| Super Admin UI | Routes exist; no frontend shell |
-| `reports.analytics_dashboard` | Key reserved; same as dashboard for now |
+| Area                          | Notes                                           |
+| ----------------------------- | ----------------------------------------------- |
+| Delivery module               | Feature keys exist; no routes                   |
+| FBR integration               | Feature key only                                |
+| Receipt PDF/thermal           | `printReceipt` flag only; no server-side render |
+| Sale detail endpoint          | No `GET /sales/:id` — use list or add later     |
+| Product delete                | Soft delete via PATCH `isActive: false` only    |
+| Customer delete               | Soft delete not exposed in routes               |
+| File upload (logo)            | `logoUrl` is string URL; no upload endpoint     |
+| WebSockets                    | No real-time; poll sync status                  |
+| Super Admin UI                | Routes exist; no frontend shell                 |
+| `reports.analytics_dashboard` | Key reserved; same as dashboard for now         |
 
 ---
 
@@ -1237,66 +1238,66 @@ front/src/
 
 ## Appendix: endpoint index
 
-| Method | Path |
-|--------|------|
-| GET | `/health` |
-| POST | `/auth/login` |
-| POST | `/auth/refresh` |
-| POST | `/auth/logout` |
-| POST | `/auth/change-password` |
-| GET | `/auth/me` |
-| GET | `/features` |
-| GET | `/tenants` |
-| GET | `/tenants/:tenantId` |
-| POST | `/tenants` |
-| PATCH | `/tenants/:tenantId` |
-| PUT | `/tenants/:tenantId/features` |
-| GET | `/tenants/:tenantId/users` |
-| POST | `/tenants/:tenantId/users` |
-| PATCH | `/tenants/:tenantId/users/:userId` |
-| PUT | `/tenants/:tenantId/users/:userId/features` |
-| GET | `/users` |
-| POST | `/users` |
-| PATCH | `/users/:userId` |
-| PUT | `/users/:userId/features` |
-| GET | `/categories` |
-| POST | `/categories` |
-| PATCH | `/categories/:id` |
-| GET | `/products` |
-| GET | `/products/barcode/:barcode` |
-| POST | `/products` |
-| PATCH | `/products/:id` |
-| POST | `/products/:id/stock` |
-| GET | `/sales` |
-| POST | `/sales` |
-| POST | `/sales/:saleId/void` |
-| GET | `/discounts` |
-| POST | `/discounts` |
-| PATCH | `/discounts/:id` |
-| GET | `/customers` |
-| GET | `/customers/:id` |
-| POST | `/customers` |
-| PATCH | `/customers/:id` |
-| GET | `/customers/:id/ledger` |
-| POST | `/customers/:id/payments` |
-| POST | `/customers/:id/ledger/:entryId/void` |
-| GET | `/settings` |
-| PATCH | `/settings` |
-| GET | `/branches` |
-| POST | `/branches` |
-| PATCH | `/branches/:branchId` |
-| GET | `/reports/dashboard` |
-| GET | `/reports/daily-sales` |
-| GET | `/reports/udhaar-aging` |
-| GET | `/sync/status` |
-| GET | `/sync/outbox/issues` |
-| POST | `/sync/outbox/:outboxId/retry` |
-| POST | `/sync/outbox/:outboxId/dismiss` |
-| POST | `/sync/run` |
-| POST | `/sync/devices` |
+| Method | Path                                        |
+| ------ | ------------------------------------------- |
+| GET    | `/health`                                   |
+| POST   | `/auth/login`                               |
+| POST   | `/auth/refresh`                             |
+| POST   | `/auth/logout`                              |
+| POST   | `/auth/change-password`                     |
+| GET    | `/auth/me`                                  |
+| GET    | `/features`                                 |
+| GET    | `/tenants`                                  |
+| GET    | `/tenants/:tenantId`                        |
+| POST   | `/tenants`                                  |
+| PATCH  | `/tenants/:tenantId`                        |
+| PUT    | `/tenants/:tenantId/features`               |
+| GET    | `/tenants/:tenantId/users`                  |
+| POST   | `/tenants/:tenantId/users`                  |
+| PATCH  | `/tenants/:tenantId/users/:userId`          |
+| PUT    | `/tenants/:tenantId/users/:userId/features` |
+| GET    | `/users`                                    |
+| POST   | `/users`                                    |
+| PATCH  | `/users/:userId`                            |
+| PUT    | `/users/:userId/features`                   |
+| GET    | `/categories`                               |
+| POST   | `/categories`                               |
+| PATCH  | `/categories/:id`                           |
+| GET    | `/products`                                 |
+| GET    | `/products/barcode/:barcode`                |
+| POST   | `/products`                                 |
+| PATCH  | `/products/:id`                             |
+| POST   | `/products/:id/stock`                       |
+| GET    | `/sales`                                    |
+| POST   | `/sales`                                    |
+| POST   | `/sales/:saleId/void`                       |
+| GET    | `/discounts`                                |
+| POST   | `/discounts`                                |
+| PATCH  | `/discounts/:id`                            |
+| GET    | `/customers`                                |
+| GET    | `/customers/:id`                            |
+| POST   | `/customers`                                |
+| PATCH  | `/customers/:id`                            |
+| GET    | `/customers/:id/ledger`                     |
+| POST   | `/customers/:id/payments`                   |
+| POST   | `/customers/:id/ledger/:entryId/void`       |
+| GET    | `/settings`                                 |
+| PATCH  | `/settings`                                 |
+| GET    | `/branches`                                 |
+| POST   | `/branches`                                 |
+| PATCH  | `/branches/:branchId`                       |
+| GET    | `/reports/dashboard`                        |
+| GET    | `/reports/daily-sales`                      |
+| GET    | `/reports/udhaar-aging`                     |
+| GET    | `/sync/status`                              |
+| GET    | `/sync/outbox/issues`                       |
+| POST   | `/sync/outbox/:outboxId/retry`              |
+| POST   | `/sync/outbox/:outboxId/dismiss`            |
+| POST   | `/sync/run`                                 |
+| POST   | `/sync/devices`                             |
 
-*Cloud-only sync routes (`/sync/ingest`, `/sync/changes`, `/sync/records/...`) use device API keys — not called from browser.*
+_Cloud-only sync routes (`/sync/ingest`, `/sync/changes`, `/sync/records/...`) use device API keys — not called from browser._
 
 ---
 
-*Generated from backend Phase 1 implementation. Update this doc when new routes are added.*
+_Generated from backend Phase 1 implementation. Update this doc when new routes are added._

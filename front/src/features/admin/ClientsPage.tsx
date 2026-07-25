@@ -11,7 +11,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Select';
 import { PageLoader } from '@/components/ui/Spinner';
 import { FeaturePicker } from '@/features/admin/FeaturePicker';
-import { feeBadgeVariant, accessStatusBadgeVariant, accessStatusLabel, toDatetimeLocalValue } from '@/features/admin/admin-utils';
+import {
+  feeBadgeVariant,
+  accessStatusBadgeVariant,
+  accessStatusLabel,
+  toDatetimeLocalValue,
+} from '@/features/admin/admin-utils';
 import { ApiError, api } from '@/lib/api-client';
 
 const emptyForm = {
@@ -41,8 +46,8 @@ export function ClientsPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(
-    () => getTierFeaturePreset(TENANT_TIERS.STANDARD),
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(() =>
+    getTierFeaturePreset(TENANT_TIERS.STANDARD),
   );
   const [error, setError] = useState('');
 
@@ -126,7 +131,8 @@ export function ClientsPage() {
             {(data?.data ?? []).length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center text-text-muted">
-                  No clients yet. Click <strong className="text-text">+ New client</strong> to create a shop account.
+                  No clients yet. Click <strong className="text-text">+ New client</strong> to
+                  create a shop account.
                 </td>
               </tr>
             ) : (
@@ -141,7 +147,9 @@ export function ClientsPage() {
                     <Badge variant="brand">{t.featureCount} enabled</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={t.isActive ? 'success' : 'danger'}>{t.isActive ? 'Active' : 'Inactive'}</Badge>
+                    <Badge variant={t.isActive ? 'success' : 'danger'}>
+                      {t.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={accessStatusBadgeVariant(t.accessStatus)}>
@@ -158,7 +166,10 @@ export function ClientsPage() {
                   <td className="px-4 py-3">{t.userCount}</td>
                   <td className="px-4 py-3">{t.acquiredBy?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link to={`/admin/clients/${t.id}`} className="font-medium text-brand-700 hover:underline">
+                    <Link
+                      to={`/admin/clients/${t.id}`}
+                      className="font-medium text-brand-700 hover:underline"
+                    >
                       Manage
                     </Link>
                   </td>
@@ -177,21 +188,36 @@ export function ClientsPage() {
           <span className="flex items-center text-sm text-text-muted">
             Page {page} of {data.meta.totalPages}
           </span>
-          <Button variant="secondary" disabled={page >= data.meta.totalPages} onClick={() => setPage((p) => p + 1)}>
+          <Button
+            variant="secondary"
+            disabled={page >= data.meta.totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
             Next
           </Button>
         </div>
       )}
 
-      <Modal open={createOpen} title="Create new client" onClose={() => setCreateOpen(false)} size="lg">
+      <Modal
+        open={createOpen}
+        title="Create new client"
+        onClose={() => setCreateOpen(false)}
+        size="lg"
+      >
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Shop name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input
+              label="Shop name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
             <Input
               label="Slug (URL id)"
               value={form.slug}
               placeholder="my-shop"
-              onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+              onChange={(e) =>
+                setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })
+              }
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -249,22 +275,24 @@ export function ClientsPage() {
             />
           </div>
           <p className="text-xs text-text-muted">
-            Trial lasts {form.subscriptionDays || 30} day(s) from the start above. When it ends the shop soft-locks to
-            Starter (billing still works) — not a full lockout.
+            Trial lasts {form.subscriptionDays || 30} day(s) from the start above. When it ends the
+            shop soft-locks to Starter (billing still works) — not a full lockout.
           </p>
 
           <FeaturePicker
-              features={FEATURE_REGISTRY}
-              selected={selectedFeatures}
-              onChange={setSelectedFeatures}
-              minFeatures={1}
-            />
+            features={FEATURE_REGISTRY}
+            selected={selectedFeatures}
+            onChange={setSelectedFeatures}
+            minFeatures={1}
+          />
 
           <hr />
-          <p className="text-xs font-semibold uppercase text-text-muted">Shop owner account (POS login)</p>
+          <p className="text-xs font-semibold uppercase text-text-muted">
+            Shop owner account (POS login)
+          </p>
           <p className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs text-brand-900">
-            Enter the <strong>client shop owner’s</strong> email and a temporary password — not your Raunaq admin
-            login. Share these with the shop so they can open the POS.
+            Enter the <strong>client shop owner’s</strong> email and a temporary password — not your
+            Raunaq admin login. Share these with the shop so they can open the POS.
           </p>
           <Input
             label="Owner full name"

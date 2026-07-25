@@ -57,7 +57,13 @@ export function openPrintDocument(title: string, bodyHtml: string): void {
 
 export function buildCustomerStatementHtml(
   customer: { name: string; phone: string | null; balance: string },
-  ledger: Array<{ entryType: string; amount: string; balanceAfter: string; createdAt: string; description?: string }>,
+  ledger: Array<{
+    entryType: string;
+    amount: string;
+    balanceAfter: string;
+    createdAt: string;
+    description?: string;
+  }>,
   currency: string,
   businessName: string,
 ): string {

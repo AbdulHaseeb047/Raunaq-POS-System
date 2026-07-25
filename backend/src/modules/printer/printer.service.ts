@@ -14,7 +14,11 @@ function normalizePaperWidth(value: number): PrinterPaperWidth {
   return value <= 58 ? 58 : 80;
 }
 
-export async function sendToNetworkPrinter(host: string, port: number, data: Buffer): Promise<void> {
+export async function sendToNetworkPrinter(
+  host: string,
+  port: number,
+  data: Buffer,
+): Promise<void> {
   if (!host.trim()) throw new ValidationError('Printer IP address is required');
 
   await new Promise<void>((resolve, reject) => {
@@ -41,8 +45,14 @@ export async function sendToNetworkPrinter(host: string, port: number, data: Buf
   });
 }
 
-export async function printSaleSlip(tenantId: string, saleId: string): Promise<{ success: true; mode: 'NETWORK' }> {
-  const [sale, settings] = await Promise.all([getSaleDetail(tenantId, saleId), getSettings(tenantId)]);
+export async function printSaleSlip(
+  tenantId: string,
+  saleId: string,
+): Promise<{ success: true; mode: 'NETWORK' }> {
+  const [sale, settings] = await Promise.all([
+    getSaleDetail(tenantId, saleId),
+    getSettings(tenantId),
+  ]);
 
   if (settings.printerMode !== 'NETWORK') {
     throw new ValidationError('Network slip printer is not enabled in Settings.');

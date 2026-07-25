@@ -24,7 +24,8 @@ export function SalesRepsPage() {
       void queryClient.invalidateQueries({ queryKey: ['sales-reps'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to create sales rep'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'Failed to create sales rep'),
   });
 
   if (isLoading) return <PageLoader />;
@@ -36,7 +37,14 @@ export function SalesRepsPage() {
           <h1 className="text-2xl font-bold">Sales Representatives</h1>
           <p className="text-slate-500">Track which rep brought each client</p>
         </div>
-        <Button onClick={() => { setOpen(true); setError(''); }}>+ Add sales rep</Button>
+        <Button
+          onClick={() => {
+            setOpen(true);
+            setError('');
+          }}
+        >
+          + Add sales rep
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -47,7 +55,9 @@ export function SalesRepsPage() {
                 <p className="font-semibold">{r.fullName}</p>
                 <p className="text-sm text-slate-500">{r.email}</p>
               </div>
-              <Badge tone={r.isActive ? 'success' : 'danger'}>{r.isActive ? 'Active' : 'Inactive'}</Badge>
+              <Badge tone={r.isActive ? 'success' : 'danger'}>
+                {r.isActive ? 'Active' : 'Inactive'}
+              </Badge>
             </div>
             <p className="mt-4 text-2xl font-bold text-indigo-600">{r.clientCount}</p>
             <p className="text-xs text-slate-500">clients acquired</p>
@@ -57,9 +67,23 @@ export function SalesRepsPage() {
 
       <Modal open={open} title="New sales representative" onClose={() => setOpen(false)}>
         <div className="space-y-3">
-          <Input placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input type="password" placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <Input
+            placeholder="Full name"
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <Input
+            type="password"
+            placeholder="Temporary password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button
             disabled={createRep.isPending}

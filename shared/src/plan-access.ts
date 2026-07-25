@@ -135,7 +135,11 @@ export function getEffectivePlan(tenant: TenantPlanInput, now = new Date()): Eff
   };
 }
 
-export function effectiveHasFeature(tenant: TenantPlanInput, feature: FeatureKey, now = new Date()): boolean {
+export function effectiveHasFeature(
+  tenant: TenantPlanInput,
+  feature: FeatureKey,
+  now = new Date(),
+): boolean {
   const result = getEffectivePlan(tenant, now);
   if (result.isAccessRevoked) return false;
   return result.featureKeys.includes(feature);

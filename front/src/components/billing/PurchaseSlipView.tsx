@@ -50,7 +50,9 @@ export function PurchaseSlipView({
 
       {stock && (
         <div className="mt-3">
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-text-muted">Items received</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-text-muted">
+            Items received
+          </p>
           <div className="mt-1.5 border-b border-dashed border-border" />
           <p className="mt-2 font-semibold text-text">{stock.productName}</p>
           {stock.sku && <p className="text-[10px] text-text-muted">SKU: {stock.sku}</p>}

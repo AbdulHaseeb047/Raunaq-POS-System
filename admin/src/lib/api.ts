@@ -79,7 +79,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string; code?: string };
+    const err = (await res.json().catch(() => ({ message: res.statusText }))) as {
+      message?: string;
+      code?: string;
+    };
     throw new ApiError(err.message ?? 'Request failed', res.status, err.code);
   }
   if (res.status === 204) return undefined as T;

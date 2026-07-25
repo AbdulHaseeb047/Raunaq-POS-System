@@ -4,7 +4,11 @@ import { withRlsBypass } from '../core/rls.js';
 import { probeCloudHealth } from './cloud-client.js';
 import { pullRemoteChanges } from './pull.service.js';
 import { pushPendingOutbox } from './push.service.js';
-import { getSyncWorkerConfig, isHybridWorkerConfigured, type SyncWorkerConfig } from './sync-config.js';
+import {
+  getSyncWorkerConfig,
+  isHybridWorkerConfigured,
+  type SyncWorkerConfig,
+} from './sync-config.js';
 
 export interface SyncCycleSummary {
   online: boolean;

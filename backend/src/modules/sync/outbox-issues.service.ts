@@ -79,7 +79,11 @@ export async function dismissOutboxEntry(tenantId: string, outboxId: string, rea
   return { id: outboxId, status: 'SYNCED' as const, reconcile };
 }
 
-export function buildSyncStatusMessage(pending: number, conflicts: number, failed: number): string | null {
+export function buildSyncStatusMessage(
+  pending: number,
+  conflicts: number,
+  failed: number,
+): string | null {
   if (conflicts > 0) {
     return `${conflicts} change(s) could not sync and need review. Use GET /sync/outbox/issues or retry/dismiss endpoints.`;
   }

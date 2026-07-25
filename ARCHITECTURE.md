@@ -33,11 +33,11 @@ This document is the single source of truth for how the product is structured, w
 
 A packaged POS for SMBs in Karachi (kiryana, restaurants, fashion, pharmacies), sold from **one codebase** in three modes:
 
-| Mode | Connectivity | Database | Tenancy |
-|------|-------------|----------|---------|
-| **Offline license** | None after activation | Local PostgreSQL | Single-tenant per install |
-| **Cloud SaaS** | Always online | Hosted PostgreSQL | Multi-tenant (shared DB) |
-| **Hybrid** | Offline-first, sync when available | Local + cloud PostgreSQL | Single-tenant locally; cloud row for sync |
+| Mode                | Connectivity                       | Database                 | Tenancy                                   |
+| ------------------- | ---------------------------------- | ------------------------ | ----------------------------------------- |
+| **Offline license** | None after activation              | Local PostgreSQL         | Single-tenant per install                 |
+| **Cloud SaaS**      | Always online                      | Hosted PostgreSQL        | Multi-tenant (shared DB)                  |
+| **Hybrid**          | Offline-first, sync when available | Local + cloud PostgreSQL | Single-tenant locally; cloud row for sync |
 
 **Competitive edge:** offline-first operation with reliable udhaar (credit ledger) — built as a first-class module, not a bolt-on.
 
@@ -77,18 +77,18 @@ All queries, services, and permission checks are identical across targets.
 
 ## 3. Tech Stack & Rationale
 
-| Layer | Choice | Notes |
-|-------|--------|-------|
-| **Frontend** | React 19 + Vite + Tailwind CSS + TanStack Query | Fast dev, modern tooling, server-state caching |
-| **Backend** | **Node.js + Fastify** | See [§17.1](#171-fastify-vs-express) |
-| **Language** | **TypeScript** (front, back, electron, shared) | Non-negotiable for a codebase this size |
-| **ORM** | **Prisma** | See [§17.2](#172-prisma-vs-alternatives) |
-| **Database** | PostgreSQL everywhere | Same schema/migrations; no SQLite |
-| **Auth** | JWT (access + refresh tokens) | Stateless API; refresh rotation |
-| **Desktop** | Electron hosting embedded backend | No separate backend binary |
-| **Cloud jobs** | BullMQ + Redis | Sync retries, reports, FBR |
-| **Offline jobs** | In-process queue + `node-cron` | No Redis dependency offline |
-| **Mobile** | React Native + Expo | Phase 7 only; no PWA |
+| Layer            | Choice                                          | Notes                                          |
+| ---------------- | ----------------------------------------------- | ---------------------------------------------- |
+| **Frontend**     | React 19 + Vite + Tailwind CSS + TanStack Query | Fast dev, modern tooling, server-state caching |
+| **Backend**      | **Node.js + Fastify**                           | See [§17.1](#171-fastify-vs-express)           |
+| **Language**     | **TypeScript** (front, back, electron, shared)  | Non-negotiable for a codebase this size        |
+| **ORM**          | **Prisma**                                      | See [§17.2](#172-prisma-vs-alternatives)       |
+| **Database**     | PostgreSQL everywhere                           | Same schema/migrations; no SQLite              |
+| **Auth**         | JWT (access + refresh tokens)                   | Stateless API; refresh rotation                |
+| **Desktop**      | Electron hosting embedded backend               | No separate backend binary                     |
+| **Cloud jobs**   | BullMQ + Redis                                  | Sync retries, reports, FBR                     |
+| **Offline jobs** | In-process queue + `node-cron`                  | No Redis dependency offline                    |
+| **Mobile**       | React Native + Expo                             | Phase 7 only; no PWA                           |
 
 ---
 
@@ -146,19 +146,19 @@ modules/billing/
 
 ### Phase 1 modules
 
-| Module | Responsibility |
-|--------|---------------|
-| `core/` | Config, Prisma client, error types, pagination helpers, deployment mode detection |
-| `auth/` | Login, refresh, password reset, JWT issuance |
-| `permissions/` | Feature registry, tenant features, staff features, middleware |
-| `tenants/` | Tenant CRUD (Super Admin), business profile |
-| `users/` | Staff accounts, role assignment |
-| `inventory/` | Products, categories, stock movements, barcode lookup |
-| `billing/` | Sales, cart, discounts, payments, receipt payload generation |
-| `customers/` | Customer CRUD, **udhaar ledger**, credit limits, aging, statements |
-| `reports/` | Daily sales, basic charts, udhaar aging (Phase 1 scope) |
-| `settings/` | Business profile, printer prefs, tax fields, license status |
-| `audit/` | Immutable audit log for sensitive actions |
+| Module         | Responsibility                                                                    |
+| -------------- | --------------------------------------------------------------------------------- |
+| `core/`        | Config, Prisma client, error types, pagination helpers, deployment mode detection |
+| `auth/`        | Login, refresh, password reset, JWT issuance                                      |
+| `permissions/` | Feature registry, tenant features, staff features, middleware                     |
+| `tenants/`     | Tenant CRUD (Super Admin), business profile                                       |
+| `users/`       | Staff accounts, role assignment                                                   |
+| `inventory/`   | Products, categories, stock movements, barcode lookup                             |
+| `billing/`     | Sales, cart, discounts, payments, receipt payload generation                      |
+| `customers/`   | Customer CRUD, **udhaar ledger**, credit limits, aging, statements                |
+| `reports/`     | Daily sales, basic charts, udhaar aging (Phase 1 scope)                           |
+| `settings/`    | Business profile, printer prefs, tax fields, license status                       |
+| `audit/`       | Immutable audit log for sensitive actions                                         |
 
 ### Later modules (feature-flagged)
 
@@ -166,13 +166,13 @@ modules/billing/
 
 ### Auth module scope
 
-| Feature | Status |
-|---------|--------|
-| Login / refresh / logout | Implemented (Step 2) |
-| JWT access + rotating refresh tokens | Implemented |
-| `must_change_password` enforcement | Implemented |
-| Password reset (email/token flow) | **Deferred** — requires outbound email or admin reset UI; not needed for offline-first MVP. Client Admin can reset staff passwords directly. |
-| Password reset for Super Admin | Use `POST /auth/change-password` after first login |
+| Feature                              | Status                                                                                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Login / refresh / logout             | Implemented (Step 2)                                                                                                                         |
+| JWT access + rotating refresh tokens | Implemented                                                                                                                                  |
+| `must_change_password` enforcement   | Implemented                                                                                                                                  |
+| Password reset (email/token flow)    | **Deferred** — requires outbound email or admin reset UI; not needed for offline-first MVP. Client Admin can reset staff passwords directly. |
+| Password reset for Super Admin       | Use `POST /auth/change-password` after first login                                                                                           |
 
 ### Request flow
 
@@ -199,11 +199,11 @@ HTTP Request
 
 ### Role hierarchy
 
-| Role | Scope | Capabilities |
-|------|-------|-------------|
-| **Super Admin** | All tenants | Create tenants, set tenant features, issue license keys, cross-tenant reports |
-| **Client Admin** | Own tenant | Full tenant access, create staff, assign staff features (subset of tenant features) |
-| **Staff** | Own tenant | Only features explicitly granted by Client Admin |
+| Role             | Scope       | Capabilities                                                                        |
+| ---------------- | ----------- | ----------------------------------------------------------------------------------- |
+| **Super Admin**  | All tenants | Create tenants, set tenant features, issue license keys, cross-tenant reports       |
+| **Client Admin** | Own tenant  | Full tenant access, create staff, assign staff features (subset of tenant features) |
+| **Staff**        | Own tenant  | Only features explicitly granted by Client Admin                                    |
 
 Roles are stored on the `users` record. Permissions are **feature-key based**, not role-name based — roles are convenience defaults when creating users, not the enforcement mechanism.
 
@@ -339,30 +339,30 @@ UI action → API → local PostgreSQL commit (instant) → enqueue to sync_outb
 
 Table `sync_outbox`: persists pending changes across app restarts.
 
-| Column | Purpose |
-|--------|---------|
-| `id` | UUID |
-| `table_name` | Which entity changed |
-| `record_id` | PK of changed row |
-| `operation` | INSERT / UPDATE / DELETE |
-| `payload` | JSON snapshot |
-| `version` | Monotonic per-record version |
-| `created_at` | For ordering |
-| `synced_at` | NULL until pushed |
-| `status` | PENDING / SYNCED / CONFLICT |
+| Column       | Purpose                      |
+| ------------ | ---------------------------- |
+| `id`         | UUID                         |
+| `table_name` | Which entity changed         |
+| `record_id`  | PK of changed row            |
+| `operation`  | INSERT / UPDATE / DELETE     |
+| `payload`    | JSON snapshot                |
+| `version`    | Monotonic per-record version |
+| `created_at` | For ordering                 |
+| `synced_at`  | NULL until pushed            |
+| `status`     | PENDING / SYNCED / CONFLICT  |
 
 Every syncable table gets: `version INT`, `updated_at TIMESTAMPTZ`, `deleted_at` (soft delete for sync).
 
 ### Conflict resolution (explicit per entity)
 
-| Entity | Strategy | Rationale |
-|--------|----------|-----------|
-| Products, categories, customers (profile fields only) | **Last-write-wins** by `updated_at` | Metadata; rare concurrent edits |
-| `customers.balance` | **Never synced — recompute** | `SUM(ledger entries)` after sync; LWW would corrupt balance across offline devices |
-| Sales, ledger entries | **Append-only; no merge** | Immutable; conflicts = duplicate detection by client-generated UUID |
-| Stock quantity | **Operational transform / delta merge** | `stock = stock + sum(deltas)` per sync window; reject if negative |
-| Udhaar obligations | **No automatic merge** | Flag conflict for admin review; never silently combine balances |
-| Settings | **Last-write-wins** | Low risk |
+| Entity                                                | Strategy                                | Rationale                                                                          |
+| ----------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
+| Products, categories, customers (profile fields only) | **Last-write-wins** by `updated_at`     | Metadata; rare concurrent edits                                                    |
+| `customers.balance`                                   | **Never synced — recompute**            | `SUM(ledger entries)` after sync; LWW would corrupt balance across offline devices |
+| Sales, ledger entries                                 | **Append-only; no merge**               | Immutable; conflicts = duplicate detection by client-generated UUID                |
+| Stock quantity                                        | **Operational transform / delta merge** | `stock = stock + sum(deltas)` per sync window; reject if negative                  |
+| Udhaar obligations                                    | **No automatic merge**                  | Flag conflict for admin review; never silently combine balances                    |
+| Settings                                              | **Last-write-wins**                     | Low risk                                                                           |
 
 ### Balance reconciliation (hybrid sync)
 
@@ -389,12 +389,12 @@ All primary keys are **UUIDs generated client-side** so offline devices can crea
 
 ### Outbox conflict resolution (pre-UI)
 
-| Status | Meaning | Resolution |
-|--------|---------|------------|
-| `PENDING` | Waiting to push | Auto on worker / `POST /sync/run` |
-| `FAILED` | Transient push/apply error | Auto-retry on worker / `POST /sync/run` |
+| Status     | Meaning                      | Resolution                                                                                                                                                     |
+| ---------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PENDING`  | Waiting to push              | Auto on worker / `POST /sync/run`                                                                                                                              |
+| `FAILED`   | Transient push/apply error   | Auto-retry on worker / `POST /sync/run`                                                                                                                        |
 | `CONFLICT` | Cloud rejected (version/LWW) | **Not** auto-retried; admin uses `POST /sync/outbox/:id/retry` after fixing data, or `POST /sync/outbox/:id/dismiss` to fetch cloud row and reconcile local DB |
-| `SYNCED` | Done | — |
+| `SYNCED`   | Done                         | —                                                                                                                                                              |
 
 **Dismiss (`accept remote wins`):** Hybrid calls `GET /sync/records/:table/:id` on cloud, then `reconcileLocalWithRemote` — applies the cloud snapshot locally (ledger tables trigger `recomputeCustomerBalance`). If cloud has no row and the outbox op was `INSERT`, the unsynced local row is rolled back. Outbox is marked `SYNCED` only after reconciliation.
 
@@ -453,17 +453,17 @@ Bind to `127.0.0.1:0` (OS assigns free port) on first run; persist port in `%APP
 
 ### Navigation (Phase 1)
 
-| Route | Feature key gate | Role gate |
-|-------|-----------------|-----------|
-| `/dashboard` | — | all authenticated |
-| `/sale` | `billing.create_sale` | staff+ |
-| `/inventory` | `inventory.view` | staff+ |
-| `/categories` | `inventory.categories` | staff+ |
-| `/customers` | `customers.view` | staff+ |
-| `/discounts` | `billing.discount` | staff+ |
-| `/reports` | `reports.view` | staff+ |
-| `/staff` | `users.manage` | client admin |
-| `/settings` | `settings.view` | client admin |
+| Route         | Feature key gate       | Role gate         |
+| ------------- | ---------------------- | ----------------- |
+| `/dashboard`  | —                      | all authenticated |
+| `/sale`       | `billing.create_sale`  | staff+            |
+| `/inventory`  | `inventory.view`       | staff+            |
+| `/categories` | `inventory.categories` | staff+            |
+| `/customers`  | `customers.view`       | staff+            |
+| `/discounts`  | `billing.discount`     | staff+            |
+| `/reports`    | `reports.view`         | staff+            |
+| `/staff`      | `users.manage`         | client admin      |
+| `/settings`   | `settings.view`        | client admin      |
 
 ### Design approach
 
@@ -476,13 +476,13 @@ Bind to `127.0.0.1:0` (OS assigns free port) on first run; persist port in `%APP
 
 ## 13. Background Jobs
 
-| Job | Offline | Cloud |
-|-----|---------|-------|
-| Sync push/pull | In-process worker, cron every 30s when online | BullMQ worker |
-| Low-stock alerts | `node-cron` daily | BullMQ scheduled |
-| Report generation | On-demand (sync) | BullMQ async |
-| FBR retry | N/A offline | BullMQ with backoff |
-| Backup | Local export cron | Managed PG backups + app-level |
+| Job               | Offline                                       | Cloud                          |
+| ----------------- | --------------------------------------------- | ------------------------------ |
+| Sync push/pull    | In-process worker, cron every 30s when online | BullMQ worker                  |
+| Low-stock alerts  | `node-cron` daily                             | BullMQ scheduled               |
+| Report generation | On-demand (sync)                              | BullMQ async                   |
+| FBR retry         | N/A offline                                   | BullMQ with backoff            |
+| Backup            | Local export cron                             | Managed PG backups + app-level |
 
 ---
 
@@ -522,14 +522,14 @@ Bind to `127.0.0.1:0` (OS assigns free port) on first run; persist port in `%APP
 
 **Priority:** money, stock, and ledger correctness.
 
-| Area | Approach |
-|------|----------|
-| Billing math (discounts, tax, totals) | Unit tests, table-driven |
-| Stock movements | Integration tests with test DB |
-| Udhaar ledger (balance, FIFO payments, aging) | Integration tests — highest priority |
-| Permission middleware | Unit tests per feature key |
-| Sync conflict resolution | Unit tests per entity strategy (Step 5) |
-| UI | Manual for Phase 1; Playwright for critical flows in Phase 2 |
+| Area                                          | Approach                                                     |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| Billing math (discounts, tax, totals)         | Unit tests, table-driven                                     |
+| Stock movements                               | Integration tests with test DB                               |
+| Udhaar ledger (balance, FIFO payments, aging) | Integration tests — highest priority                         |
+| Permission middleware                         | Unit tests per feature key                                   |
+| Sync conflict resolution                      | Unit tests per entity strategy (Step 5)                      |
+| UI                                            | Manual for Phase 1; Playwright for critical flows in Phase 2 |
 
 ---
 
@@ -537,17 +537,17 @@ Bind to `127.0.0.1:0` (OS assigns free port) on first run; persist port in `%APP
 
 Backend domain APIs are built first so money, stock, and ledger correctness are proven before any UI consumes them (see §15). The `/front` workspace was scaffolded in Step 1 (Vite, routing shell, placeholder pages) but **feature screens are intentionally deferred** — not an oversight.
 
-| Step | Scope | Status |
-|------|-------|--------|
-| **1** | `ARCHITECTURE.md` + repo scaffold (`/front` shell + `/backend` + CI) | Done |
-| **2** | Auth + RBAC + tenant model | Done |
-| **3** | Billing + inventory + full udhaar ledger | Done |
-| **4** | Reporting + multi-branch | Done |
-| **5** | Hybrid sync engine (outbox, push/pull worker, device auth, conflict APIs) | **Done** |
-| **—** | **Backend Phase 1** (API + ledger + inventory + branches + sync) | **Complete** |
-| **6** | **Frontend Phase 1** — on hold until UI brief (auth, billing POS, inventory, customers/udhaar, reports) | **On hold** |
-| **7** | Add-on modules (feature-flagged) | Pending |
-| **8** | Mobile + hardware integrations | Pending |
+| Step  | Scope                                                                                                   | Status       |
+| ----- | ------------------------------------------------------------------------------------------------------- | ------------ |
+| **1** | `ARCHITECTURE.md` + repo scaffold (`/front` shell + `/backend` + CI)                                    | Done         |
+| **2** | Auth + RBAC + tenant model                                                                              | Done         |
+| **3** | Billing + inventory + full udhaar ledger                                                                | Done         |
+| **4** | Reporting + multi-branch                                                                                | Done         |
+| **5** | Hybrid sync engine (outbox, push/pull worker, device auth, conflict APIs)                               | **Done**     |
+| **—** | **Backend Phase 1** (API + ledger + inventory + branches + sync)                                        | **Complete** |
+| **6** | **Frontend Phase 1** — on hold until UI brief (auth, billing POS, inventory, customers/udhaar, reports) | **On hold**  |
+| **7** | Add-on modules (feature-flagged)                                                                        | Pending      |
+| **8** | Mobile + hardware integrations                                                                          | Pending      |
 
 **Frontend timing:** Step 6 is on hold. Backend Phase 1 is complete; `/front` remains a routed shell only. Cloud deployment is deferred until the full stack is ready — not part of backend Phase 1.
 
@@ -559,13 +559,13 @@ Backend domain APIs are built first so money, stock, and ledger correctness are 
 
 **Decision: Fastify**
 
-| Factor | Fastify | Express |
-|--------|---------|---------|
-| JSON schema validation | Built-in (TypeBox/AJV) | Requires manual Zod/express-validator |
-| Performance | ~2–3× throughput in benchmarks | Adequate for POS scale |
-| TypeScript | First-class via generics | Doable but bolted-on |
-| Ecosystem | Smaller but sufficient | Larger |
-| Learning curve | Slightly steeper | Familiar to most Node devs |
+| Factor                 | Fastify                        | Express                               |
+| ---------------------- | ------------------------------ | ------------------------------------- |
+| JSON schema validation | Built-in (TypeBox/AJV)         | Requires manual Zod/express-validator |
+| Performance            | ~2–3× throughput in benchmarks | Adequate for POS scale                |
+| TypeScript             | First-class via generics       | Doable but bolted-on                  |
+| Ecosystem              | Smaller but sufficient         | Larger                                |
+| Learning curve         | Slightly steeper               | Familiar to most Node devs            |
 
 For a POS where **every endpoint touches money or inventory**, built-in request/response validation is worth more than Express's larger middleware catalog. Fastify's plugin encapsulation also maps cleanly to domain modules.
 
@@ -584,16 +584,16 @@ For a POS where **every endpoint touches money or inventory**, built-in request/
 
 ### 17.3 Where I agree vs. would flag alternatives
 
-| Topic | Brief says | My take |
-|-------|-----------|---------|
-| PostgreSQL offline | Bundled local PG | **Agree.** SQLite would simplify Electron but breaks "one schema everywhere" and makes sync harder. Worth the PG lifecycle cost. |
-| Shared DB multi-tenancy | `tenant_id` row isolation | **Agree** at this scale. Revisit if any tenant exceeds ~50M rows. |
-| No PWA | React Native later | **Agree.** PWA offline is unreliable for POS hardware access. |
-| JWT | Stateless auth | **Agree** for cloud. Offline installs will also issue JWTs locally (signed with per-install secret from license). |
-| BullMQ cloud-only | Redis dependency | **Agree.** Redis on a shopkeeper's PC is unnecessary complexity. |
-| UUID client-side IDs | Not in brief | **Adding** — required for offline sync without central ID server. See §10. |
-| Credit obligations table | Not in brief | **Adding** — needed for correct aging buckets without replaying entire ledger on every report. |
-| Argon2 over bcrypt | Brief says bcrypt/argon2 | **Prefer argon2id** as default; both acceptable. |
+| Topic                    | Brief says                | My take                                                                                                                          |
+| ------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL offline       | Bundled local PG          | **Agree.** SQLite would simplify Electron but breaks "one schema everywhere" and makes sync harder. Worth the PG lifecycle cost. |
+| Shared DB multi-tenancy  | `tenant_id` row isolation | **Agree** at this scale. Revisit if any tenant exceeds ~50M rows.                                                                |
+| No PWA                   | React Native later        | **Agree.** PWA offline is unreliable for POS hardware access.                                                                    |
+| JWT                      | Stateless auth            | **Agree** for cloud. Offline installs will also issue JWTs locally (signed with per-install secret from license).                |
+| BullMQ cloud-only        | Redis dependency          | **Agree.** Redis on a shopkeeper's PC is unnecessary complexity.                                                                 |
+| UUID client-side IDs     | Not in brief              | **Adding** — required for offline sync without central ID server. See §10.                                                       |
+| Credit obligations table | Not in brief              | **Adding** — needed for correct aging buckets without replaying entire ledger on every report.                                   |
+| Argon2 over bcrypt       | Brief says bcrypt/argon2  | **Prefer argon2id** as default; both acceptable.                                                                                 |
 
 ### 17.4 Electron backend hosting
 
@@ -614,13 +614,13 @@ See [`docs/SCHEMA.md`](docs/SCHEMA.md) for full table definitions covering build
 
 ## Appendix C: Environment Variables
 
-| Variable | Used by | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | backend | PostgreSQL connection string |
-| `JWT_SECRET` | backend | Access token signing key |
-| `JWT_REFRESH_SECRET` | backend | Refresh token signing key |
-| `DEPLOYMENT_MODE` | backend | `cloud` \| `offline` \| `hybrid` |
-| `TENANT_ID` | backend (offline) | Fixed tenant for single-tenant installs |
-| `REDIS_URL` | backend (cloud) | BullMQ connection |
-| `SENTRY_DSN` | backend (cloud) | Error tracking |
-| `VITE_API_URL` | front | API base URL |
+| Variable             | Used by           | Description                             |
+| -------------------- | ----------------- | --------------------------------------- |
+| `DATABASE_URL`       | backend           | PostgreSQL connection string            |
+| `JWT_SECRET`         | backend           | Access token signing key                |
+| `JWT_REFRESH_SECRET` | backend           | Refresh token signing key               |
+| `DEPLOYMENT_MODE`    | backend           | `cloud` \| `offline` \| `hybrid`        |
+| `TENANT_ID`          | backend (offline) | Fixed tenant for single-tenant installs |
+| `REDIS_URL`          | backend (cloud)   | BullMQ connection                       |
+| `SENTRY_DSN`         | backend (cloud)   | Error tracking                          |
+| `VITE_API_URL`       | front             | API base URL                            |

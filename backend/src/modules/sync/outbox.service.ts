@@ -17,7 +17,12 @@ export interface OutboxEntryInput {
 }
 
 function sanitizePayload(tableName: string, payload: Prisma.InputJsonValue): Prisma.InputJsonValue {
-  if (tableName !== 'customers' || typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+  if (
+    tableName !== 'customers' ||
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
     return payload;
   }
 

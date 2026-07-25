@@ -48,7 +48,9 @@ export async function registerSyncDevice(
   return { deviceId, apiKey };
 }
 
-export async function authenticateSyncDevice(apiKey: string): Promise<AuthenticatedSyncDevice | null> {
+export async function authenticateSyncDevice(
+  apiKey: string,
+): Promise<AuthenticatedSyncDevice | null> {
   const device = await prisma.syncDevice.findFirst({
     where: { apiKeyHash: hashSyncApiKey(apiKey), isActive: true },
     select: { id: true, tenantId: true, deviceId: true },
@@ -70,9 +72,15 @@ export function assertSyncDeviceBinding(
   deviceId: string,
 ): void {
   if (tenantId !== device.tenantId) {
-    throw new ForbiddenError('tenantId does not match authenticated sync device', 'SYNC_TENANT_MISMATCH');
+    throw new ForbiddenError(
+      'tenantId does not match authenticated sync device',
+      'SYNC_TENANT_MISMATCH',
+    );
   }
   if (deviceId !== device.deviceId) {
-    throw new ForbiddenError('deviceId does not match authenticated sync device', 'SYNC_DEVICE_MISMATCH');
+    throw new ForbiddenError(
+      'deviceId does not match authenticated sync device',
+      'SYNC_DEVICE_MISMATCH',
+    );
   }
 }

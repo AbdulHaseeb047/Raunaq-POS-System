@@ -8,7 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 
-import { api, clearTokens, getStoredBranchId, setStoredBranchId, setTokens } from '@/lib/api-client';
+import {
+  api,
+  clearTokens,
+  getStoredBranchId,
+  setStoredBranchId,
+  setTokens,
+} from '@/lib/api-client';
 import type { AuthUser, Branch } from '@/types/api';
 import { canUsePosApp, FEATURES, hasFeature, isPlatformAdmin } from '@/lib/features';
 
@@ -180,7 +186,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       isAdmin,
     }),
-    [user, isLoading, branchId, branches, setBranchId, login, logout, changePassword, refreshUser, isAdmin],
+    [
+      user,
+      isLoading,
+      branchId,
+      branches,
+      setBranchId,
+      login,
+      logout,
+      changePassword,
+      refreshUser,
+      isAdmin,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

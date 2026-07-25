@@ -127,7 +127,10 @@ export function AdminDashboardPage() {
           title="Recent clients"
           subtitle="Latest shops on the platform"
           action={
-            <Link to="/admin/clients" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link
+              to="/admin/clients"
+              className="text-sm font-semibold text-brand-700 hover:underline"
+            >
               View all
             </Link>
           }
@@ -149,14 +152,20 @@ export function AdminDashboardPage() {
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-text-muted">
                     No clients yet.{' '}
-                    <Link to="/admin/clients" className="font-medium text-brand-700 hover:underline">
+                    <Link
+                      to="/admin/clients"
+                      className="font-medium text-brand-700 hover:underline"
+                    >
                       Create your first client
                     </Link>
                   </td>
                 </tr>
               ) : (
                 data.recentTenants.map((t) => (
-                  <tr key={t.id} className="border-b border-border/50 transition hover:bg-surface-muted/50">
+                  <tr
+                    key={t.id}
+                    className="border-b border-border/50 transition hover:bg-surface-muted/50"
+                  >
                     <td className="py-3 pr-4">
                       <Link
                         to={`/admin/clients/${t.id}`}

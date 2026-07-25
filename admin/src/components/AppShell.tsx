@@ -25,7 +25,9 @@ export function AppShell() {
               end={l.end}
               className={({ isActive }) =>
                 `block rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  isActive ? 'bg-[var(--color-sidebar-active)]' : 'hover:bg-[var(--color-sidebar-hover)]'
+                  isActive
+                    ? 'bg-[var(--color-sidebar-active)]'
+                    : 'hover:bg-[var(--color-sidebar-hover)]'
                 }`
               }
             >

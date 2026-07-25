@@ -33,7 +33,11 @@ export function DiscountsPage() {
   const [editing, setEditing] = useState<DiscountRule | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [showInactive, setShowInactive] = useState(true);
-  const [toggleTarget, setToggleTarget] = useState<{ id: string; isActive: boolean; name: string } | null>(null);
+  const [toggleTarget, setToggleTarget] = useState<{
+    id: string;
+    isActive: boolean;
+    name: string;
+  } | null>(null);
 
   const canUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
 
@@ -64,9 +68,7 @@ export function DiscountsPage() {
         minBillAmount: form.minBillAmount ? parseFloat(form.minBillAmount) : null,
         isActive: form.isActive,
       };
-      return editing
-        ? api.discounts.update(editing.id, body)
-        : api.discounts.create(body);
+      return editing ? api.discounts.update(editing.id, body) : api.discounts.create(body);
     },
     onSuccess: () => {
       setModal(false);
@@ -155,8 +157,14 @@ export function DiscountsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {(data ?? []).map((d) => (
-          <Card key={d.id} hover className={`relative overflow-hidden ${!d.isActive ? 'opacity-60' : ''}`}>
-            <div className={`absolute left-0 top-0 h-full w-1 ${d.isActive ? 'bg-brand-500' : 'bg-border'}`} />
+          <Card
+            key={d.id}
+            hover
+            className={`relative overflow-hidden ${!d.isActive ? 'opacity-60' : ''}`}
+          >
+            <div
+              className={`absolute left-0 top-0 h-full w-1 ${d.isActive ? 'bg-brand-500' : 'bg-border'}`}
+            />
             <div className="flex items-start justify-between gap-2 pl-2">
               <div>
                 <p className="font-semibold text-text">{d.name}</p>
@@ -217,7 +225,11 @@ export function DiscountsPage() {
         }
       >
         <div className="space-y-4">
-          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
           <Select
             label="Type"
             value={form.discountType}
@@ -285,7 +297,8 @@ export function DiscountsPage() {
         open={toggleTarget != null}
         onClose={() => setToggleTarget(null)}
         onConfirm={() => {
-          if (toggleTarget) toggleActive.mutate({ id: toggleTarget.id, isActive: toggleTarget.isActive });
+          if (toggleTarget)
+            toggleActive.mutate({ id: toggleTarget.id, isActive: toggleTarget.isActive });
         }}
         title={toggleTarget?.isActive ? 'Activate discount rule' : 'Deactivate discount rule'}
         message={

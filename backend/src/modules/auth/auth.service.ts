@@ -175,42 +175,42 @@ export async function changePassword(
 /** Refresh token rotation: old token revoked, new token issued. */
 export async function refreshAccessToken(refreshToken: string): Promise<TokenPair> {
   return withRlsBypass(async () => {
-  const tokenHash = hashToken(refreshToken);
+    const tokenHash = hashToken(refreshToken);
 
-  const stored = await prisma.refreshToken.findFirst({
-    where: {
-      tokenHash,
-      revokedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-  });
-
-  if (!stored) {
-    throw new UnauthorizedError('Invalid or expired refresh token');
-  }
-
-  const authenticated = await buildAuthenticatedUser(stored.userId);
-  if (authenticated.tenantId) {
-    await assertTenantPortalAccess(authenticated.tenantId, { forLogin: true });
-  }
-  const accessToken = signAccessToken(authenticated);
-  const newRefreshToken = generateRefreshToken();
-
-  await prisma.$transaction([
-    prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    }),
-    prisma.refreshToken.create({
-      data: {
-        userId: stored.userId,
-        tokenHash: hashToken(newRefreshToken),
-        expiresAt: stored.expiresAt,
+    const stored = await prisma.refreshToken.findFirst({
+      where: {
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
       },
-    }),
-  ]);
+    });
 
-  return { accessToken, refreshToken: newRefreshToken };
+    if (!stored) {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    const authenticated = await buildAuthenticatedUser(stored.userId);
+    if (authenticated.tenantId) {
+      await assertTenantPortalAccess(authenticated.tenantId, { forLogin: true });
+    }
+    const accessToken = signAccessToken(authenticated);
+    const newRefreshToken = generateRefreshToken();
+
+    await prisma.$transaction([
+      prisma.refreshToken.update({
+        where: { id: stored.id },
+        data: { revokedAt: new Date() },
+      }),
+      prisma.refreshToken.create({
+        data: {
+          userId: stored.userId,
+          tokenHash: hashToken(newRefreshToken),
+          expiresAt: stored.expiresAt,
+        },
+      }),
+    ]);
+
+    return { accessToken, refreshToken: newRefreshToken };
   });
 }
 

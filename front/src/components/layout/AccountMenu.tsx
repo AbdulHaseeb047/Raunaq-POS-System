@@ -87,7 +87,9 @@ export function AccountMenu({ placement = 'header', collapsed = false }: Account
             ? `flex w-full items-center rounded-xl text-left transition-colors ${
                 collapsed ? 'justify-center px-1 py-2' : 'justify-between gap-2 px-2.5 py-2'
               } ${
-                open ? 'bg-sidebar-hover text-white' : 'text-brand-100/90 hover:bg-sidebar-hover hover:text-white'
+                open
+                  ? 'bg-sidebar-hover text-white'
+                  : 'text-brand-100/90 hover:bg-sidebar-hover hover:text-white'
               }`
             : 'flex items-center gap-2 rounded-xl border border-border bg-surface px-2 py-1.5 text-sm shadow-sm transition hover:bg-surface-muted'
         }

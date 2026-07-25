@@ -48,11 +48,7 @@ export function Input({
             aria-label={showPassword ? 'Hide password' : 'Show password'}
             title={showPassword ? 'Hide password' : 'Show password'}
           >
-            {showPassword ? (
-              <IconEyeOff className="h-4 w-4" />
-            ) : (
-              <IconEye className="h-4 w-4" />
-            )}
+            {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
             <span className="hidden sm:inline">{showPassword ? 'Hide' : 'Show'}</span>
           </button>
         )}

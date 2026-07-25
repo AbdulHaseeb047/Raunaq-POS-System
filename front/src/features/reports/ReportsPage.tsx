@@ -12,7 +12,9 @@ import { useAuth } from '@/lib/auth';
 import { formatDateShort, formatMoney, todayIso } from '@/lib/format';
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -130,7 +132,10 @@ export function ReportsPage() {
   const maxTopProductRevenue = Math.max(...topProducts.map((p) => toNumber(p.revenue)), 1);
   const agingRows = aging ?? [];
   const maxAging = Math.max(...agingRows.map((r) => toNumber(r.total)), 1);
-  const maxDiscountUsage = Math.max(...(discountUsage ?? []).map((r) => toNumber(r.totalDiscount)), 1);
+  const maxDiscountUsage = Math.max(
+    ...(discountUsage ?? []).map((r) => toNumber(r.totalDiscount)),
+    1,
+  );
 
   const exportSummaryCsv = () => {
     downloadCsv(`sales-summary-${dates.from}-${dates.to}.csv`, [
@@ -182,13 +187,24 @@ export function ReportsPage() {
               onClick={() => setRange(r)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${range === r ? 'bg-brand-600 text-white' : 'bg-surface-muted'}`}
             >
-              {r === 'today' ? 'Today' : r === 'week' ? 'This week' : r === 'month' ? 'This month' : 'Custom'}
+              {r === 'today'
+                ? 'Today'
+                : r === 'week'
+                  ? 'This week'
+                  : r === 'month'
+                    ? 'This month'
+                    : 'Custom'}
             </button>
           ))}
         </div>
         {range === 'custom' && (
           <div className="mb-4 flex gap-2">
-            <Input label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Input
+              label="From"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
             <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         )}
@@ -207,15 +223,21 @@ export function ReportsPage() {
           </div>
           <div className="rounded-xl bg-surface-muted px-4 py-3">
             <p className="text-xs text-text-muted">Avg ticket</p>
-            <p className="text-xl font-bold">{formatMoney(summary?.averageTicket ?? '0', currency)}</p>
+            <p className="text-xl font-bold">
+              {formatMoney(summary?.averageTicket ?? '0', currency)}
+            </p>
           </div>
           <div className="rounded-xl bg-surface-muted px-4 py-3">
             <p className="text-xs text-text-muted">Discount given</p>
-            <p className="text-xl font-bold text-danger">{formatMoney(summary?.discountTotal ?? '0', currency)}</p>
+            <p className="text-xl font-bold text-danger">
+              {formatMoney(summary?.discountTotal ?? '0', currency)}
+            </p>
           </div>
           <div className="rounded-xl bg-surface-muted px-4 py-3">
             <p className="text-xs text-text-muted">Gross profit</p>
-            <p className="text-xl font-bold">{formatMoney(summary?.grossProfit ?? '0', currency)}</p>
+            <p className="text-xl font-bold">
+              {formatMoney(summary?.grossProfit ?? '0', currency)}
+            </p>
           </div>
         </div>
         <div className="mb-4 grid gap-4 lg:grid-cols-2">
@@ -247,7 +269,9 @@ export function ReportsPage() {
                 />
               ))}
               {topProducts.length === 0 && (
-                <p className="py-6 text-center text-sm text-text-muted">No product sales in this range.</p>
+                <p className="py-6 text-center text-sm text-text-muted">
+                  No product sales in this range.
+                </p>
               )}
             </div>
           </div>
@@ -278,7 +302,10 @@ export function ReportsPage() {
 
       {(discountUsage?.length ?? 0) > 0 && (
         <Card className="mb-6">
-          <CardHeader title="Discount usage by rule" subtitle="Per-rule analytics for the selected period" />
+          <CardHeader
+            title="Discount usage by rule"
+            subtitle="Per-rule analytics for the selected period"
+          />
           <div className="mb-4 space-y-3 rounded-xl border border-border bg-white p-4">
             {discountUsage?.slice(0, 8).map((row) => (
               <HorizontalBar
@@ -304,7 +331,9 @@ export function ReportsPage() {
                 <tr key={row.discountRuleId} className="border-t border-border/60">
                   <td className="px-4 py-3 font-medium">{row.ruleName}</td>
                   <td className="px-4 py-3">{row.usageCount}</td>
-                  <td className="px-4 py-3 font-semibold text-danger">{formatMoney(row.totalDiscount, currency)}</td>
+                  <td className="px-4 py-3 font-semibold text-danger">
+                    {formatMoney(row.totalDiscount, currency)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -380,7 +409,9 @@ export function ReportsPage() {
         <div className="mb-4 flex gap-6 rounded-xl bg-brand-50 px-5 py-4">
           <div>
             <p className="text-xs font-medium text-text-muted">Total</p>
-            <p className="text-xl font-bold text-brand-800">{formatMoney(daily?.total ?? '0', currency)}</p>
+            <p className="text-xl font-bold text-brand-800">
+              {formatMoney(daily?.total ?? '0', currency)}
+            </p>
           </div>
           <div>
             <p className="text-xs font-medium text-text-muted">Transactions</p>
@@ -440,7 +471,9 @@ export function ReportsPage() {
                 <td className="px-4 py-3 font-medium">{row.name}</td>
                 <td className="px-4 py-3">{formatMoney(row.bucket0_7, currency)}</td>
                 <td className="px-4 py-3">{formatMoney(row.bucket8_30, currency)}</td>
-                <td className="px-4 py-3 font-medium text-warning">{formatMoney(row.bucket30_plus, currency)}</td>
+                <td className="px-4 py-3 font-medium text-warning">
+                  {formatMoney(row.bucket30_plus, currency)}
+                </td>
                 <td className="px-4 py-3 font-bold">{formatMoney(row.total, currency)}</td>
               </tr>
             ))}

@@ -64,7 +64,10 @@ export function SalesHistoryPage() {
     return () => window.clearTimeout(t);
   }, [search]);
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['sales', page, debouncedSearch],
     queryFn: () => api.sales.list(page, PAGE_SIZE, debouncedSearch || undefined),
@@ -217,7 +220,9 @@ export function SalesHistoryPage() {
                     <td className="px-4 py-3 text-text-muted">{s.cashier?.fullName ?? '—'}</td>
                     <td className="px-4 py-3 text-right">{s.itemCount ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={paymentBadgeVariant(s.paymentStatus)}>{paymentLabel(s)}</Badge>
+                      <Badge variant={paymentBadgeVariant(s.paymentStatus)}>
+                        {paymentLabel(s)}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-brand-700">
                       {s.hasReturns && s.netTotal
@@ -317,7 +322,10 @@ export function SalesHistoryPage() {
                       <Button
                         onClick={() => {
                           setPanel('return');
-                          window.setTimeout(() => returnPanelRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+                          window.setTimeout(
+                            () => returnPanelRef.current?.scrollIntoView({ behavior: 'smooth' }),
+                            50,
+                          );
                         }}
                       >
                         Return items
@@ -336,7 +344,9 @@ export function SalesHistoryPage() {
                       Cancel
                     </Button>
                     <Button
-                      disabled={!returnReason.trim() || !Object.values(returnQty).some((q) => q > 0)}
+                      disabled={
+                        !returnReason.trim() || !Object.values(returnQty).some((q) => q > 0)
+                      }
                       onClick={() => setConfirmReturn(true)}
                     >
                       Process return
@@ -370,8 +380,8 @@ export function SalesHistoryPage() {
             <div className="rounded-xl border border-brand-200 bg-brand-50/70 p-4">
               <p className="font-semibold text-brand-900">Return items from this invoice</p>
               <p className="mt-1 text-sm text-brand-800/80">
-                Enter qty to return for each line, add a reason, then process. Stock is restored for tracked
-                products. The original receipt becomes adjusted.
+                Enter qty to return for each line, add a reason, then process. Stock is restored for
+                tracked products. The original receipt becomes adjusted.
               </p>
             </div>
 
@@ -390,7 +400,9 @@ export function SalesHistoryPage() {
               {selected.items.map((item) => {
                 const sold = parseFloat(item.quantity);
                 const returned = parseFloat(item.returnedQuantity ?? '0');
-                const returnable = parseFloat(item.returnableQuantity ?? String(Math.max(0, sold - returned)));
+                const returnable = parseFloat(
+                  item.returnableQuantity ?? String(Math.max(0, sold - returned)),
+                );
                 const unitRefund = sold > 0 ? parseFloat(item.lineTotal) / sold : 0;
                 const qty = returnQty[item.id] ?? 0;
 
@@ -413,8 +425,8 @@ export function SalesHistoryPage() {
                         <p className="font-semibold text-text">{item.productName}</p>
                         <p className="mt-1 text-xs text-text-muted">
                           Sold {sold}
-                          {returned > 0 ? ` · Already returned ${returned}` : ''} · Can return {returnable} ·{' '}
-                          {formatMoney(unitRefund, currency)} each
+                          {returned > 0 ? ` · Already returned ${returned}` : ''} · Can return{' '}
+                          {returnable} · {formatMoney(unitRefund, currency)} each
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -470,8 +482,9 @@ export function SalesHistoryPage() {
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
               <p className="font-semibold text-rose-900">Void entire sale</p>
               <p className="mt-1 text-sm text-rose-800">
-                Cancels the whole bill ({formatMoney(selected.grandTotal, currency)}), restores stock, and
-                reverses udhaar if any. Prefer Return items if only some products came back.
+                Cancels the whole bill ({formatMoney(selected.grandTotal, currency)}), restores
+                stock, and reverses udhaar if any. Prefer Return items if only some products came
+                back.
               </p>
             </div>
             <Input
@@ -487,8 +500,8 @@ export function SalesHistoryPage() {
               <div className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm">
                 <p className="font-semibold text-text">Adjusted invoice</p>
                 <p className="mt-1 text-text-muted">
-                  Original total {formatMoney(selected.grandTotal, currency)} is superseded. Receipt below shows
-                  returns and net total.
+                  Original total {formatMoney(selected.grandTotal, currency)} is superseded. Receipt
+                  below shows returns and net total.
                 </p>
               </div>
             )}
@@ -506,8 +519,8 @@ export function SalesHistoryPage() {
           selected ? (
             <>
               Void sale <strong className="text-text">{selected.saleNumber}</strong> for{' '}
-              {formatMoney(selected.grandTotal, currency)}? Stock will be restored and udhaar entries
-              reversed. Reason: {voidReason}
+              {formatMoney(selected.grandTotal, currency)}? Stock will be restored and udhaar
+              entries reversed. Reason: {voidReason}
             </>
           ) : null
         }
@@ -522,7 +535,8 @@ export function SalesHistoryPage() {
         title="Process return?"
         message={
           <>
-            Refund about <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
+            Refund about{' '}
+            <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
             Selected quantities will return to stock (if tracked). This cannot be undone.
           </>
         }

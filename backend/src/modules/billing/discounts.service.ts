@@ -113,7 +113,9 @@ export async function updateDiscount(
   id: string,
   input: Partial<z.infer<typeof discountSchema>>,
 ) {
-  const existing = await prisma.discountRule.findFirst({ where: { id, tenantId, deletedAt: null } });
+  const existing = await prisma.discountRule.findFirst({
+    where: { id, tenantId, deletedAt: null },
+  });
   if (!existing) throw new NotFoundError('Discount rule not found');
 
   const rule = await prisma.$transaction(async (tx) => {

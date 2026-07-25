@@ -51,13 +51,25 @@ async function findExisting(
 ): Promise<{ version?: number; updatedAt?: Date; id?: string } | null> {
   switch (tableName) {
     case SYNC_TABLES.sales:
-      return tx.sale.findUnique({ where: { id: recordId }, select: { version: true, updatedAt: true } });
+      return tx.sale.findUnique({
+        where: { id: recordId },
+        select: { version: true, updatedAt: true },
+      });
     case SYNC_TABLES.products:
-      return tx.product.findUnique({ where: { id: recordId }, select: { version: true, updatedAt: true } });
+      return tx.product.findUnique({
+        where: { id: recordId },
+        select: { version: true, updatedAt: true },
+      });
     case SYNC_TABLES.categories:
-      return tx.category.findUnique({ where: { id: recordId }, select: { version: true, updatedAt: true } });
+      return tx.category.findUnique({
+        where: { id: recordId },
+        select: { version: true, updatedAt: true },
+      });
     case SYNC_TABLES.customers:
-      return tx.customer.findUnique({ where: { id: recordId }, select: { version: true, updatedAt: true } });
+      return tx.customer.findUnique({
+        where: { id: recordId },
+        select: { version: true, updatedAt: true },
+      });
     case SYNC_TABLES.customerLedgerEntries:
       return tx.customerLedgerEntry.findUnique({
         where: { id: recordId },
@@ -69,7 +81,10 @@ async function findExisting(
         select: { version: true },
       });
     case SYNC_TABLES.discountRules:
-      return tx.discountRule.findUnique({ where: { id: recordId }, select: { version: true, updatedAt: true } });
+      return tx.discountRule.findUnique({
+        where: { id: recordId },
+        select: { version: true, updatedAt: true },
+      });
     case SYNC_TABLES.branches:
       return tx.branch.findUnique({ where: { id: recordId }, select: { updatedAt: true } });
     case SYNC_TABLES.businessSettings:
@@ -84,13 +99,20 @@ async function findExisting(
     case SYNC_TABLES.stockMovements:
       return tx.stockMovement.findUnique({ where: { id: recordId }, select: { id: true } });
     case SYNC_TABLES.customerPaymentAllocations:
-      return tx.customerPaymentAllocation.findUnique({ where: { id: recordId }, select: { id: true } });
+      return tx.customerPaymentAllocation.findUnique({
+        where: { id: recordId },
+        select: { id: true },
+      });
     default:
       return null;
   }
 }
 
-async function insertRow(tx: TransactionClient, tableName: string, data: Record<string, unknown>): Promise<void> {
+async function insertRow(
+  tx: TransactionClient,
+  tableName: string,
+  data: Record<string, unknown>,
+): Promise<void> {
   switch (tableName) {
     case SYNC_TABLES.sales:
       await tx.sale.create({ data: data as never });
@@ -136,7 +158,12 @@ async function insertRow(tx: TransactionClient, tableName: string, data: Record<
   }
 }
 
-async function updateRow(tx: TransactionClient, tableName: string, recordId: string, data: Record<string, unknown>): Promise<void> {
+async function updateRow(
+  tx: TransactionClient,
+  tableName: string,
+  recordId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
   switch (tableName) {
     case SYNC_TABLES.sales:
       await tx.sale.update({ where: { id: recordId }, data: data as never });

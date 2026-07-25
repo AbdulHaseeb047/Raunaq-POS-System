@@ -12,7 +12,10 @@ function feeTone(status: string): 'default' | 'success' | 'warning' | 'danger' {
 }
 
 export function DashboardPage() {
-  const { data, isLoading } = useQuery({ queryKey: ['admin-dashboard'], queryFn: () => api.admin.dashboard() });
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-dashboard'],
+    queryFn: () => api.admin.dashboard(),
+  });
 
   if (isLoading || !data) return <PageLoader />;
 
@@ -24,8 +27,16 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total clients" value={data.totals.tenants} sub={`${data.totals.activeTenants} active`} />
-        <StatCard label="Client users" value={data.totals.clientUsers} sub={`${data.totals.activeClientUsers} active`} />
+        <StatCard
+          label="Total clients"
+          value={data.totals.tenants}
+          sub={`${data.totals.activeTenants} active`}
+        />
+        <StatCard
+          label="Client users"
+          value={data.totals.clientUsers}
+          sub={`${data.totals.activeClientUsers} active`}
+        />
         <StatCard label="Inactive clients" value={data.totals.inactiveTenants} />
         <StatCard label="Sales reps" value={data.totals.salesReps} />
       </div>
@@ -34,7 +45,10 @@ export function DashboardPage() {
         <Card title="Fee status breakdown">
           <div className="space-y-3">
             {data.feeStatus.map((f) => (
-              <div key={f.status} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <div
+                key={f.status}
+                className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"
+              >
                 <Badge tone={feeTone(f.status)}>{f.status}</Badge>
                 <span className="text-lg font-semibold">{f.count}</span>
               </div>
@@ -48,7 +62,10 @@ export function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {data.salesRepPerformance.map((r) => (
-                <div key={r.salesRepId ?? r.salesRepName} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+                <div
+                  key={r.salesRepId ?? r.salesRepName}
+                  className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3"
+                >
                   <span className="font-medium">{r.salesRepName}</span>
                   <span className="text-sm text-slate-500">{r.clientCount} clients</span>
                 </div>
@@ -58,7 +75,14 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <Card title="Recent clients" action={<Link to="/clients" className="text-sm font-medium text-indigo-600 hover:underline">View all</Link>}>
+      <Card
+        title="Recent clients"
+        action={
+          <Link to="/clients" className="text-sm font-medium text-indigo-600 hover:underline">
+            View all
+          </Link>
+        }
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -75,12 +99,19 @@ export function DashboardPage() {
               {data.recentTenants.map((t) => (
                 <tr key={t.id} className="border-b border-slate-50">
                   <td className="py-3 pr-4">
-                    <Link to={`/clients/${t.id}`} className="font-medium text-indigo-600 hover:underline">{t.name}</Link>
+                    <Link
+                      to={`/clients/${t.id}`}
+                      className="font-medium text-indigo-600 hover:underline"
+                    >
+                      {t.name}
+                    </Link>
                     <p className="text-xs text-slate-400">{t.slug}</p>
                   </td>
                   <td className="py-3 pr-4">{t.tier}</td>
                   <td className="py-3 pr-4">
-                    <Badge tone={t.isActive ? 'success' : 'danger'}>{t.isActive ? 'Active' : 'Inactive'}</Badge>
+                    <Badge tone={t.isActive ? 'success' : 'danger'}>
+                      {t.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
                   </td>
                   <td className="py-3 pr-4">
                     <Badge tone={feeTone(t.feeStatus)}>{t.feeStatus}</Badge>

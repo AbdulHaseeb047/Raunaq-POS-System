@@ -25,13 +25,7 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { downloadSalesReportPdf } from '@/lib/sales-pdf';
 
 export type SettingsTabId =
-  | 'account'
-  | 'password'
-  | 'business'
-  | 'receipts'
-  | 'printer'
-  | 'staff'
-  | 'data';
+  'account' | 'password' | 'business' | 'receipts' | 'printer' | 'staff' | 'data';
 
 type SettingsDialogProps = {
   open: boolean;
@@ -166,7 +160,9 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
         logoUrl: String(formValue('logoUrl', data?.logoUrl ?? '')) || null,
         currency: String(formValue('currency', data?.currency ?? 'PKR')),
         taxLabel: String(formValue('taxLabel', data?.taxLabel ?? 'Tax')),
-        defaultTaxRate: parseFloat(String(formValue('defaultTaxRate', data?.defaultTaxRate ?? '0'))),
+        defaultTaxRate: parseFloat(
+          String(formValue('defaultTaxRate', data?.defaultTaxRate ?? '0')),
+        ),
         receiptFooter: String(formValue('receiptFooter', data?.receiptFooter ?? '')) || null,
         receiptHeaderMode: String(
           formValue('receiptHeaderMode', data?.receiptHeaderMode ?? 'NAME'),
@@ -183,10 +179,12 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
             )
           : null,
         printerMode: String(formValue('printerMode', data?.printerMode ?? 'BROWSER')) as
-          | 'BROWSER'
-          | 'NETWORK',
+          'BROWSER' | 'NETWORK',
         printerHost: String(formValue('printerHost', data?.printerHost ?? '')) || null,
-        printerPort: parseInt(String(formValue('printerPort', String(data?.printerPort ?? 9100))), 10),
+        printerPort: parseInt(
+          String(formValue('printerPort', String(data?.printerPort ?? 9100))),
+          10,
+        ),
         printerPaperWidth: parseInt(
           String(formValue('printerPaperWidth', String(data?.printerPaperWidth ?? 80))),
           10,
@@ -264,10 +262,14 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
                     <Icon className="sidebar-nav-icon h-4 w-4 opacity-90" />
                   </span>
                   <span className="sidebar-nav-label min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold leading-tight">{item.label}</span>
+                    <span className="block text-[13px] font-semibold leading-tight">
+                      {item.label}
+                    </span>
                     <span
                       className={`block text-[11px] leading-tight ${
-                        selected ? 'text-white/75' : 'text-brand-200/65 group-hover:text-brand-100/80'
+                        selected
+                          ? 'text-white/75'
+                          : 'text-brand-200/65 group-hover:text-brand-100/80'
                       }`}
                     >
                       {item.hint}
@@ -293,7 +295,9 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
             <div className="min-w-0">
-              <h2 className="truncate text-base font-bold text-text">{active?.label ?? 'Settings'}</h2>
+              <h2 className="truncate text-base font-bold text-text">
+                {active?.label ?? 'Settings'}
+              </h2>
               <p className="truncate text-xs text-text-muted">{active?.hint}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -309,9 +313,7 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-            {tab === 'account' && (
-              <AccountPanel onChangePassword={() => onTabChange('password')} />
-            )}
+            {tab === 'account' && <AccountPanel onChangePassword={() => onTabChange('password')} />}
             {tab === 'password' && <ChangePasswordForm />}
             {tab !== 'account' && tab !== 'password' && (!canView || isLoading || !data) && (
               <PageLoader />

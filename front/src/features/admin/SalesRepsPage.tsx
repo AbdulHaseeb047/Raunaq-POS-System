@@ -29,7 +29,8 @@ export function SalesRepsPage() {
       void queryClient.invalidateQueries({ queryKey: ['sales-reps'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to create sales rep'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'Failed to create sales rep'),
   });
 
   if (isLoading) return <PageLoader />;
@@ -41,7 +42,14 @@ export function SalesRepsPage() {
           <h1 className="text-2xl font-bold text-text">Sales Representatives</h1>
           <p className="text-text-muted">Track which rep brought each client</p>
         </div>
-        <Button onClick={() => { setOpen(true); setError(''); }}>+ Add sales rep</Button>
+        <Button
+          onClick={() => {
+            setOpen(true);
+            setError('');
+          }}
+        >
+          + Add sales rep
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -52,7 +60,9 @@ export function SalesRepsPage() {
                 <p className="font-semibold">{r.fullName}</p>
                 <p className="text-sm text-text-muted">{r.email}</p>
               </div>
-              <Badge variant={r.isActive ? 'success' : 'danger'}>{r.isActive ? 'Active' : 'Inactive'}</Badge>
+              <Badge variant={r.isActive ? 'success' : 'danger'}>
+                {r.isActive ? 'Active' : 'Inactive'}
+              </Badge>
             </div>
             <p className="mt-4 text-2xl font-bold text-brand-700">{r.clientCount}</p>
             <p className="text-xs text-text-muted">clients acquired</p>
@@ -63,8 +73,8 @@ export function SalesRepsPage() {
       <Modal open={open} title="New sales representative" onClose={() => setOpen(false)}>
         <div className="space-y-3">
           <p className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs text-brand-900">
-            Enter the <strong>sales rep’s own</strong> email and a temporary password — not your admin login.
-            Give these credentials to that person so they can sign in.
+            Enter the <strong>sales rep’s own</strong> email and a temporary password — not your
+            admin login. Give these credentials to that person so they can sign in.
           </p>
           <Input
             label="Full name"

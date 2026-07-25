@@ -22,7 +22,9 @@ export function getSyncWorkerConfig(): SyncWorkerConfig {
   };
 }
 
-export function isHybridWorkerConfigured(config: SyncWorkerConfig = getSyncWorkerConfig()): boolean {
+export function isHybridWorkerConfigured(
+  config: SyncWorkerConfig = getSyncWorkerConfig(),
+): boolean {
   return (
     process.env.DEPLOYMENT_MODE === 'hybrid' &&
     Boolean(config.cloudApiUrl && config.apiKey && config.tenantId && config.deviceId)

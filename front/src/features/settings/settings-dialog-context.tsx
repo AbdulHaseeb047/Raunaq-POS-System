@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { SettingsDialog, type SettingsTabId } from './SettingsDialog';
 
@@ -27,20 +20,12 @@ export function SettingsDialogProvider({ children }: { children: ReactNode }) {
 
   const closeSettings = useCallback(() => setOpen(false), []);
 
-  const value = useMemo(
-    () => ({ openSettings, closeSettings }),
-    [openSettings, closeSettings],
-  );
+  const value = useMemo(() => ({ openSettings, closeSettings }), [openSettings, closeSettings]);
 
   return (
     <SettingsDialogContext.Provider value={value}>
       {children}
-      <SettingsDialog
-        open={open}
-        tab={tab}
-        onTabChange={setTab}
-        onClose={closeSettings}
-      />
+      <SettingsDialog open={open} tab={tab} onTabChange={setTab} onClose={closeSettings} />
     </SettingsDialogContext.Provider>
   );
 }

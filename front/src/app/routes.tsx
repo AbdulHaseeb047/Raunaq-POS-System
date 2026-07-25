@@ -72,13 +72,7 @@ const SalesRepsPage = lazy(() =>
   import('@/features/admin/SalesRepsPage').then((m) => ({ default: m.SalesRepsPage })),
 );
 
-function FeatureRoute({
-  feature,
-  children,
-}: {
-  feature: FeatureKey | null;
-  children: ReactNode;
-}) {
+function FeatureRoute({ feature, children }: { feature: FeatureKey | null; children: ReactNode }) {
   const { user } = useAuth();
   if (feature && !hasFeature(user, feature)) {
     return <Navigate to="/upgrade" replace state={{ fromFeature: feature }} />;

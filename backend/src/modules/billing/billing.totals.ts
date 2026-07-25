@@ -44,7 +44,10 @@ export function calculateSaleTotals(
   const calculatedLines = lines.map(calculateSaleLine);
 
   const subtotal = calculatedLines.reduce((s, l) => s.plus(l.lineSubtotal), new Decimal(0));
-  const lineDiscountTotal = calculatedLines.reduce((s, l) => s.plus(l.discountAmount), new Decimal(0));
+  const lineDiscountTotal = calculatedLines.reduce(
+    (s, l) => s.plus(l.discountAmount),
+    new Decimal(0),
+  );
   const billDiscount = toDecimal(billDiscountAmount ?? 0);
   const discountTotal = lineDiscountTotal.plus(billDiscount);
   const taxTotal = calculatedLines.reduce((s, l) => s.plus(l.taxAmount), new Decimal(0));

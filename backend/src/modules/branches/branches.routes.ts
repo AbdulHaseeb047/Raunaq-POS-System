@@ -18,7 +18,8 @@ export async function registerBranchRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: [authenticate, requireFeature(FEATURES.MULTI_BRANCH_ACCESS)] },
     async (request) => {
       const parsed = branchSchema.safeParse(request.body);
-      if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
+      if (!parsed.success)
+        throw new ValidationError('Invalid request body', parsed.error.flatten());
       return createBranch(resolveTenantId(request), parsed.data);
     },
   );
@@ -29,7 +30,8 @@ export async function registerBranchRoutes(app: FastifyInstance): Promise<void> 
     async (request) => {
       const { branchId } = request.params as { branchId: string };
       const parsed = branchSchema.partial().safeParse(request.body);
-      if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
+      if (!parsed.success)
+        throw new ValidationError('Invalid request body', parsed.error.flatten());
       return updateBranch(resolveTenantId(request), branchId, parsed.data);
     },
   );

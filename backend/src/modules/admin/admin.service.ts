@@ -86,27 +86,29 @@ export async function getAdminDashboard() {
 }
 
 export async function listSalesReps() {
-  return prisma.user.findMany({
-    where: { tenantId: null, role: 'SUPER_ADMIN', isSalesRep: true, deletedAt: null },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      isActive: true,
-      createdAt: true,
-      _count: { select: { tenantsAcquired: true } },
-    },
-    orderBy: { fullName: 'asc' },
-  }).then((rows) =>
-    rows.map((r) => ({
-      id: r.id,
-      email: r.email,
-      fullName: r.fullName,
-      isActive: r.isActive,
-      clientCount: r._count.tenantsAcquired,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  );
+  return prisma.user
+    .findMany({
+      where: { tenantId: null, role: 'SUPER_ADMIN', isSalesRep: true, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        isActive: true,
+        createdAt: true,
+        _count: { select: { tenantsAcquired: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    })
+    .then((rows) =>
+      rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        fullName: r.fullName,
+        isActive: r.isActive,
+        clientCount: r._count.tenantsAcquired,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    );
 }
 
 export const createSalesRepSchema = z.object({

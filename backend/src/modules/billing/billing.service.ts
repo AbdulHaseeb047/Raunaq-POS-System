@@ -47,7 +47,11 @@ export async function createSale(
   tenantId: string,
   cashierId: string,
   input: CreateSaleInput,
-  options?: { canDiscountUnlimited?: boolean; maxDiscountPercent?: number | null; branchId?: string },
+  options?: {
+    canDiscountUnlimited?: boolean;
+    maxDiscountPercent?: number | null;
+    branchId?: string;
+  },
 ) {
   if (input.paymentMethod === 'CREDIT' && !input.customerId) {
     throw new ValidationError('Customer is required for credit sales');
@@ -56,7 +60,8 @@ export async function createSale(
     if (!input.customerId) throw new ValidationError('Customer is required for split payment');
     const cash = input.cashAmount ?? 0;
     const credit = input.creditAmount ?? 0;
-    if (cash <= 0 && credit <= 0) throw new ValidationError('Split payment requires cash or credit amount');
+    if (cash <= 0 && credit <= 0)
+      throw new ValidationError('Split payment requires cash or credit amount');
   }
 
   const productIds = input.items.map((i) => i.productId);
@@ -98,10 +103,16 @@ export async function createSale(
     input.billDiscountAmount ?? 0,
   );
 
-  if (!options?.canDiscountUnlimited && options?.maxDiscountPercent != null && totals.discountTotal.gt(0)) {
+  if (
+    !options?.canDiscountUnlimited &&
+    options?.maxDiscountPercent != null &&
+    totals.discountTotal.gt(0)
+  ) {
     const maxAllowed = totals.subtotal.times(options.maxDiscountPercent).div(100);
     if (totals.discountTotal.gt(maxAllowed)) {
-      throw new ForbiddenError(`Discount exceeds allowed maximum of ${options.maxDiscountPercent}%`);
+      throw new ForbiddenError(
+        `Discount exceeds allowed maximum of ${options.maxDiscountPercent}%`,
+      );
     }
   }
 
@@ -203,8 +214,14 @@ export async function createSale(
     const nestedPaymentData =
       input.paymentMethod === 'SPLIT'
         ? [
-            ...( (input.cashAmount ?? 0) > 0
-              ? [{ tenantId, paymentMethod: 'CASH' as const, amount: toDecimal(input.cashAmount ?? 0) }]
+            ...((input.cashAmount ?? 0) > 0
+              ? [
+                  {
+                    tenantId,
+                    paymentMethod: 'CASH' as const,
+                    amount: toDecimal(input.cashAmount ?? 0),
+                  },
+                ]
               : []),
           ]
         : [{ tenantId, paymentMethod: input.paymentMethod, amount: grandTotal }];
@@ -673,12 +690,14 @@ export async function getSaleDetail(tenantId: string, saleId: string) {
 
 export const partialReturnSchema = z.object({
   reason: z.string().min(1),
-  items: z.array(
-    z.object({
-      saleItemId: z.string().uuid(),
-      quantity: z.number().positive(),
-    }),
-  ).min(1),
+  items: z
+    .array(
+      z.object({
+        saleItemId: z.string().uuid(),
+        quantity: z.number().positive(),
+      }),
+    )
+    .min(1),
 });
 
 export async function partialReturn(
@@ -814,10 +833,11 @@ export async function listSales(
   const skip = (page - 1) * pageSize;
   const term = search?.trim();
   const statusMatches = term
-    ? (['PAID', 'ON_CREDIT', 'PARTIAL'] as const).filter((s) =>
-        s.toLowerCase().includes(term.toLowerCase()) ||
-        (term.toLowerCase().includes('credit') && s === 'ON_CREDIT') ||
-        (term.toLowerCase().includes('udhaar') && s === 'ON_CREDIT'),
+    ? (['PAID', 'ON_CREDIT', 'PARTIAL'] as const).filter(
+        (s) =>
+          s.toLowerCase().includes(term.toLowerCase()) ||
+          (term.toLowerCase().includes('credit') && s === 'ON_CREDIT') ||
+          (term.toLowerCase().includes('udhaar') && s === 'ON_CREDIT'),
       )
     : [];
   const where = {
@@ -829,9 +849,7 @@ export async function listSales(
           OR: [
             { saleNumber: { contains: term, mode: 'insensitive' as const } },
             { customer: { name: { contains: term, mode: 'insensitive' as const } } },
-            ...(statusMatches.length > 0
-              ? [{ paymentStatus: { in: [...statusMatches] } }]
-              : []),
+            ...(statusMatches.length > 0 ? [{ paymentStatus: { in: [...statusMatches] } }] : []),
           ],
         }
       : {}),
@@ -866,26 +884,26 @@ export async function listSales(
     data: data.map((s) => {
       const returnedTotal = s.returns.reduce((sum, r) => sum + Number(r.totalAmount), 0);
       return {
-      id: s.id,
-      saleNumber: s.saleNumber,
-      status: s.status,
-      subtotal: s.subtotal.toFixed(2),
-      discountTotal: s.discountTotal.toFixed(2),
-      taxTotal: s.taxTotal.toFixed(2),
-      grandTotal: s.grandTotal.toFixed(2),
-      paymentStatus: s.paymentStatus,
-      createdAt: s.createdAt.toISOString(),
-      customer: s.customer,
-      cashier: s.cashier,
-      itemCount: s._count.items,
-      payments: s.payments.map((p) => ({
-        paymentMethod: p.paymentMethod,
-        amount: p.amount.toFixed(2),
-      })),
-      hasReturns: s.returns.length > 0,
-      returnedTotal: returnedTotal.toFixed(2),
-      netTotal: Math.max(0, Number(s.grandTotal) - returnedTotal).toFixed(2),
-    };
+        id: s.id,
+        saleNumber: s.saleNumber,
+        status: s.status,
+        subtotal: s.subtotal.toFixed(2),
+        discountTotal: s.discountTotal.toFixed(2),
+        taxTotal: s.taxTotal.toFixed(2),
+        grandTotal: s.grandTotal.toFixed(2),
+        paymentStatus: s.paymentStatus,
+        createdAt: s.createdAt.toISOString(),
+        customer: s.customer,
+        cashier: s.cashier,
+        itemCount: s._count.items,
+        payments: s.payments.map((p) => ({
+          paymentMethod: p.paymentMethod,
+          amount: p.amount.toFixed(2),
+        })),
+        hasReturns: s.returns.length > 0,
+        returnedTotal: returnedTotal.toFixed(2),
+        netTotal: Math.max(0, Number(s.grandTotal) - returnedTotal).toFixed(2),
+      };
     }),
     meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
   };

@@ -43,7 +43,12 @@ export function serializeRecord(record: Record<string, unknown>): Prisma.InputJs
 
   for (const [key, value] of Object.entries(record)) {
     if (value === undefined) continue;
-    if (value !== null && typeof value === 'object' && !(value instanceof Date) && !(value instanceof Decimal)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !(value instanceof Date) &&
+      !(value instanceof Decimal)
+    ) {
       continue;
     }
     out[camelToSnake(key)] = serializeValue(value);

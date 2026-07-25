@@ -33,7 +33,11 @@ export async function createBrand(tenantId: string, input: z.infer<typeof brandS
   });
 }
 
-export async function updateBrand(tenantId: string, id: string, input: Partial<z.infer<typeof brandSchema>>) {
+export async function updateBrand(
+  tenantId: string,
+  id: string,
+  input: Partial<z.infer<typeof brandSchema>>,
+) {
   const brand = await prisma.brand.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!brand) throw new NotFoundError('Brand not found');
   return prisma.brand.update({
@@ -72,7 +76,11 @@ export async function createSupplier(tenantId: string, input: z.infer<typeof sup
   return serializeSupplier(supplier);
 }
 
-export async function updateSupplier(tenantId: string, id: string, input: Partial<z.infer<typeof supplierSchema>>) {
+export async function updateSupplier(
+  tenantId: string,
+  id: string,
+  input: Partial<z.infer<typeof supplierSchema>>,
+) {
   const supplier = await prisma.supplier.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!supplier) throw new NotFoundError('Supplier not found');
   const updated = await prisma.supplier.update({
@@ -110,7 +118,9 @@ export async function supplierStockIn(
   recordedById: string,
   branchId?: string,
 ) {
-  const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, tenantId, deletedAt: null } });
+  const supplier = await prisma.supplier.findFirst({
+    where: { id: supplierId, tenantId, deletedAt: null },
+  });
   if (!supplier) throw new NotFoundError('Supplier not found');
 
   return prisma.$transaction(async (tx) => {
@@ -162,9 +172,7 @@ export async function supplierStockIn(
       });
     }
 
-    return serializeSupplier(
-      await tx.supplier.findUniqueOrThrow({ where: { id: supplierId } }),
-    );
+    return serializeSupplier(await tx.supplier.findUniqueOrThrow({ where: { id: supplierId } }));
   });
 }
 

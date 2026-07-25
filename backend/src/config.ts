@@ -31,10 +31,17 @@ function parseCorsOrigins(nodeEnv: string): string[] | true {
   if (!raw?.trim()) {
     throw new Error('CORS_ORIGINS is required in production (comma-separated allowed origins)');
   }
-  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+  return raw
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 }
 
-function assertProductionSecrets(nodeEnv: string, jwtSecret: string, jwtRefreshSecret: string): void {
+function assertProductionSecrets(
+  nodeEnv: string,
+  jwtSecret: string,
+  jwtRefreshSecret: string,
+): void {
   if (nodeEnv !== 'production') return;
   if (jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');

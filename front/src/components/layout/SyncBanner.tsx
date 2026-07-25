@@ -65,7 +65,9 @@ export function SyncBanner() {
 
   return (
     <>
-      <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 ${style}`}>
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 ${style}`}
+      >
         <div className="flex items-center gap-2 text-sm font-medium">
           <IconSync className="h-4 w-4 shrink-0" />
           <span>{status.userMessage}</span>
@@ -89,12 +91,7 @@ export function SyncBanner() {
         </div>
       </div>
 
-      <Modal
-        open={issuesOpen}
-        onClose={() => setIssuesOpen(false)}
-        title="Sync issues"
-        size="lg"
-      >
+      <Modal open={issuesOpen} onClose={() => setIssuesOpen(false)} title="Sync issues" size="lg">
         {!isClientAdmin(user) && (
           <p className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <IconAlert className="h-4 w-4" />

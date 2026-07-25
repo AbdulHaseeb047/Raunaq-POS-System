@@ -14,7 +14,13 @@ type MountainChartProps = {
   height?: number;
 };
 
-function buildPath(points: MountainPoint[], width: number, height: number, padX: number, padY: number) {
+function buildPath(
+  points: MountainPoint[],
+  width: number,
+  height: number,
+  padX: number,
+  padY: number,
+) {
   const max = Math.max(...points.map((p) => p.value), 1);
   const innerW = width - padX * 2;
   const innerH = height - padY * 2;
@@ -80,7 +86,9 @@ export function MountainChart({
           <p className="text-lg font-bold tabular-nums text-text">
             {active ? formatValue(active.value) : '—'}
           </p>
-          <p className={`text-[11px] font-semibold ${change >= 0 ? 'text-brand-700' : 'text-danger'}`}>
+          <p
+            className={`text-[11px] font-semibold ${change >= 0 ? 'text-brand-700' : 'text-danger'}`}
+          >
             {change >= 0 ? '+' : ''}
             {change.toFixed(1)}% period
           </p>
@@ -150,7 +158,14 @@ export function MountainChart({
                   strokeOpacity="0.35"
                   strokeDasharray="3 3"
                 />
-                <circle cx={active.x} cy={active.y} r={5} fill="#fff" stroke={color} strokeWidth="2" />
+                <circle
+                  cx={active.x}
+                  cy={active.y}
+                  r={5}
+                  fill="#fff"
+                  stroke={color}
+                  strokeWidth="2"
+                />
               </g>
             )}
           </svg>

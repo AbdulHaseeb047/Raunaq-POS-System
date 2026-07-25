@@ -49,12 +49,16 @@ export function AdminAppShell() {
                 <span className="sidebar-nav-icon-wrap flex shrink-0 items-center justify-center">
                   <item.icon className="sidebar-nav-icon h-4 w-4 opacity-90" />
                 </span>
-                {!collapsed && <span className="sidebar-nav-label min-w-0 flex-1 truncate">{item.label}</span>}
+                {!collapsed && (
+                  <span className="sidebar-nav-label min-w-0 flex-1 truncate">{item.label}</span>
+                )}
               </NavLink>
             ))}
           </nav>
 
-          <div className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}>
+          <div
+            className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}
+          >
             <AccountMenu placement="sidebar" collapsed={collapsed} />
           </div>
         </aside>

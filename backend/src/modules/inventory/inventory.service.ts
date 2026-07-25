@@ -67,14 +67,23 @@ export async function listCategories(tenantId: string) {
 export async function createCategory(tenantId: string, input: z.infer<typeof categorySchema>) {
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.create({
-      data: { tenantId, name: input.name, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true },
+      data: {
+        tenantId,
+        name: input.name,
+        sortOrder: input.sortOrder ?? 0,
+        isActive: input.isActive ?? true,
+      },
     });
     await syncInsert(tx, SYNC_TABLES.categories, category);
     return category;
   });
 }
 
-export async function updateCategory(tenantId: string, id: string, input: Partial<z.infer<typeof categorySchema>>) {
+export async function updateCategory(
+  tenantId: string,
+  id: string,
+  input: Partial<z.infer<typeof categorySchema>>,
+) {
   const cat = await prisma.category.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!cat) throw new NotFoundError('Category not found');
   return prisma.$transaction(async (tx) => {
@@ -135,9 +144,7 @@ export async function listProducts(
           ],
         }
       : {}),
-    ...(options?.stockStatus === 'out'
-      ? { trackStock: true, stockQuantity: { lte: 0 } }
-      : {}),
+    ...(options?.stockStatus === 'out' ? { trackStock: true, stockQuantity: { lte: 0 } } : {}),
   };
 
   const include = {
@@ -175,9 +182,7 @@ export async function listProducts(
     skip,
     take: pageSize,
   });
-  const total = options?.skipCount
-    ? products.length + skip
-    : await prisma.product.count({ where });
+  const total = options?.skipCount ? products.length + skip : await prisma.product.count({ where });
 
   return {
     data: products.map(serializeProduct),
@@ -251,7 +256,8 @@ export async function createProduct(tenantId: string, input: z.infer<typeof prod
         costPrice: input.costPrice != null ? toDecimal(input.costPrice) : null,
         sellPrice: toDecimal(input.sellPrice),
         taxRate: toDecimal(input.taxRate ?? 0),
-        lowStockThreshold: input.lowStockThreshold != null ? toDecimal(input.lowStockThreshold) : null,
+        lowStockThreshold:
+          input.lowStockThreshold != null ? toDecimal(input.lowStockThreshold) : null,
         expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
         trackStock: input.trackStock ?? true,
         isActive: input.isActive ?? true,
@@ -268,7 +274,11 @@ export async function createProduct(tenantId: string, input: z.infer<typeof prod
   return serializeProduct(product);
 }
 
-export async function updateProduct(tenantId: string, id: string, input: Partial<z.infer<typeof productSchema>>) {
+export async function updateProduct(
+  tenantId: string,
+  id: string,
+  input: Partial<z.infer<typeof productSchema>>,
+) {
   const existing = await prisma.product.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!existing) throw new NotFoundError('Product not found');
 
@@ -286,8 +296,14 @@ export async function updateProduct(tenantId: string, id: string, input: Partial
         costPrice: input.costPrice != null ? toDecimal(input.costPrice) : undefined,
         sellPrice: input.sellPrice != null ? toDecimal(input.sellPrice) : undefined,
         taxRate: input.taxRate != null ? toDecimal(input.taxRate) : undefined,
-        lowStockThreshold: input.lowStockThreshold != null ? toDecimal(input.lowStockThreshold) : undefined,
-        expiryDate: input.expiryDate !== undefined ? (input.expiryDate ? new Date(input.expiryDate) : null) : undefined,
+        lowStockThreshold:
+          input.lowStockThreshold != null ? toDecimal(input.lowStockThreshold) : undefined,
+        expiryDate:
+          input.expiryDate !== undefined
+            ? input.expiryDate
+              ? new Date(input.expiryDate)
+              : null
+            : undefined,
         trackStock: input.trackStock,
         isActive: input.isActive,
       },
@@ -310,14 +326,19 @@ export async function adjustStock(
   recordedById: string,
 ) {
   return prisma.$transaction(async (tx) => {
-    const product = await tx.product.findFirst({ where: { id: productId, tenantId, deletedAt: null } });
+    const product = await tx.product.findFirst({
+      where: { id: productId, tenantId, deletedAt: null },
+    });
     if (!product) throw new NotFoundError('Product not found');
 
     const delta = toDecimal(input.quantityDelta);
     const newQty = product.stockQuantity.plus(delta);
     if (newQty.lt(0)) throw new NotFoundError('Stock cannot go negative');
 
-    const updatedProduct = await tx.product.update({ where: { id: productId }, data: { stockQuantity: newQty } });
+    const updatedProduct = await tx.product.update({
+      where: { id: productId },
+      data: { stockQuantity: newQty },
+    });
 
     const movement = await tx.stockMovement.create({
       data: {
@@ -410,9 +431,18 @@ export async function importProducts(
   input: z.infer<typeof importProductsSchema>,
 ) {
   const [categories, brands, suppliers, existingProducts] = await Promise.all([
-    prisma.category.findMany({ where: { tenantId, deletedAt: null }, select: { id: true, name: true } }),
-    prisma.brand.findMany({ where: { tenantId, deletedAt: null }, select: { id: true, name: true } }),
-    prisma.supplier.findMany({ where: { tenantId, deletedAt: null }, select: { id: true, name: true } }),
+    prisma.category.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true },
+    }),
+    prisma.brand.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true },
+    }),
+    prisma.supplier.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true },
+    }),
     prisma.product.findMany({ where: { tenantId, deletedAt: null } }),
   ]);
 

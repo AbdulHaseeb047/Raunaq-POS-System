@@ -54,22 +54,39 @@ export function ChangePasswordPage() {
           You must change your password before continuing.
         </p>
       )}
-      <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
+      <form
+        onSubmit={(e) => void submit(e)}
+        className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6"
+      >
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600">Current password</label>
-          <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+          <Input
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600">New password</label>
           <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} required />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Confirm new password</label>
-          <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            Confirm new password
+          </label>
+          <Input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+          />
         </div>
         {error && <p className="text-sm text-rose-600">{error}</p>}
         {success && <p className="text-sm text-emerald-600">{success}</p>}
-        <Button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Update password'}</Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Saving…' : 'Update password'}
+        </Button>
       </form>
     </div>
   );

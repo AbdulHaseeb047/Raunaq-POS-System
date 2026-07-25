@@ -21,7 +21,10 @@ export function BrandsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
   const [search, setSearch] = useState('');
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  });
   const { data, isLoading } = useQuery({ queryKey: ['brands'], queryFn: () => api.brands.list() });
 
   const { data: productsPage } = useQuery({
@@ -164,7 +167,11 @@ export function BrandsPage() {
         open={modal}
         onClose={() => setModal(false)}
         title={editing ? 'Edit brand' : 'New brand'}
-        footer={<Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button>}
+        footer={
+          <Button loading={save.isPending} onClick={() => save.mutate()}>
+            Save
+          </Button>
+        }
       >
         <Input label="Brand name" value={name} onChange={(e) => setName(e.target.value)} />
       </Modal>
@@ -179,8 +186,8 @@ export function BrandsPage() {
         message={
           deleteTarget ? (
             <>
-              Delete brand <strong className="text-text">{deleteTarget.name}</strong>? Products linked
-              to this brand will remain but lose the brand tag.
+              Delete brand <strong className="text-text">{deleteTarget.name}</strong>? Products
+              linked to this brand will remain but lose the brand tag.
             </>
           ) : null
         }

@@ -62,7 +62,9 @@ export async function updateSettings(tenantId: string, input: z.infer<typeof set
         receiptFooter: input.receiptFooter,
         ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
         maxDiscountPercentStaff:
-          input.maxDiscountPercentStaff != null ? toDecimal(input.maxDiscountPercentStaff) : undefined,
+          input.maxDiscountPercentStaff != null
+            ? toDecimal(input.maxDiscountPercentStaff)
+            : undefined,
         fbrEnabled: input.fbrEnabled,
         fbrPosId: input.fbrPosId,
         fbrStrn: input.fbrStrn,

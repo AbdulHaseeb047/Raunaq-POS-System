@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 
 import { ValidationError } from '../core/errors.js';
-import { authenticate, requirePlatformAdmin, requirePlatformOwner } from '../permissions/permissions.middleware.js';
+import {
+  authenticate,
+  requirePlatformAdmin,
+  requirePlatformOwner,
+} from '../permissions/permissions.middleware.js';
 import {
   createSalesRep,
   createSalesRepSchema,
@@ -19,7 +23,10 @@ const adminWriteLimit = {
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   const readGuard = { preHandler: [authenticate, requirePlatformAdmin()], config: adminReadLimit };
-  const writeGuard = { preHandler: [authenticate, requirePlatformOwner()], config: adminWriteLimit };
+  const writeGuard = {
+    preHandler: [authenticate, requirePlatformOwner()],
+    config: adminWriteLimit,
+  };
 
   app.get('/admin/dashboard', readGuard, async () => getAdminDashboard());
 

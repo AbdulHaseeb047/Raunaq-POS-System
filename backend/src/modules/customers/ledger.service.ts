@@ -307,7 +307,14 @@ export async function getUdhaarAging(tenantId: string) {
   const now = Date.now();
   const buckets = new Map<
     string,
-    { customerId: string; name: string; phone: string | null; bucket0_7: Decimal; bucket8_30: Decimal; bucket30Plus: Decimal }
+    {
+      customerId: string;
+      name: string;
+      phone: string | null;
+      bucket0_7: Decimal;
+      bucket8_30: Decimal;
+      bucket30Plus: Decimal;
+    }
   >();
 
   for (const o of obligations) {

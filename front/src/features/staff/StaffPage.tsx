@@ -57,7 +57,8 @@ export function StaffPage() {
       setError('');
       void queryClient.invalidateQueries({ queryKey: ['users'] });
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to save permissions'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'Failed to save permissions'),
   });
 
   if (isLoading) return <PageLoader />;
@@ -69,7 +70,17 @@ export function StaffPage() {
       <PageHeader
         title="Staff"
         subtitle="Manage team members and permissions"
-        action={<Button onClick={() => { setCreateOpen(true); setSelectedFeatures([]); setError(''); }}>Add staff</Button>}
+        action={
+          <Button
+            onClick={() => {
+              setCreateOpen(true);
+              setSelectedFeatures([]);
+              setError('');
+            }}
+          >
+            Add staff
+          </Button>
+        }
       />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)]">
@@ -123,7 +134,9 @@ export function StaffPage() {
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
             <Button
               loading={createUser.isPending}
               disabled={!form.fullName || !form.email || form.password.length < 8}
@@ -135,13 +148,34 @@ export function StaffPage() {
         }
       >
         <div className="space-y-4">
-          <Input label="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} hint="Minimum 8 characters" />
+          <Input
+            label="Full name"
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            hint="Minimum 8 characters"
+          />
           {staffFeatures.length === 0 ? (
-            <p className="text-sm text-amber-700">No assignable features on your plan. Upgrade tier or contact support.</p>
+            <p className="text-sm text-amber-700">
+              No assignable features on your plan. Upgrade tier or contact support.
+            </p>
           ) : (
-            <FeaturePicker features={staffFeatures} selected={selectedFeatures} onChange={setSelectedFeatures} />
+            <FeaturePicker
+              features={staffFeatures}
+              selected={selectedFeatures}
+              onChange={setSelectedFeatures}
+            />
           )}
         </div>
       </Modal>
@@ -153,12 +187,20 @@ export function StaffPage() {
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setFeaturesOpen(null)}>Cancel</Button>
-            <Button loading={saveFeatures.isPending} onClick={() => saveFeatures.mutate()}>Save</Button>
+            <Button variant="ghost" onClick={() => setFeaturesOpen(null)}>
+              Cancel
+            </Button>
+            <Button loading={saveFeatures.isPending} onClick={() => saveFeatures.mutate()}>
+              Save
+            </Button>
           </>
         }
       >
-        <FeaturePicker features={staffFeatures} selected={selectedFeatures} onChange={setSelectedFeatures} />
+        <FeaturePicker
+          features={staffFeatures}
+          selected={selectedFeatures}
+          onChange={setSelectedFeatures}
+        />
       </Modal>
     </div>
   );
@@ -186,7 +228,9 @@ function FeaturePicker({
     <div className="max-h-64 space-y-4 overflow-y-auto">
       {Object.entries(byModule).map(([module, items]) => (
         <div key={module}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">{module}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            {module}
+          </p>
           <div className="space-y-1">
             {items.map((f) => (
               <label

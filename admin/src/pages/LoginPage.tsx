@@ -42,7 +42,8 @@ export function LoginPage() {
         </p>
         <h1 className="mt-2 text-center text-xl font-bold text-slate-900">Super Admin Login</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Manage clients, fees, features, and sales team. Change the default password after first login.
+          Manage clients, fees, features, and sales team. Change the default password after first
+          login.
         </p>
         <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
           <div>
@@ -51,9 +52,16 @@ export function LoginPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Password</label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
-          {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+          {error && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+          )}
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? 'Signing in…' : 'Sign in'}
           </Button>
@@ -65,7 +73,10 @@ export function LoginPage() {
         )}
         <p className="mt-4 text-center text-xs text-slate-400">
           Shop POS login is at{' '}
-          <a href={import.meta.env.VITE_POS_URL ?? 'http://localhost:5173'} className="text-indigo-600 hover:underline">
+          <a
+            href={import.meta.env.VITE_POS_URL ?? 'http://localhost:5173'}
+            className="text-indigo-600 hover:underline"
+          >
             {BRAND.name} POS
           </a>
         </p>

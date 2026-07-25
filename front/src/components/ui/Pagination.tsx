@@ -24,7 +24,12 @@ export function Pagination({
         {total != null ? ` · ${total} total` : ''}
       </p>
       <div className="flex gap-2">
-        <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
           Previous
         </Button>
         <Button

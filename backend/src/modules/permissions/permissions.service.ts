@@ -38,9 +38,7 @@ export async function resolveUserFeatures(
   });
   const tenantSet = new Set(tenantKeys);
 
-  return staffFeatures
-    .map((f) => f.featureKey as FeatureKey)
-    .filter((key) => tenantSet.has(key));
+  return staffFeatures.map((f) => f.featureKey as FeatureKey).filter((key) => tenantSet.has(key));
 }
 
 export async function resolveTenantEffectiveFeatureKeys(tenantId: string): Promise<FeatureKey[]> {
@@ -153,7 +151,9 @@ export function assertStaffFeaturesSubset(
   const tenantSet = new Set(tenantFeatures);
   const invalid = requested.filter((f) => !tenantSet.has(f));
   if (invalid.length > 0) {
-    throw new ValidationError(`Staff features must be enabled for this shop: ${invalid.join(', ')}`);
+    throw new ValidationError(
+      `Staff features must be enabled for this shop: ${invalid.join(', ')}`,
+    );
   }
 }
 

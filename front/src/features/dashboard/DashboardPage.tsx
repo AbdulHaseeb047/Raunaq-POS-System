@@ -21,7 +21,9 @@ function shortDay(isoDate: string) {
 }
 
 function StatSkeleton() {
-  return <div className="h-[104px] animate-pulse rounded-2xl border border-border bg-surface-muted" />;
+  return (
+    <div className="h-[104px] animate-pulse rounded-2xl border border-border bg-surface-muted" />
+  );
 }
 
 export function DashboardPage() {
@@ -187,7 +189,9 @@ export function DashboardPage() {
           <CardHeader title="Products returned today" subtitle="Refunds processed so far" />
           <div className="space-y-3">
             <div className="rounded-xl border border-border bg-surface-muted/60 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Amount returned</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                Amount returned
+              </p>
               <p className="mt-1 text-2xl font-bold text-brand-800">
                 {formatMoney(data?.todayReturnsAmount ?? '0', currency)}
               </p>

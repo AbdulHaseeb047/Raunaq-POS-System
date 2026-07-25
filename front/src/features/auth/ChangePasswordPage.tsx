@@ -43,7 +43,9 @@ export function ChangePasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-muted p-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-[var(--shadow-card-hover)]">
         <h1 className="text-xl font-bold text-text">Change your password</h1>
-        <p className="mt-1 text-sm text-text-muted">You must set a new password before continuing.</p>
+        <p className="mt-1 text-sm text-text-muted">
+          You must set a new password before continuing.
+        </p>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
           <Input
@@ -68,9 +70,7 @@ export function ChangePasswordPage() {
             onChange={(e) => setConfirm(e.target.value)}
             required
           />
-          {error && (
-            <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-danger">{error}</p>
-          )}
+          {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-danger">{error}</p>}
           <Button type="submit" className="w-full" loading={loading}>
             Update password
           </Button>

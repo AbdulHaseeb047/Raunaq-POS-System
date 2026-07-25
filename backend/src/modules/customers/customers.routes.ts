@@ -18,39 +18,66 @@ import {
 } from './customers.service.js';
 
 export async function registerCustomerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/customers', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_VIEW)] }, async (request) => {
-    const q = request.query as { search?: string; page?: string; pageSize?: string; sortBy?: string };
-    return listCustomers(
-      resolveTenantId(request),
-      q.search,
-      q.page ? Number(q.page) : 1,
-      q.pageSize ? Number(q.pageSize) : 50,
-      q.sortBy === 'balance' ? 'balance' : 'name',
-    );
-  });
+  app.get(
+    '/customers',
+    { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_VIEW)] },
+    async (request) => {
+      const q = request.query as {
+        search?: string;
+        page?: string;
+        pageSize?: string;
+        sortBy?: string;
+      };
+      return listCustomers(
+        resolveTenantId(request),
+        q.search,
+        q.page ? Number(q.page) : 1,
+        q.pageSize ? Number(q.pageSize) : 50,
+        q.sortBy === 'balance' ? 'balance' : 'name',
+      );
+    },
+  );
 
-  app.get('/customers/:id', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_VIEW)] }, async (request) => {
-    const { id } = request.params as { id: string };
-    return getCustomer(resolveTenantId(request), id);
-  });
+  app.get(
+    '/customers/:id',
+    { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_VIEW)] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return getCustomer(resolveTenantId(request), id);
+    },
+  );
 
-  app.post('/customers', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] }, async (request) => {
-    const parsed = customerSchema.safeParse(request.body);
-    if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
-    return createCustomer(resolveTenantId(request), parsed.data);
-  });
+  app.post(
+    '/customers',
+    { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] },
+    async (request) => {
+      const parsed = customerSchema.safeParse(request.body);
+      if (!parsed.success)
+        throw new ValidationError('Invalid request body', parsed.error.flatten());
+      return createCustomer(resolveTenantId(request), parsed.data);
+    },
+  );
 
-  app.patch('/customers/:id', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] }, async (request) => {
-    const { id } = request.params as { id: string };
-    const parsed = customerSchema.partial().safeParse(request.body);
-    if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
-    return updateCustomer(resolveTenantId(request), id, parsed.data);
-  });
+  app.patch(
+    '/customers/:id',
+    { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const parsed = customerSchema.partial().safeParse(request.body);
+      if (!parsed.success)
+        throw new ValidationError('Invalid request body', parsed.error.flatten());
+      return updateCustomer(resolveTenantId(request), id, parsed.data);
+    },
+  );
 
-  app.delete('/customers/:id', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] }, async (request) => {
-    const { id } = request.params as { id: string };
-    return deleteCustomer(resolveTenantId(request), id);
-  });
+  app.delete(
+    '/customers/:id',
+    { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return deleteCustomer(resolveTenantId(request), id);
+    },
+  );
 
   app.get(
     '/customers/:id/ledger',
@@ -67,7 +94,8 @@ export async function registerCustomerRoutes(app: FastifyInstance): Promise<void
     async (request) => {
       const { id } = request.params as { id: string };
       const parsed = recordPaymentSchema.safeParse(request.body);
-      if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
+      if (!parsed.success)
+        throw new ValidationError('Invalid request body', parsed.error.flatten());
       return recordCustomerPayment(resolveTenantId(request), id, parsed.data, request.user!.id);
     },
   );

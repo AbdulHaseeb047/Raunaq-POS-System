@@ -26,11 +26,7 @@ export function LoginPage() {
       navigate(getHomePath(user));
     } catch (err) {
       let message =
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Login failed';
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Login failed';
       if (
         message === 'Failed to fetch' ||
         message.includes('NetworkError') ||
@@ -54,7 +50,8 @@ export function LoginPage() {
             Fast billing, inventory, and udhaar management built for Pakistani shops.
           </p>
           <p className="mt-4 max-w-md text-sm text-brand-200/80">
-            One login for shop owners and platform admins — you are routed to the right dashboard automatically.
+            One login for shop owners and platform admins — you are routed to the right dashboard
+            automatically.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-4 text-sm">
@@ -76,7 +73,9 @@ export function LoginPage() {
 
           <div className="rounded-2xl border border-border bg-surface p-8 shadow-[var(--shadow-card-hover)]">
             <h2 className="text-xl font-bold text-text">Welcome back</h2>
-            <p className="mt-1 text-sm text-text-muted">Enter your credentials to access your dashboard</p>
+            <p className="mt-1 text-sm text-text-muted">
+              Enter your credentials to access your dashboard
+            </p>
 
             <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
               <Input
@@ -117,9 +116,10 @@ export function LoginPage() {
                 </p>
                 <p className="border-t border-brand-200/80 pt-2 text-xs leading-relaxed text-brand-800">
                   These passwords are stored <strong>hashed in PostgreSQL</strong> when you run{' '}
-                  <code className="rounded bg-white/60 px-1">npm run db:seed</code> — not checked in app code.
-                  After you change your password, the new hash replaces the old one in the database, so the seed
-                  password will <strong>never work again</strong> unless you re-run the seed or reset the account.
+                  <code className="rounded bg-white/60 px-1">npm run db:seed</code> — not checked in
+                  app code. After you change your password, the new hash replaces the old one in the
+                  database, so the seed password will <strong>never work again</strong> unless you
+                  re-run the seed or reset the account.
                 </p>
               </div>
             )}
