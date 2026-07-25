@@ -144,11 +144,13 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
     }
   }, [open, tab, tabs, onTabChange]);
 
-  const formValue = (key: string, fallback: string | boolean = '') => {
+  const formValue = (key: string, fallback: string | boolean = ''): string | boolean => {
     if (key in form) return form[key];
     if (!data) return fallback;
     const v = data[key as keyof typeof data];
-    return v ?? fallback;
+    if (v == null) return fallback;
+    if (typeof v === 'boolean') return v;
+    return String(v);
   };
 
   const update = useMutation({
