@@ -344,16 +344,18 @@ export function SalePage() {
   }, []);
 
   useEffect(() => {
-    if (paymentMode === 'SPLIT') {
-      const credit = parseFloat(creditAmount) || 0;
-      if (credit > 0) {
-        setCashAmount(String(Math.max(0, Math.round((totals.grandTotal - credit) * 100) / 100)));
-      }
-    } else if (paymentMode === 'CREDIT') {
+    if (paymentMode === 'CREDIT') {
       setCreditAmount(String(totals.grandTotal));
       setCashAmount('0');
+      setAmountReceived('');
+      return;
     }
-  }, [paymentMode, totals.grandTotal]);
+    if (paymentMode === 'SPLIT' && cashAmount !== '') {
+      const cash = Math.min(Math.max(0, parseFloat(cashAmount) || 0), totals.grandTotal);
+      setCreditAmount(String(Math.max(0, Math.round((totals.grandTotal - cash) * 100) / 100)));
+      setAmountReceived(String(cash));
+    }
+  }, [paymentMode, totals.grandTotal, cashAmount]);
 
   const availablePaymentModes = useMemo((): PaymentMode[] => {
     if (!customer) return ['CASH'];
@@ -409,10 +411,13 @@ export function SalePage() {
       printReceipt: settings?.printReceiptsDefault ?? false,
     };
     if (paymentMode === 'SPLIT') {
-      body.cashAmount = parseFloat(cashAmount) || 0;
-      body.creditAmount = parseFloat(creditAmount) || 0;
+      const cash = parseFloat(cashAmount) || 0;
+      body.cashAmount = cash;
+      body.creditAmount = Math.max(0, Math.round((totals.grandTotal - cash) * 100) / 100);
+      // Same figure as cash given — no second tender entry.
+      body.amountReceived = cash;
     }
-    if (paymentMode === 'CASH' || (paymentMode === 'SPLIT' && (parseFloat(cashAmount) || 0) > 0)) {
+    if (paymentMode === 'CASH') {
       body.amountReceived = parseFloat(amountReceived) || 0;
     }
     return body;
@@ -545,9 +550,11 @@ export function SalePage() {
 
   const deleteHeld = useMutation({
     mutationFn: (id: string) => api.heldCarts.delete(id),
-    onSuccess: () => {
+    onSuccess: async () => {
       setDeleteHeldTarget(null);
-      void refetchHeld();
+      const result = await refetchHeld();
+      const remaining = result.data?.length ?? 0;
+      if (remaining === 0) setShowHeld(false);
     },
   });
 
@@ -619,9 +626,14 @@ export function SalePage() {
     return Math.round((received - cashDue) * 100) / 100;
   }, [amountReceived, cashDue]);
 
-  const needsCashTender =
-    paymentMode === 'CASH' || (paymentMode === 'SPLIT' && (parseFloat(cashAmount) || 0) > 0);
-  const cashTenderOk = !needsCashTender || (parseFloat(amountReceived) || 0) >= cashDue;
+  const needsCashTender = paymentMode === 'CASH';
+  const splitCashOk =
+    paymentMode !== 'SPLIT' ||
+    (cashAmount !== '' &&
+      (parseFloat(cashAmount) || 0) >= 0 &&
+      (parseFloat(cashAmount) || 0) < totals.grandTotal);
+  const cashTenderOk =
+    (!needsCashTender || (parseFloat(amountReceived) || 0) >= cashDue) && splitCashOk;
 
   const canAuthorize =
     cart.length > 0 &&
@@ -1130,6 +1142,13 @@ export function SalePage() {
                   onClick={() => {
                     setPaymentMode(mode);
                     setAmountReceived('');
+                    if (mode === 'SPLIT') {
+                      setCashAmount('');
+                      setCreditAmount(String(totals.grandTotal));
+                    } else if (mode !== 'CREDIT') {
+                      setCashAmount('');
+                      setCreditAmount('');
+                    }
                   }}
                   className={`rounded-2xl border px-4 py-5 text-center transition ${
                     paymentMode === mode
@@ -1214,59 +1233,64 @@ export function SalePage() {
 
           {paymentMode === 'SPLIT' && (
             <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-400 px-4 py-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Cash customer is giving now ({currency})
+                </p>
                 <Input
-                  label={`Cash (${currency})`}
                   type="number"
+                  min={0}
+                  max={totals.grandTotal}
+                  step="1"
                   value={cashAmount}
                   onChange={(e) => {
-                    const cash = parseFloat(e.target.value) || 0;
-                    setCashAmount(e.target.value);
-                    setCreditAmount(String(Math.max(0, totals.grandTotal - cash)));
-                    setAmountReceived('');
+                    const raw = e.target.value;
+                    setCashAmount(raw);
+                    const cash = Math.min(
+                      Math.max(0, parseFloat(raw) || 0),
+                      totals.grandTotal,
+                    );
+                    const credit = Math.max(
+                      0,
+                      Math.round((totals.grandTotal - cash) * 100) / 100,
+                    );
+                    setCreditAmount(String(credit));
+                    setAmountReceived(raw === '' ? '' : String(cash));
                   }}
+                  placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
+                  autoFocus
                 />
-                <Input
-                  label={`Udhaar (${currency})`}
-                  type="number"
-                  value={creditAmount}
-                  onChange={(e) => {
-                    const credit = parseFloat(e.target.value) || 0;
-                    setCreditAmount(e.target.value);
-                    setCashAmount(String(Math.max(0, totals.grandTotal - credit)));
-                    setAmountReceived('');
-                  }}
-                />
+                <p className="mt-2 text-xs text-text-muted">
+                  Enter cash paid now once. Remaining is saved as udhaar automatically.
+                </p>
               </div>
-              {(parseFloat(cashAmount) || 0) > 0 && (
-                <div className="rounded-2xl border border-slate-400 px-4 py-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Cash received ({currency})
-                  </p>
-                  <Input
-                    type="number"
-                    min={cashDue}
-                    value={amountReceived}
-                    onChange={(e) => setAmountReceived(e.target.value)}
-                    placeholder={`Cash due: ${formatMoney(cashDue, currency)}`}
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      type="button"
-                      onClick={() => setQuickTender(cashDue)}
-                    >
-                      Exact cash
-                    </Button>
-                  </div>
-                  {parseFloat(amountReceived) > 0 && changeDue > 0 && (
-                    <p className="mt-3 text-sm font-bold text-emerald-700">
-                      Change back: {formatMoney(changeDue, currency)}
-                    </p>
-                  )}
+
+              <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
+                <div className="flex justify-between">
+                  <span>Bill total</span>
+                  <span className="font-semibold">{formatMoney(totals.grandTotal, currency)}</span>
                 </div>
-              )}
+                <div className="mt-1 flex justify-between">
+                  <span>Cash now</span>
+                  <span className="font-semibold">
+                    {formatMoney(parseFloat(cashAmount) || 0, currency)}
+                  </span>
+                </div>
+                <div className="mt-2 flex justify-between border-t border-brand-200 pt-2 text-base font-bold">
+                  <span>Remaining on udhaar</span>
+                  <span>
+                    {formatMoney(
+                      Math.max(
+                        0,
+                        Math.round(
+                          (totals.grandTotal - (parseFloat(cashAmount) || 0)) * 100,
+                        ) / 100,
+                      ),
+                      currency,
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
