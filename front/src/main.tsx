@@ -9,8 +9,10 @@ import './app/styles/index.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      retry: 1,
+      staleTime: 60_000,
+      // High-latency hosting: avoid doubling every slow/failed request.
+      retry: 0,
+      refetchOnWindowFocus: false,
     },
   },
 });

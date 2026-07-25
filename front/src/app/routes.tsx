@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { FEATURES } from '@pos/shared';
 import type { FeatureKey } from '@pos/shared';
@@ -10,40 +11,78 @@ import {
 } from '@/components/auth/RouteGuards';
 import { AdminAppShell } from '@/components/layout/AdminAppShell';
 import { AppShell } from '@/components/layout/AppShell';
-import { AdminDashboardPage } from '@/features/admin/AdminDashboardPage';
-import { ClientDetailPage } from '@/features/admin/ClientDetailPage';
-import { ClientsPage } from '@/features/admin/ClientsPage';
-import { SalesRepsPage } from '@/features/admin/SalesRepsPage';
+import { PageLoader } from '@/components/ui/Spinner';
+import { LoginPage } from '@/features/auth/LoginPage';
 import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage';
 import { AccountPasswordPage } from '@/features/auth/AccountPasswordPage';
-import { LoginPage } from '@/features/auth/LoginPage';
-import { BrandsPage } from '@/features/catalog/BrandsPage';
-import { SuppliersPage } from '@/features/catalog/SuppliersPage';
-import { SalePage } from '@/features/billing/SalePage';
-import { SalesHistoryPage } from '@/features/billing/SalesHistoryPage';
-import { CustomersPage } from '@/features/customers/CustomersPage';
-import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { DiscountsPage } from '@/features/discounts/DiscountsPage';
-import { CategoriesPage } from '@/features/inventory/CategoriesPage';
-import { InventoryPage } from '@/features/inventory/InventoryPage';
-import { ReportsPage } from '@/features/reports/ReportsPage';
-import { SettingsPage } from '@/features/settings/SettingsPage';
-import { StaffPage } from '@/features/staff/StaffPage';
 import { hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
+
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const SalePage = lazy(() =>
+  import('@/features/billing/SalePage').then((m) => ({ default: m.SalePage })),
+);
+const SalesHistoryPage = lazy(() =>
+  import('@/features/billing/SalesHistoryPage').then((m) => ({ default: m.SalesHistoryPage })),
+);
+const InventoryPage = lazy(() =>
+  import('@/features/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })),
+);
+const CategoriesPage = lazy(() =>
+  import('@/features/inventory/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
+);
+const CustomersPage = lazy(() =>
+  import('@/features/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
+);
+const DiscountsPage = lazy(() =>
+  import('@/features/discounts/DiscountsPage').then((m) => ({ default: m.DiscountsPage })),
+);
+const ReportsPage = lazy(() =>
+  import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const StaffPage = lazy(() =>
+  import('@/features/staff/StaffPage').then((m) => ({ default: m.StaffPage })),
+);
+const BrandsPage = lazy(() =>
+  import('@/features/catalog/BrandsPage').then((m) => ({ default: m.BrandsPage })),
+);
+const SuppliersPage = lazy(() =>
+  import('@/features/catalog/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
+);
+const SettingsPage = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
+const AdminDashboardPage = lazy(() =>
+  import('@/features/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
+);
+const ClientsPage = lazy(() =>
+  import('@/features/admin/ClientsPage').then((m) => ({ default: m.ClientsPage })),
+);
+const ClientDetailPage = lazy(() =>
+  import('@/features/admin/ClientDetailPage').then((m) => ({ default: m.ClientDetailPage })),
+);
+const SalesRepsPage = lazy(() =>
+  import('@/features/admin/SalesRepsPage').then((m) => ({ default: m.SalesRepsPage })),
+);
 
 function FeatureRoute({
   feature,
   children,
 }: {
   feature: FeatureKey | null;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const { user } = useAuth();
   if (feature && !hasFeature(user, feature)) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
 export function AppRoutes() {
@@ -59,22 +98,59 @@ export function AppRoutes() {
 
         <Route element={<AdminShellRoute />}>
           <Route element={<AdminAppShell />}>
-            <Route path="/admin" element={<AdminDashboardPage />} />
-            <Route path="/admin/clients" element={<ClientsPage />} />
-            <Route path="/admin/clients/:tenantId" element={<ClientDetailPage />} />
-            <Route path="/admin/sales-reps" element={<SalesRepsPage />} />
+            <Route
+              path="/admin"
+              element={
+                <LazyPage>
+                  <AdminDashboardPage />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="/admin/clients"
+              element={
+                <LazyPage>
+                  <ClientsPage />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="/admin/clients/:tenantId"
+              element={
+                <LazyPage>
+                  <ClientDetailPage />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="/admin/sales-reps"
+              element={
+                <LazyPage>
+                  <SalesRepsPage />
+                </LazyPage>
+              }
+            />
           </Route>
         </Route>
 
         <Route element={<PosShellRoute />}>
           <Route element={<AppShell />}>
-            <Route index element={<DashboardPage />} />
+            <Route
+              index
+              element={
+                <LazyPage>
+                  <DashboardPage />
+                </LazyPage>
+              }
+            />
 
             <Route
               path="sale"
               element={
                 <FeatureRoute feature={FEATURES.BILLING_CREATE_SALE}>
-                  <SalePage />
+                  <LazyPage>
+                    <SalePage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -82,7 +158,9 @@ export function AppRoutes() {
               path="inventory"
               element={
                 <FeatureRoute feature={FEATURES.INVENTORY_VIEW}>
-                  <InventoryPage />
+                  <LazyPage>
+                    <InventoryPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -90,7 +168,9 @@ export function AppRoutes() {
               path="categories"
               element={
                 <FeatureRoute feature={FEATURES.INVENTORY_CATEGORIES}>
-                  <CategoriesPage />
+                  <LazyPage>
+                    <CategoriesPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -98,7 +178,9 @@ export function AppRoutes() {
               path="customers"
               element={
                 <FeatureRoute feature={FEATURES.CUSTOMERS_VIEW}>
-                  <CustomersPage />
+                  <LazyPage>
+                    <CustomersPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -106,7 +188,9 @@ export function AppRoutes() {
               path="discounts"
               element={
                 <FeatureRoute feature={FEATURES.BILLING_DISCOUNT}>
-                  <DiscountsPage />
+                  <LazyPage>
+                    <DiscountsPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -114,7 +198,9 @@ export function AppRoutes() {
               path="reports"
               element={
                 <FeatureRoute feature={FEATURES.REPORTS_VIEW}>
-                  <ReportsPage />
+                  <LazyPage>
+                    <ReportsPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -122,7 +208,9 @@ export function AppRoutes() {
               path="staff"
               element={
                 <FeatureRoute feature={FEATURES.USERS_MANAGE}>
-                  <StaffPage />
+                  <LazyPage>
+                    <StaffPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -130,7 +218,9 @@ export function AppRoutes() {
               path="sales"
               element={
                 <FeatureRoute feature={FEATURES.BILLING_CREATE_SALE}>
-                  <SalesHistoryPage />
+                  <LazyPage>
+                    <SalesHistoryPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -138,7 +228,9 @@ export function AppRoutes() {
               path="brands"
               element={
                 <FeatureRoute feature={FEATURES.INVENTORY_VIEW}>
-                  <BrandsPage />
+                  <LazyPage>
+                    <BrandsPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -146,7 +238,9 @@ export function AppRoutes() {
               path="suppliers"
               element={
                 <FeatureRoute feature={FEATURES.INVENTORY_VIEW}>
-                  <SuppliersPage />
+                  <LazyPage>
+                    <SuppliersPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />
@@ -154,7 +248,9 @@ export function AppRoutes() {
               path="settings"
               element={
                 <FeatureRoute feature={FEATURES.SETTINGS_VIEW}>
-                  <SettingsPage />
+                  <LazyPage>
+                    <SettingsPage />
+                  </LazyPage>
                 </FeatureRoute>
               }
             />

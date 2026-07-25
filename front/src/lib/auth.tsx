@@ -12,6 +12,27 @@ import { api, clearTokens, getStoredBranchId, setStoredBranchId, setTokens } fro
 import type { AuthUser, Branch } from '@/types/api';
 import { canUsePosApp, FEATURES, hasFeature, isPlatformAdmin } from '@/lib/features';
 
+const USER_CACHE_KEY = 'pos_user_cache';
+
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user: AuthUser | null) {
+  try {
+    if (!user) localStorage.removeItem(USER_CACHE_KEY);
+    else localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
@@ -28,10 +49,25 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (typeof localStorage === 'undefined') return null;
+    if (!localStorage.getItem('pos_access_token')) return null;
+    return readCachedUser();
+  });
+  // Cached user + token → show shell immediately; revalidate in background.
+  const [isLoading, setIsLoading] = useState(() => {
+    if (typeof localStorage === 'undefined') return true;
+    const token = localStorage.getItem('pos_access_token');
+    if (!token) return false;
+    return !readCachedUser();
+  });
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchIdState] = useState<string | null>(getStoredBranchId());
+
+  const applyUser = useCallback((next: AuthUser | null) => {
+    setUser(next);
+    writeCachedUser(next);
+  }, []);
 
   const loadBranches = useCallback(async (authUser: AuthUser) => {
     if (!canUsePosApp(authUser) || !hasFeature(authUser, FEATURES.MULTI_BRANCH_ACCESS)) {
@@ -59,45 +95,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await api.auth.me();
       if (!canUsePosApp(me) && !isPlatformAdmin(me)) {
         clearTokens();
-        setUser(null);
+        applyUser(null);
         setBranches([]);
         return;
       }
-      setUser(me);
+      applyUser(me);
+      // Branches are not required for first paint — load in background.
       if (canUsePosApp(me)) {
-        await loadBranches(me);
+        void loadBranches(me);
       } else {
         setBranches([]);
       }
     } catch {
-      setUser(null);
+      applyUser(null);
       clearTokens();
     }
-  }, [loadBranches]);
+  }, [applyUser, loadBranches]);
 
   useEffect(() => {
     void (async () => {
-      const token = localStorage.getItem('pos_access_token');
-      if (token) {
+      const accessToken = localStorage.getItem('pos_access_token');
+      if (accessToken) {
         await refreshUser();
+      } else {
+        applyUser(null);
       }
       setIsLoading(false);
     })();
-  }, [refreshUser]);
+  }, [refreshUser, applyUser]);
 
   const login = useCallback(
     async (email: string, password: string) => {
       const result = await api.auth.login(email, password);
       setTokens(result.accessToken, result.refreshToken);
-      setUser(result.user);
+      applyUser(result.user);
       if (canUsePosApp(result.user)) {
-        await loadBranches(result.user);
+        void loadBranches(result.user);
       } else {
         setBranches([]);
       }
       return result.user;
     },
-    [loadBranches],
+    [applyUser, loadBranches],
   );
 
   const logout = useCallback(async () => {
@@ -105,20 +144,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.auth.logout();
     } finally {
       clearTokens();
-      setUser(null);
+      applyUser(null);
       setBranches([]);
       setBranchIdState(null);
       setStoredBranchId(null);
     }
-  }, []);
+  }, [applyUser]);
 
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
       const result = await api.auth.changePassword(currentPassword, newPassword);
       setTokens(result.accessToken, result.refreshToken);
-      setUser(result.user);
+      applyUser(result.user);
     },
-    [],
+    [applyUser],
   );
 
   const setBranchId = useCallback((id: string) => {

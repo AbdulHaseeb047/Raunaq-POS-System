@@ -6,7 +6,7 @@ import { appConfig } from '../../config.js';
 import type { TransactionClient } from '../core/prisma.js';
 import { enqueueSyncOutbox } from './outbox.service.js';
 
-function syncOutboxEnabled(): boolean {
+export function syncOutboxEnabled(): boolean {
   return appConfig.deploymentMode === 'hybrid';
 }
 

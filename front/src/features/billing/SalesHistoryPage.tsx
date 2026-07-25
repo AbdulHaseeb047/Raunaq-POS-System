@@ -315,7 +315,6 @@ export function SalesHistoryPage() {
                     )}
                     {canReturnSelected && (
                       <Button
-                        variant="accent"
                         onClick={() => {
                           setPanel('return');
                           window.setTimeout(() => returnPanelRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -484,16 +483,6 @@ export function SalesHistoryPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {canReturnSelected && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3">
-                <p className="text-sm text-brand-900">
-                  Need to take items back? Use <strong>Return items</strong>.
-                </p>
-                <Button size="sm" variant="accent" onClick={() => setPanel('return')}>
-                  Return items
-                </Button>
-              </div>
-            )}
             {selected.returns.length > 0 && (
               <div className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm">
                 <p className="font-semibold text-text">Adjusted invoice</p>

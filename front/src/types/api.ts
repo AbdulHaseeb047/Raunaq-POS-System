@@ -335,6 +335,8 @@ export interface CreateSaleResponse {
     paymentStatus: string;
     createdAt: string;
   };
+  /** Full receipt payload — avoids a second GET after checkout. */
+  detail?: SaleDetail;
   printReceipt: boolean;
   creditLimitWarning?: string;
 }

@@ -25,8 +25,10 @@ export function SyncBanner() {
   const { data: status } = useQuery({
     queryKey: ['sync', 'status'],
     queryFn: () => api.sync.status(),
-    refetchInterval: 60_000,
+    // Only keep polling in hybrid mode — cloud/offline Railway should not pay this RTT every minute.
+    refetchInterval: (q) => (q.state.data?.deploymentMode === 'hybrid' ? 60_000 : false),
     enabled: !!user,
+    staleTime: 5 * 60_000,
   });
 
   const { data: issues } = useQuery({

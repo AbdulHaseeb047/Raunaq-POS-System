@@ -72,3 +72,36 @@ export function productMatchesKeyword(product: Product, keyword: string): boolea
     (product.barcode?.toLowerCase().includes(q) ?? false)
   );
 }
+
+/**
+ * Lower = better. Prefix matches beat “contains” matches
+ * (typing "s" → Sugar before Basmati).
+ */
+export function productSearchRank(product: Product, keyword: string): number {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return 0;
+
+  const name = product.name.toLowerCase();
+  const sku = product.sku?.toLowerCase() ?? '';
+  const barcode = product.barcode?.toLowerCase() ?? '';
+
+  if (name.startsWith(q)) return 0;
+  if (sku.startsWith(q) || barcode.startsWith(q)) return 1;
+  if (name.split(/[\s\-_/]+/).some((word) => word.startsWith(q))) return 2;
+  if (name.includes(q) || sku.includes(q) || barcode.includes(q)) return 3;
+  return 99;
+}
+
+/** Filter by keyword, then rank: starts-with first, then contains. */
+export function filterAndRankProducts(products: Product[], keyword: string): Product[] {
+  const q = keyword.trim();
+  if (!q) return products;
+
+  return products
+    .filter((p) => productMatchesKeyword(p, q))
+    .sort((a, b) => {
+      const rankDiff = productSearchRank(a, q) - productSearchRank(b, q);
+      if (rankDiff !== 0) return rankDiff;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+}

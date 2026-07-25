@@ -75,17 +75,16 @@ export async function recordDiscountUsages(
   saleId: string,
   applied: Array<{ ruleId: string; amount: number }>,
 ) {
-  for (const item of applied) {
-    if (item.amount <= 0) continue;
-    await tx.discountUsage.create({
-      data: {
-        tenantId,
-        discountRuleId: item.ruleId,
-        saleId,
-        amount: toDecimal(item.amount),
-      },
-    });
-  }
+  const rows = applied
+    .filter((item) => item.amount > 0)
+    .map((item) => ({
+      tenantId,
+      discountRuleId: item.ruleId,
+      saleId,
+      amount: toDecimal(item.amount),
+    }));
+  if (rows.length === 0) return;
+  await tx.discountUsage.createMany({ data: rows });
 }
 
 export async function createDiscount(tenantId: string, input: z.infer<typeof discountSchema>) {

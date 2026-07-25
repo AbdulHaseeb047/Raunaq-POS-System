@@ -15,7 +15,7 @@ import { recordDiscountUsages } from './discounts.service.js';
 import { getSettings } from '../settings/settings.service.js';
 import { lockCustomerForUpdate } from '../customers/customer-lock.js';
 import { decrementProductStock, incrementProductStock } from '../inventory/product-stock.js';
-import { SYNC_TABLES, syncInsert, syncUpdate } from '../sync/sync-payload.js';
+import { SYNC_TABLES, syncInsert, syncOutboxEnabled, syncUpdate } from '../sync/sync-payload.js';
 
 export const saleItemSchema = z.object({
   productId: z.string().uuid(),
@@ -61,16 +61,26 @@ export async function createSale(
 
   const productIds = input.items.map((i) => i.productId);
   const saleId = randomUUID();
+  const needsCustomer = Boolean(input.customerId);
 
-  const [products, settings] = await Promise.all([
+  const [products, settings, customerRow] = await Promise.all([
     prisma.product.findMany({
       where: { tenantId, id: { in: productIds }, deletedAt: null, isActive: true },
     }),
     getSettings(tenantId),
+    needsCustomer
+      ? prisma.customer.findFirst({
+          where: { id: input.customerId!, tenantId, deletedAt: null },
+          select: { id: true, creditLimit: true, balance: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (products.length !== productIds.length) {
     throw new NotFoundError('One or more products not found');
+  }
+  if (needsCustomer && !customerRow) {
+    throw new NotFoundError('Customer not found');
   }
 
   const productMap = new Map(products.map((p) => [p.id, p]));
@@ -148,13 +158,6 @@ export async function createSale(
     };
   });
 
-  if (input.paymentMethod === 'CREDIT' && input.customerId) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: input.customerId, tenantId, deletedAt: null },
-    });
-    if (!customer) throw new NotFoundError('Customer not found');
-  }
-
   const paymentStatus =
     input.paymentMethod === 'CREDIT'
       ? ('ON_CREDIT' as const)
@@ -162,7 +165,22 @@ export async function createSale(
         ? ('PARTIAL' as const)
         : ('PAID' as const);
 
-  // Writes only — keep TX short; default timeout raised to 60s for remote DB latency.
+  const creditAmt =
+    input.paymentMethod === 'CREDIT'
+      ? grandTotal
+      : input.paymentMethod === 'SPLIT'
+        ? toDecimal(input.creditAmount ?? 0)
+        : toDecimal(0);
+  const syncOn = syncOutboxEnabled();
+
+  const saleInclude = {
+    items: true,
+    payments: true,
+    customer: { select: { id: true, name: true, phone: true } },
+    cashier: { select: { id: true, fullName: true } },
+  } as const;
+
+  // Fast path: nest payments when no credit ledger; batch stock movements; skip sync reloads on cloud.
   const sale = await prisma.$transaction(async (tx) => {
     const saleNumber = await nextSaleNumber(tx, tenantId);
 
@@ -181,7 +199,17 @@ export async function createSale(
       ].join('|');
     }
 
-    const created = await tx.sale.create({
+    const nestPayments = creditAmt.lte(0);
+    const nestedPaymentData =
+      input.paymentMethod === 'SPLIT'
+        ? [
+            ...( (input.cashAmount ?? 0) > 0
+              ? [{ tenantId, paymentMethod: 'CASH' as const, amount: toDecimal(input.cashAmount ?? 0) }]
+              : []),
+          ]
+        : [{ tenantId, paymentMethod: input.paymentMethod, amount: grandTotal }];
+
+    let created = await tx.sale.create({
       data: {
         id: saleId,
         tenantId,
@@ -212,18 +240,14 @@ export async function createSale(
             lineTotal: li.lineTotal,
           })),
         },
+        ...(nestPayments && nestedPaymentData.length > 0
+          ? { payments: { create: nestedPaymentData } }
+          : {}),
       },
-      include: { items: true },
+      include: saleInclude,
     });
 
     let ledgerEntryId: string | null = null;
-    const creditAmt =
-      input.paymentMethod === 'CREDIT'
-        ? grandTotal
-        : input.paymentMethod === 'SPLIT'
-          ? toDecimal(input.creditAmount ?? 0)
-          : toDecimal(0);
-
     if (creditAmt.gt(0) && input.customerId) {
       ledgerEntryId = await recordCreditSale(tx, {
         tenantId,
@@ -232,78 +256,109 @@ export async function createSale(
         amount: creditAmt,
         recordedById: cashierId,
       });
-    }
 
-    if (input.paymentMethod === 'SPLIT') {
-      const cashAmt = toDecimal(input.cashAmount ?? 0);
-      if (cashAmt.gt(0)) {
-        const cashPay = await tx.salePayment.create({
-          data: { tenantId, saleId: created.id, paymentMethod: 'CASH', amount: cashAmt },
-        });
-        await syncInsert(tx, SYNC_TABLES.salePayments, cashPay);
-      }
-      if (creditAmt.gt(0)) {
-        const creditPay = await tx.salePayment.create({
-          data: {
+      const paymentRows: Array<{
+        tenantId: string;
+        saleId: string;
+        paymentMethod: 'CASH' | 'CREDIT' | 'CARD' | 'BANK_TRANSFER';
+        amount: ReturnType<typeof toDecimal>;
+        ledgerEntryId?: string | null;
+      }> = [];
+      if (input.paymentMethod === 'SPLIT') {
+        const cashAmt = toDecimal(input.cashAmount ?? 0);
+        if (cashAmt.gt(0)) {
+          paymentRows.push({
             tenantId,
             saleId: created.id,
-            paymentMethod: 'CREDIT',
-            amount: creditAmt,
-            ledgerEntryId,
-          },
+            paymentMethod: 'CASH',
+            amount: cashAmt,
+          });
+        }
+        paymentRows.push({
+          tenantId,
+          saleId: created.id,
+          paymentMethod: 'CREDIT',
+          amount: creditAmt,
+          ledgerEntryId,
         });
-        await syncInsert(tx, SYNC_TABLES.salePayments, creditPay);
-      }
-    } else {
-      const payment = await tx.salePayment.create({
-        data: {
+      } else {
+        paymentRows.push({
           tenantId,
           saleId: created.id,
           paymentMethod: input.paymentMethod,
           amount: grandTotal,
           ledgerEntryId,
-        },
-      });
-      await syncInsert(tx, SYNC_TABLES.salePayments, payment);
+        });
+      }
+      await tx.salePayment.createMany({ data: paymentRows });
+      created = (await tx.sale.findUnique({
+        where: { id: created.id },
+        include: saleInclude,
+      }))!;
     }
 
-    await syncInsert(tx, SYNC_TABLES.sales, created);
-    for (const item of created.items) {
-      await syncInsert(tx, SYNC_TABLES.saleItems, item);
+    if (syncOn) {
+      await syncInsert(tx, SYNC_TABLES.sales, created);
+      for (const item of created.items) {
+        await syncInsert(tx, SYNC_TABLES.saleItems, item);
+      }
+      for (const pay of created.payments) {
+        await syncInsert(tx, SYNC_TABLES.salePayments, pay);
+      }
     }
 
     if (input.appliedDiscounts?.length) {
       await recordDiscountUsages(tx, tenantId, created.id, input.appliedDiscounts);
     }
 
+    const movementRows: Array<{
+      tenantId: string;
+      productId: string;
+      movementType: 'SALE';
+      quantityDelta: ReturnType<typeof toDecimal>;
+      quantityAfter: ReturnType<typeof toDecimal>;
+      referenceType: string;
+      referenceId: string;
+      recordedById: string;
+      branchId?: string;
+    }> = [];
+
     for (const li of lineItems) {
       if (!li.trackStock) continue;
-
       const quantityAfter = await decrementProductStock(tx, {
         tenantId,
         productId: li.productId,
         quantity: li.quantity,
         productName: li.productName,
       });
-
-      const movement = await tx.stockMovement.create({
-        data: {
-          tenantId,
-          productId: li.productId,
-          movementType: 'SALE',
-          quantityDelta: li.quantity.negated(),
-          quantityAfter,
-          referenceType: 'sale',
-          referenceId: created.id,
-          recordedById: cashierId,
-          branchId: options?.branchId,
-        },
+      movementRows.push({
+        tenantId,
+        productId: li.productId,
+        movementType: 'SALE',
+        quantityDelta: li.quantity.negated(),
+        quantityAfter,
+        referenceType: 'sale',
+        referenceId: created.id,
+        recordedById: cashierId,
+        branchId: options?.branchId,
       });
+    }
 
-      const productRow = await tx.product.findUnique({ where: { id: li.productId } });
-      await syncInsert(tx, SYNC_TABLES.stockMovements, movement);
-      if (productRow) {
-        await syncUpdate(tx, SYNC_TABLES.products, productRow);
+    if (movementRows.length > 0) {
+      await tx.stockMovement.createMany({ data: movementRows });
+    }
+
+    if (syncOn && movementRows.length > 0) {
+      const movements = await tx.stockMovement.findMany({
+        where: { tenantId, referenceId: created.id, movementType: 'SALE' },
+      });
+      for (const movement of movements) {
+        await syncInsert(tx, SYNC_TABLES.stockMovements, movement);
+      }
+      for (const li of lineItems) {
+        if (!li.trackStock) continue;
+        const productRow = await tx.product.findUnique({ where: { id: li.productId } });
+        if (productRow) await syncUpdate(tx, SYNC_TABLES.products, productRow);
       }
     }
 
@@ -311,17 +366,79 @@ export async function createSale(
   });
 
   let creditLimitWarning: string | undefined;
-  const creditPosted =
-    input.paymentMethod === 'CREDIT' ||
-    (input.paymentMethod === 'SPLIT' && (input.creditAmount ?? 0) > 0);
-  if (creditPosted && input.customerId) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: input.customerId, tenantId, deletedAt: null },
-    });
-    if (customer?.creditLimit && customer.balance.gt(customer.creditLimit)) {
-      creditLimitWarning = `Customer balance (${customer.balance.toFixed(2)}) exceeds credit limit (${customer.creditLimit.toFixed(2)})`;
+  if (creditAmt.gt(0) && customerRow?.creditLimit) {
+    const newBalance = customerRow.balance.plus(creditAmt);
+    if (newBalance.gt(customerRow.creditLimit)) {
+      creditLimitWarning = `Customer balance (${newBalance.toFixed(2)}) exceeds credit limit (${customerRow.creditLimit.toFixed(2)})`;
     }
   }
+
+  const detail = {
+    id: sale.id,
+    saleNumber: sale.saleNumber,
+    status: sale.status,
+    subtotal: sale.subtotal.toFixed(2),
+    discountTotal: sale.discountTotal.toFixed(2),
+    taxTotal: sale.taxTotal.toFixed(2),
+    grandTotal: sale.grandTotal.toFixed(2),
+    amountReceived: sale.amountReceived?.toFixed(2) ?? null,
+    changeGiven: sale.changeGiven?.toFixed(2) ?? null,
+    paymentStatus: sale.paymentStatus,
+    notes: sale.notes,
+    createdAt: sale.createdAt.toISOString(),
+    voidedAt: sale.voidedAt?.toISOString() ?? null,
+    voidReason: sale.voidReason,
+    fbrInvoiceNumber: sale.fbrInvoiceNumber,
+    fbrQrData: sale.fbrQrData,
+    customer: sale.customer,
+    cashier: sale.cashier,
+    items: sale.items.map((i) => ({
+      id: i.id,
+      productId: i.productId,
+      productName: i.productName,
+      unitPrice: i.unitPrice.toFixed(2),
+      quantity: i.quantity.toFixed(3),
+      discountAmount: i.discountAmount.toFixed(2),
+      taxAmount: i.taxAmount.toFixed(2),
+      lineTotal: i.lineTotal.toFixed(2),
+      returnedQuantity: '0.000',
+      returnableQuantity: i.quantity.toFixed(3),
+    })),
+    payments: sale.payments.map((p) => ({
+      id: p.id,
+      paymentMethod: p.paymentMethod,
+      amount: p.amount.toFixed(2),
+    })),
+    returns: [] as Array<{
+      id: string;
+      returnNumber: string;
+      reason: string;
+      totalAmount: string;
+      createdAt: string;
+      items: Array<{
+        id: string;
+        saleItemId: string;
+        productName: string;
+        quantity: string;
+        refundAmount: string;
+      }>;
+    }>,
+    receipt: {
+      businessName: settings.businessName ?? 'POS',
+      address: settings.address ?? null,
+      phone: settings.phone ?? null,
+      logoUrl: settings.logoUrl ?? null,
+      receiptHeaderMode: settings.receiptHeaderMode ?? 'NAME',
+      taxLabel: settings.taxLabel ?? 'Tax',
+      receiptFooter: settings.receiptFooter ?? null,
+      currency: settings.currency ?? 'PKR',
+      fbrEnabled: settings.fbrEnabled ?? false,
+      fbrPosId: settings.fbrPosId ?? null,
+      fbrStrn: settings.fbrStrn ?? null,
+      fbrRegisteredName: settings.fbrRegisteredName ?? null,
+      builtBy: BRAND.builtBy,
+    },
+  };
 
   return {
     sale: {
@@ -331,6 +448,7 @@ export async function createSale(
       paymentStatus: sale.paymentStatus,
       createdAt: sale.createdAt.toISOString(),
     },
+    detail,
     printReceipt: input.printReceipt ?? false,
     creditLimitWarning,
   };

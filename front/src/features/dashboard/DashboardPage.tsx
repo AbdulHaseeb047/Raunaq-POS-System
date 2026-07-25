@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 import { IconBox, IconSale, IconWallet } from '@/components/icons';
@@ -6,25 +7,37 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { MountainChart } from '@/components/ui/MountainChart';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PageLoader } from '@/components/ui/Spinner';
 import { QueryError } from '@/components/ui/QueryError';
 import { StatCard } from '@/components/ui/StatCard';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { FEATURES, hasFeature } from '@/lib/features';
+import { prefetchSaleCatalog } from '@/lib/use-sale-catalog';
 
 function shortDay(isoDate: string) {
   const d = new Date(`${isoDate}T12:00:00`);
   return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
 }
 
+function StatSkeleton() {
+  return <div className="h-[104px] animate-pulse rounded-2xl border border-border bg-surface-muted" />;
+}
+
 export function DashboardPage() {
   const { user, branchId } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Warm the sale catalog while the user is on the dashboard.
+  useEffect(() => {
+    if (!hasFeature(user, FEATURES.BILLING_CREATE_SALE)) return;
+    void prefetchSaleCatalog(queryClient);
+  }, [user, queryClient]);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
+    staleTime: 5 * 60_000,
   });
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -35,9 +48,8 @@ export function DashboardPage() {
   const { data: trend, isLoading: trendLoading } = useQuery({
     queryKey: ['sales-trend', branchId],
     queryFn: () => api.reports.salesTrend(14, branchId ?? undefined),
+    staleTime: 60_000,
   });
-
-  if (isLoading) return <PageLoader />;
 
   if (isError) {
     return (
@@ -74,41 +86,53 @@ export function DashboardPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard
-          label="Today's sales"
-          value={formatMoney(data?.todaySalesTotal ?? '0', currency)}
-          icon={<IconSale className="h-5 w-5" />}
-          accent="brand"
-        />
-        <StatCard
-          label="Transactions"
-          value={data?.todayTransactionCount ?? 0}
-          icon={<IconBox className="h-5 w-5" />}
-          accent="info"
-        />
-        <StatCard
-          label="Returns today"
-          value={formatMoney(data?.todayReturnsAmount ?? '0', currency)}
-          icon={<IconWallet className="h-5 w-5" />}
-          accent="info"
-          trend={
-            (data?.todayReturnsCount ?? 0) > 0
-              ? `${data?.todayReturnsCount} return${(data?.todayReturnsCount ?? 0) === 1 ? '' : 's'}`
-              : undefined
-          }
-        />
-        <StatCard
-          label="Outstanding udhaar"
-          value={formatMoney(data?.outstandingUdhaar ?? '0', currency)}
-          icon={<IconWallet className="h-5 w-5" />}
-          accent="accent"
-        />
-        <StatCard
-          label="Low stock items"
-          value={data?.lowStockAlerts?.length ?? 0}
-          icon={<IconBox className="h-5 w-5" />}
-          accent="warning"
-        />
+        {isLoading ? (
+          <>
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Today's sales"
+              value={formatMoney(data?.todaySalesTotal ?? '0', currency)}
+              icon={<IconSale className="h-5 w-5" />}
+              accent="brand"
+            />
+            <StatCard
+              label="Transactions"
+              value={data?.todayTransactionCount ?? 0}
+              icon={<IconBox className="h-5 w-5" />}
+              accent="info"
+            />
+            <StatCard
+              label="Returns today"
+              value={formatMoney(data?.todayReturnsAmount ?? '0', currency)}
+              icon={<IconWallet className="h-5 w-5" />}
+              accent="info"
+              trend={
+                (data?.todayReturnsCount ?? 0) > 0
+                  ? `${data?.todayReturnsCount} return${(data?.todayReturnsCount ?? 0) === 1 ? '' : 's'}`
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Outstanding udhaar"
+              value={formatMoney(data?.outstandingUdhaar ?? '0', currency)}
+              icon={<IconWallet className="h-5 w-5" />}
+              accent="accent"
+            />
+            <StatCard
+              label="Low stock items"
+              value={data?.lowStockAlerts?.length ?? 0}
+              icon={<IconBox className="h-5 w-5" />}
+              accent="warning"
+            />
+          </>
+        )}
       </div>
 
       <div className="mt-6">
@@ -126,7 +150,11 @@ export function DashboardPage() {
         </div>
 
         {trendLoading ? (
-          <PageLoader />
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
+            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
+            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
+          </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-3">
             <MountainChart
@@ -191,7 +219,9 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader title="Low stock alerts" subtitle="Products below threshold" />
-          {(data?.lowStockAlerts?.length ?? 0) === 0 ? (
+          {isLoading ? (
+            <div className="h-24 animate-pulse rounded-xl bg-surface-muted" />
+          ) : (data?.lowStockAlerts?.length ?? 0) === 0 ? (
             <p className="text-sm text-text-muted">All stock levels look good.</p>
           ) : (
             <ul className="space-y-2">

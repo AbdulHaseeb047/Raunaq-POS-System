@@ -20,7 +20,7 @@ import {
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
-import { productMatchesKeyword } from '@/lib/sale-utils';
+import { filterAndRankProducts } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Product } from '@/types/api';
 
@@ -81,12 +81,12 @@ export function InventoryPage() {
     placeholderData: (prev) => prev,
   });
 
-  // Filter by the live keyword so the table doesn't keep showing previous "all" results while typing.
+  // Filter + rank by live keyword: starts-with first, then contains.
   const displayedProducts = useMemo(() => {
     const rows = data?.data ?? [];
     const q = search.trim();
     if (!q) return rows;
-    return rows.filter((p) => productMatchesKeyword(p, q));
+    return filterAndRankProducts(rows, q);
   }, [data?.data, search]);
 
   const deleteProduct = useMutation({

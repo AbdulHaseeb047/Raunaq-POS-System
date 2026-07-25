@@ -15,11 +15,11 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
-import { calcSaleTotals, canAddToCart, getStockStatus, productMatchesKeyword } from '@/lib/sale-utils';
+import { calcSaleTotals, canAddToCart, filterAndRankProducts, getStockStatus } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useSaleCatalog } from '@/lib/use-sale-catalog';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
 
-const SALE_CATALOG_STALE_MS = 5 * 60 * 1000;
 const SALE_SEARCH_LIMIT = 40;
 
 interface CartLine {
@@ -107,17 +107,13 @@ export function SalePage() {
   });
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 150);
 
-  // Load catalog once — filter by keyword locally so typing stays instant on hosted API latency.
-  const { data: catalog, isLoading: catalogLoading, isFetching: catalogFetching } = useQuery({
-    queryKey: ['products', 'sale-catalog'],
-    queryFn: () =>
-      api.products.list({
-        pageSize: 2000,
-        activeOnly: true,
-        skipCount: true,
-      }),
-    staleTime: SALE_CATALOG_STALE_MS,
-  });
+  // Chunked catalog: first ~200 products unlock search quickly; rest loads in background.
+  const {
+    products: catalogProducts,
+    isLoading: catalogLoading,
+    isFetching: catalogFetching,
+    loadingMore: catalogLoadingMore,
+  } = useSaleCatalog();
   const { data: customers } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
     queryFn: () => api.customers.list(debouncedCustomerSearch || undefined, 1, 15),
@@ -127,6 +123,7 @@ export function SalePage() {
   const { data: heldCarts, refetch: refetchHeld } = useQuery({
     queryKey: ['held-carts'],
     queryFn: () => api.heldCarts.list(),
+    staleTime: 60_000,
   });
 
   const defaultTax = parseFloat(settings?.defaultTaxRate ?? '0');
@@ -381,73 +378,115 @@ export function SalePage() {
     setConfirmCancel(true);
   };
 
+  const buildSalePayload = () => {
+    const body: Record<string, unknown> = {
+      customerId: customer?.id,
+      paymentMethod: paymentMode === 'SPLIT' ? 'SPLIT' : paymentMode,
+      items: cart.map((l) => ({
+        productId: l.product.id,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discountAmount: l.discountAmount,
+        ...(l.customName ? { productName: l.customName } : {}),
+      })),
+      billDiscountAmount: billDiscount,
+      appliedDiscounts: appliedDiscounts.length > 0 ? appliedDiscounts : undefined,
+      notes: notes || undefined,
+      printReceipt: settings?.printReceiptsDefault ?? false,
+    };
+    if (paymentMode === 'SPLIT') {
+      body.cashAmount = parseFloat(cashAmount) || 0;
+      body.creditAmount = parseFloat(creditAmount) || 0;
+    }
+    if (paymentMode === 'CASH' || (paymentMode === 'SPLIT' && (parseFloat(cashAmount) || 0) > 0)) {
+      body.amountReceived = parseFloat(amountReceived) || 0;
+    }
+    return body;
+  };
+
   const completeSale = useMutation({
-    mutationFn: () => {
-      const body: Record<string, unknown> = {
-        customerId: customer?.id,
-        paymentMethod: paymentMode === 'SPLIT' ? 'SPLIT' : paymentMode,
-        items: cart.map((l) => ({
-          productId: l.product.id,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          discountAmount: l.discountAmount,
-          ...(l.customName ? { productName: l.customName } : {}),
-        })),
-        billDiscountAmount: billDiscount,
-        appliedDiscounts: appliedDiscounts.length > 0 ? appliedDiscounts : undefined,
-        notes: notes || undefined,
-        printReceipt: settings?.printReceiptsDefault ?? false,
+    mutationFn: (body: Record<string, unknown>) => api.sales.create(body),
+    onMutate: () => {
+      // Instant UX: clear register + close modal while the API runs.
+      const snapshot = {
+        cart,
+        customer,
+        customerSearch,
+        billDiscount,
+        discountInput,
+        selectedRuleId,
+        appliedDiscounts,
+        notes,
+        paymentMode,
+        amountReceived,
+        cashAmount,
+        creditAmount,
       };
-      if (paymentMode === 'SPLIT') {
-        body.cashAmount = parseFloat(cashAmount) || 0;
-        body.creditAmount = parseFloat(creditAmount) || 0;
-      }
-      if (paymentMode === 'CASH' || (paymentMode === 'SPLIT' && (parseFloat(cashAmount) || 0) > 0)) {
-        body.amountReceived = parseFloat(amountReceived) || 0;
-      }
-      return api.sales.create(body);
+      setError('');
+      setWarning('');
+      setShowCheckout(false);
+      setCart([]);
+      setCustomer(null);
+      setCustomerSearch('');
+      setBillDiscount(0);
+      setDiscountInput('');
+      setSelectedRuleId('');
+      setAppliedDiscounts([]);
+      setNotes('');
+      setPaymentMode('CASH');
+      setAmountReceived('');
+      setCashAmount('');
+      setCreditAmount('');
+      return snapshot;
     },
-    onSuccess: async (result) => {
-      try {
-        if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
-        const detail = await api.sales.get(result.sale.id);
-        setShowCheckout(false);
+    onSuccess: (result) => {
+      if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
+
+      const detail = result.detail;
+      if (detail) {
         setReceiptSale(detail);
         if (canPrint && settings?.printReceiptsDefault) {
           void printSaleReceipt(detail, settings, currency).catch((err) => {
             setWarning(err instanceof Error ? err.message : 'Receipt print failed');
           });
         }
-      } catch (err) {
-        setShowCheckout(false);
-        setError(err instanceof ApiError ? err.message : 'Sale saved, but receipt failed to load');
-      } finally {
-        setCart([]);
-        setCustomer(null);
-        setCustomerSearch('');
-        setBillDiscount(0);
-        setDiscountInput('');
-        setSelectedRuleId('');
-        setAppliedDiscounts([]);
-        setNotes('');
-        setPaymentMode('CASH');
-        setAmountReceived('');
-        setCashAmount('');
-        setCreditAmount('');
+      } else {
+        void api.sales.get(result.sale.id).then(setReceiptSale).catch(() => {
+          setError('Sale saved, but receipt failed to load');
+        });
+      }
+
+      window.setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         void queryClient.invalidateQueries({ queryKey: ['sales'] });
         void queryClient.invalidateQueries({ queryKey: ['customers'] });
         void queryClient.invalidateQueries({ queryKey: ['products'] });
-      }
+      }, 0);
     },
-    onError: (err) =>
+    onError: (err, _vars, snapshot) => {
+      if (snapshot) {
+        setCart(snapshot.cart);
+        setCustomer(snapshot.customer);
+        setCustomerSearch(snapshot.customerSearch);
+        setBillDiscount(snapshot.billDiscount);
+        setDiscountInput(snapshot.discountInput);
+        setSelectedRuleId(snapshot.selectedRuleId);
+        setAppliedDiscounts(snapshot.appliedDiscounts);
+        setNotes(snapshot.notes);
+        setPaymentMode(snapshot.paymentMode);
+        setAmountReceived(snapshot.amountReceived);
+        setCashAmount(snapshot.cashAmount);
+        setCreditAmount(snapshot.creditAmount);
+      }
+      setShowCheckout(true);
       setError(
         err instanceof ApiError
           ? err.message
           : err instanceof Error
             ? err.message
             : 'Sale failed — check API connection and try again',
-      ),
+      );
+    },
   });
 
   const holdCart = useMutation({
@@ -540,17 +579,19 @@ export function SalePage() {
   };
 
   const searchResults = useMemo(() => {
-    const rows = catalog?.data ?? [];
+    const rows = catalogProducts;
     const q = search.trim();
     if (!q && !categoryId) return [];
-    return rows
-      .filter((p) => {
-        if (categoryId && p.category?.id !== categoryId) return false;
-        return productMatchesKeyword(p, q);
-      })
-      .slice(0, SALE_SEARCH_LIMIT);
-  }, [catalog?.data, search, categoryId]);
-  const productsFetching = catalogLoading || (catalogFetching && !catalog?.data);
+
+    const inCategory = categoryId
+      ? rows.filter((p) => p.category?.id === categoryId)
+      : rows;
+
+    // Keep all matches that contain the keyword, but put "starts with" first.
+    const ranked = q ? filterAndRankProducts(inCategory, q) : inCategory;
+    return ranked.slice(0, SALE_SEARCH_LIMIT);
+  }, [catalogProducts, search, categoryId]);
+  const productsFetching = catalogLoading || (catalogFetching && catalogProducts.length === 0);
   const cashDue = useMemo(() => {
     if (paymentMode === 'CASH') return totals.grandTotal;
     if (paymentMode === 'SPLIT') return parseFloat(cashAmount) || 0;
@@ -634,6 +675,12 @@ export function SalePage() {
       {holdMessage && (
         <div className="mb-3 shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
           {holdMessage}
+        </div>
+      )}
+
+      {completeSale.isPending && (
+        <div className="mb-3 shrink-0 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-800">
+          Completing sale…
         </div>
       )}
 
@@ -758,7 +805,11 @@ export function SalePage() {
             </div>
             {!categoryId && !search && (
               <p className="py-10 text-center text-sm text-text-muted">
-                {catalogLoading ? 'Loading product catalog…' : 'Search or choose a category to start.'}
+                {catalogLoading
+                  ? 'Loading products…'
+                  : catalogLoadingMore
+                    ? 'Search or choose a category (loading more products…)'
+                    : 'Search or choose a category to start.'}
               </p>
             )}
           </Card>
@@ -978,7 +1029,7 @@ export function SalePage() {
                   setError('Enter the amount received from the customer.');
                   return;
                 }
-                completeSale.mutate();
+                completeSale.mutate(buildSalePayload());
               }}
             >
               Authorize Checkout

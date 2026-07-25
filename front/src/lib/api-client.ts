@@ -130,8 +130,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  } catch {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(20_000),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new ApiError('Request timed out. The server is slow or unreachable — try again.', 0, 'TIMEOUT');
+    }
     const hint =
       !import.meta.env.DEV && (API_BASE === '/api' || API_BASE.startsWith('/'))
         ? ' API URL looks wrong for hosting — set VITE_API_URL to your backend (e.g. https://your-api.up.railway.app) and redeploy.'
@@ -143,7 +150,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const refreshed = await refreshTokens();
     if (refreshed) {
       headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
-      res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+      res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers,
+        signal: init.signal ?? AbortSignal.timeout(20_000),
+      });
     }
   }
 
