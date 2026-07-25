@@ -109,21 +109,24 @@ export async function processTenantSubscriptionExpiry(tenantId: string): Promise
 }
 
 export async function processAllExpiredTenants(): Promise<number> {
-  const now = new Date();
-  const expired = await prisma.tenant.findMany({
-    where: {
-      deletedAt: null,
-      isActive: true,
-      subscriptionEndsAt: { lte: now },
-    },
-    select: { id: true },
+  const { withRlsBypass } = await import('../core/rls.js');
+  return withRlsBypass(async () => {
+    const now = new Date();
+    const expired = await prisma.tenant.findMany({
+      where: {
+        deletedAt: null,
+        isActive: true,
+        subscriptionEndsAt: { lte: now },
+      },
+      select: { id: true },
+    });
+
+    for (const t of expired) {
+      await processTenantSubscriptionExpiry(t.id);
+    }
+
+    return expired.length;
   });
-
-  for (const t of expired) {
-    await processTenantSubscriptionExpiry(t.id);
-  }
-
-  return expired.length;
 }
 
 export class TenantAccessBlockedError extends ForbiddenError {

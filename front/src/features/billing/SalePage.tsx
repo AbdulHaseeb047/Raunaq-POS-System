@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
 
 interface CartLine {
@@ -101,21 +102,24 @@ export function SalePage() {
     queryFn: () => api.discounts.list(false),
     enabled: canDiscount,
   });
+  const debouncedSearch = useDebouncedValue(search, 150);
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 150);
+
   const { data: products, isFetching: productsFetching } = useQuery({
-    queryKey: ['products', 'sale', search, categoryId],
+    queryKey: ['products', 'sale', debouncedSearch, categoryId],
     queryFn: () =>
       api.products.list({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         categoryId: categoryId || undefined,
         pageSize: 30,
       }),
-    enabled: search.length >= 1 || !!categoryId,
+    enabled: debouncedSearch.length >= 1 || !!categoryId,
     placeholderData: (prev) => prev,
   });
   const { data: customers } = useQuery({
-    queryKey: ['customers', 'sale', customerSearch],
-    queryFn: () => api.customers.list(customerSearch || undefined, 1, 15),
-    enabled: customerSearch.length >= 1,
+    queryKey: ['customers', 'sale', debouncedCustomerSearch],
+    queryFn: () => api.customers.list(debouncedCustomerSearch || undefined, 1, 15),
+    enabled: debouncedCustomerSearch.length >= 1,
     placeholderData: (prev) => prev,
   });
   const { data: heldCarts, refetch: refetchHeld } = useQuery({
@@ -434,7 +438,14 @@ export function SalePage() {
         void queryClient.invalidateQueries({ queryKey: ['products'] });
       }
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Sale failed'),
+    onError: (err) =>
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Sale failed — check API connection and try again',
+      ),
   });
 
   const holdCart = useMutation({

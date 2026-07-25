@@ -128,7 +128,16 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (branchId) headers.set('X-Branch-Id', branchId);
   }
 
-  let res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  } catch {
+    const hint =
+      !import.meta.env.DEV && (API_BASE === '/api' || API_BASE.startsWith('/'))
+        ? ' API URL looks wrong for hosting — set VITE_API_URL to your backend (e.g. https://your-api.up.railway.app) and redeploy.'
+        : ' Check your internet connection, CORS_ORIGINS on the API, and that the backend is running.';
+    throw new ApiError(`Cannot reach server.${hint}`, 0, 'NETWORK_ERROR');
+  }
 
   if (res.status === 401 && !skipAuth) {
     const refreshed = await refreshTokens();
@@ -139,6 +148,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!res.ok) {
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      throw new ApiError(
+        `API returned ${res.status} (not JSON). On Vercel, set VITE_API_URL to your Railway backend URL — not /api.`,
+        res.status,
+        'BAD_API_RESPONSE',
+      );
+    }
     const err = (await res.json().catch(() => ({ message: res.statusText }))) as ApiErrorBody;
     const blockedCodes = new Set([
       'SUBSCRIPTION_EXPIRED',

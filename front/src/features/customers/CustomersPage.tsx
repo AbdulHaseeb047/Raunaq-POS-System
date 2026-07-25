@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
 import { buildCustomerStatementHtml, openPrintDocument } from '@/lib/print-document';
 import { printSaleReceipt } from '@/lib/print-receipt';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Customer, LedgerEntry, SaleDetail } from '@/types/api';
 
 function printStatement(
@@ -34,6 +35,7 @@ export function CustomersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 200);
   const [sortByBalance, setSortByBalance] = useState(true);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [modal, setModal] = useState<'create' | 'edit' | 'payment' | null>(null);
@@ -57,8 +59,9 @@ export function CustomersPage() {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['customers', search, sortByBalance],
-    queryFn: () => api.customers.list(search || undefined, 1, 100, sortByBalance ? 'balance' : 'name'),
+    queryKey: ['customers', debouncedSearch, sortByBalance],
+    queryFn: () =>
+      api.customers.list(debouncedSearch || undefined, 1, 100, sortByBalance ? 'balance' : 'name'),
     placeholderData: (prev) => prev,
   });
 

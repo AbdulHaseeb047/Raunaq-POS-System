@@ -20,12 +20,14 @@ import {
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Product } from '@/types/api';
 
 export function InventoryPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 200);
   const [stockStatus, setStockStatus] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [modal, setModal] = useState<'create' | 'edit' | 'stock' | null>(null);
@@ -68,10 +70,10 @@ export function InventoryPage() {
   const { data: suppliers } = useQuery({ queryKey: ['suppliers'], queryFn: () => api.suppliers.list() });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['products', search, stockStatus, categoryFilter],
+    queryKey: ['products', debouncedSearch, stockStatus, categoryFilter],
     queryFn: () =>
       api.products.list({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         stockStatus: stockStatus === 'all' ? undefined : stockStatus,
         categoryId: categoryFilter || undefined,
       }),

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { NotFoundError } from '../core/errors.js';
@@ -113,50 +114,68 @@ export async function listProducts(
   const page = options?.page ?? 1;
   const pageSize = options?.pageSize ?? 50;
   const skip = (page - 1) * pageSize;
+  const search = options?.search?.trim();
 
-  const products = await prisma.product.findMany({
-    where: { tenantId, deletedAt: null },
-    include: {
-      category: { select: { id: true, name: true } },
-      brand: { select: { id: true, name: true } },
-      supplier: { select: { id: true, name: true } },
-    },
-  });
+  const where: Prisma.ProductWhereInput = {
+    tenantId,
+    deletedAt: null,
+    ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
+    ...(options?.brandId ? { brandId: options.brandId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { sku: { contains: search, mode: 'insensitive' } },
+            { barcode: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+    ...(options?.stockStatus === 'out'
+      ? { trackStock: true, stockQuantity: { lte: 0 } }
+      : {}),
+  };
 
-  let filtered = products;
+  const include = {
+    category: { select: { id: true, name: true } },
+    brand: { select: { id: true, name: true } },
+    supplier: { select: { id: true, name: true } },
+  } as const;
 
-  if (options?.search) {
-    const s = options.search.toLowerCase();
-    filtered = filtered.filter(
-      (p) =>
-        p.name.toLowerCase().includes(s) ||
-        p.barcode?.toLowerCase().includes(s) ||
-        p.sku?.toLowerCase().includes(s),
-    );
-  }
-  if (options?.categoryId) {
-    filtered = filtered.filter((p) => p.categoryId === options.categoryId);
-  }
-  if (options?.brandId) {
-    filtered = filtered.filter((p) => p.brandId === options.brandId);
-  }
-  if (options?.stockStatus && options.stockStatus !== 'all') {
-    filtered = filtered.filter((p) => {
+  // low/healthy compare two columns — filter after a DB-scoped fetch
+  if (options?.stockStatus === 'low' || options?.stockStatus === 'healthy') {
+    const products = await prisma.product.findMany({
+      where,
+      include,
+      orderBy: { name: 'asc' },
+    });
+    const filtered = products.filter((p) => {
       if (!p.trackStock) return options.stockStatus === 'healthy';
       const qty = Number(p.stockQuantity);
       const threshold = p.lowStockThreshold ? Number(p.lowStockThreshold) : 0;
-      if (options.stockStatus === 'out') return qty <= 0;
       if (options.stockStatus === 'low') return qty > 0 && threshold > 0 && qty <= threshold;
       return qty > threshold || threshold === 0;
     });
+    const total = filtered.length;
+    const data = filtered.slice(skip, skip + pageSize).map(serializeProduct);
+    return {
+      data,
+      meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 
-  filtered.sort((a, b) => a.name.localeCompare(b.name));
-  const total = filtered.length;
-  const data = filtered.slice(skip, skip + pageSize).map(serializeProduct);
+  const [total, products] = await Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      include,
+      orderBy: { name: 'asc' },
+      skip,
+      take: pageSize,
+    }),
+  ]);
 
   return {
-    data,
+    data: products.map(serializeProduct),
     meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
   };
 }

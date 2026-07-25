@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 
+import { withRlsBypass } from '../core/rls.js';
 import { probeCloudHealth } from './cloud-client.js';
 import { pullRemoteChanges } from './pull.service.js';
 import { pushPendingOutbox } from './push.service.js';
@@ -23,17 +24,19 @@ export async function runSyncCycle(
 
   cycleRunning = true;
   try {
-    const online = await probeCloudHealth(config);
-    if (!online) {
-      logger?.debug('Sync cycle skipped — cloud unreachable');
-      return { online: false, push: null, pull: null };
-    }
+    return await withRlsBypass(async () => {
+      const online = await probeCloudHealth(config);
+      if (!online) {
+        logger?.debug('Sync cycle skipped — cloud unreachable');
+        return { online: false, push: null, pull: null };
+      }
 
-    const push = await pushPendingOutbox(config);
-    const pull = await pullRemoteChanges(config);
+      const push = await pushPendingOutbox(config);
+      const pull = await pullRemoteChanges(config);
 
-    logger?.info({ push, pull }, 'Sync cycle completed');
-    return { online: true, push, pull };
+      logger?.info({ push, pull }, 'Sync cycle completed');
+      return { online: true, push, pull };
+    });
   } catch (error) {
     logger?.error({ err: error }, 'Sync cycle failed');
     return { online: false, push: null, pull: null };

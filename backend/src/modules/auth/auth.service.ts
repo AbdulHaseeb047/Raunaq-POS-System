@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 import { appConfig } from '../../config.js';
 import { UnauthorizedError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
+import { withRlsBypass } from '../core/rls.js';
 import type { AuthenticatedUser } from '../../types/fastify.js';
 import { resolveUserFeatures } from '../permissions/permissions.service.js';
 import { assertTenantPortalAccess } from '../tenants/subscription.service.js';
@@ -94,38 +95,40 @@ async function issueTokenPair(userId: string): Promise<{
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  const user = await prisma.user.findFirst({
-    where: {
-      email: email.toLowerCase(),
-      deletedAt: null,
-      isActive: true,
-    },
+  return withRlsBypass(async () => {
+    const user = await prisma.user.findFirst({
+      where: {
+        email: email.toLowerCase(),
+        deletedAt: null,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedError('Invalid email or password');
+    }
+
+    const valid = await argon2.verify(user.passwordHash, password);
+    if (!valid) {
+      throw new UnauthorizedError('Invalid email or password');
+    }
+
+    if (user.tenantId) {
+      await assertTenantPortalAccess(user.tenantId, { forLogin: true });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const tokens = await issueTokenPair(user.id);
+
+    return {
+      ...tokens,
+      mustChangePassword: tokens.user.mustChangePassword,
+    };
   });
-
-  if (!user) {
-    throw new UnauthorizedError('Invalid email or password');
-  }
-
-  const valid = await argon2.verify(user.passwordHash, password);
-  if (!valid) {
-    throw new UnauthorizedError('Invalid email or password');
-  }
-
-  if (user.tenantId) {
-    await assertTenantPortalAccess(user.tenantId, { forLogin: true });
-  }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
-
-  const tokens = await issueTokenPair(user.id);
-
-  return {
-    ...tokens,
-    mustChangePassword: tokens.user.mustChangePassword,
-  };
 }
 
 export async function changePassword(
@@ -137,39 +140,41 @@ export async function changePassword(
     throw new ValidationError('New password must be at least 8 characters');
   }
 
-  const user = await prisma.user.findFirst({
-    where: { id: userId, deletedAt: null, isActive: true },
+  return withRlsBypass(async () => {
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, isActive: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedError('User not found or inactive');
+    }
+
+    const valid = await argon2.verify(user.passwordHash, currentPassword);
+    if (!valid) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await hashPassword(newPassword),
+        mustChangePassword: false,
+      },
+    });
+
+    await prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    const tokens = await issueTokenPair(userId);
+    return { ...tokens, mustChangePassword: false };
   });
-
-  if (!user) {
-    throw new UnauthorizedError('User not found or inactive');
-  }
-
-  const valid = await argon2.verify(user.passwordHash, currentPassword);
-  if (!valid) {
-    throw new UnauthorizedError('Current password is incorrect');
-  }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      passwordHash: await hashPassword(newPassword),
-      mustChangePassword: false,
-    },
-  });
-
-  // Revoke all existing refresh tokens on password change
-  await prisma.refreshToken.updateMany({
-    where: { userId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
-
-  const tokens = await issueTokenPair(userId);
-  return { ...tokens, mustChangePassword: false };
 }
 
 /** Refresh token rotation: old token revoked, new token issued. */
 export async function refreshAccessToken(refreshToken: string): Promise<TokenPair> {
+  return withRlsBypass(async () => {
   const tokenHash = hashToken(refreshToken);
 
   const stored = await prisma.refreshToken.findFirst({
@@ -206,13 +211,16 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenPai
   ]);
 
   return { accessToken, refreshToken: newRefreshToken };
+  });
 }
 
 export async function logout(refreshToken: string): Promise<void> {
-  const tokenHash = hashToken(refreshToken);
-  await prisma.refreshToken.updateMany({
-    where: { tokenHash, revokedAt: null },
-    data: { revokedAt: new Date() },
+  await withRlsBypass(async () => {
+    const tokenHash = hashToken(refreshToken);
+    await prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   });
 }
 

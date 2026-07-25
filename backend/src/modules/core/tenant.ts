@@ -20,7 +20,7 @@ export function resolveTenantId(request: FastifyRequest, paramTenantId?: string)
   }
 
   if (!request.user.tenantId) {
-    throw new ForbiddenError('No tenant context');
+    throw new ForbiddenError('No tenant context — please sign in again');
   }
 
   return request.user.tenantId;

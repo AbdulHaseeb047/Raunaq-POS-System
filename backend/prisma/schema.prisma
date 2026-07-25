@@ -393,6 +393,7 @@ model Product {
   saleItems      SaleItem[]
 
   @@index([tenantId])
+  @@index([tenantId, name])
   @@index([tenantId, categoryId])
   @@index([tenantId, brandId])
   @@index([tenantId, supplierId])

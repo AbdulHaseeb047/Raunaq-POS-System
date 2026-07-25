@@ -18,6 +18,10 @@ import { ensureMiscProduct } from '../src/modules/billing/misc-product.js';
 const prisma = new PrismaClient();
 
 async function main() {
+  // RLS (when enabled) blocks writes unless bypass is set for seed/migrations.
+  await prisma.$executeRaw`SELECT set_config('app.bypass_rls', 'true', false)`;
+  await prisma.$executeRaw`SELECT set_config('app.current_tenant_id', '', false)`;
+
   for (const feature of FEATURE_REGISTRY) {
     await prisma.featureRegistry.upsert({
       where: { key: feature.key },

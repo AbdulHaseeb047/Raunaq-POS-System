@@ -5,6 +5,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { verifyAccessToken } from '../auth/auth.service.js';
 import { ForbiddenError, UnauthorizedError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
+import { applyRlsSession } from '../core/rls.js';
+import { enterTenantContext } from '../core/tenant-context.js';
 import { assertTenantPortalAccess } from '../tenants/subscription.service.js';
 import { userHasFeature } from './permissions.service.js';
 
@@ -22,6 +24,11 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
 
   const token = header.slice(7);
   request.user = verifyAccessToken(token);
+
+  const bypass = request.user.role === USER_ROLES.SUPER_ADMIN;
+  const tenantCtx = { tenantId: request.user.tenantId, bypass };
+  enterTenantContext(tenantCtx);
+  await applyRlsSession(tenantCtx);
 
   if (request.user.tenantId) {
     await assertTenantPortalAccess(request.user.tenantId);

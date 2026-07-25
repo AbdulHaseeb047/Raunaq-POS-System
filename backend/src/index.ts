@@ -23,6 +23,7 @@ import { registerUserRoutes } from './modules/users/users.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.plugin.js';
 import { registerPrisma } from './plugins/prisma.plugin.js';
 import { prisma } from './modules/core/prisma.js';
+import { clearRlsSession } from './modules/core/rls.js';
 import { startSubscriptionInterval } from './modules/tenants/subscription.service.js';
 
 export async function buildApp() {
@@ -46,12 +47,17 @@ export async function buildApp() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+  // Search + POS fire many requests; 100/min was too low for hosted use.
   await app.register(rateLimit, {
-    max: appConfig.nodeEnv === 'production' ? 100 : 300,
+    max: appConfig.nodeEnv === 'production' ? 600 : 1200,
     timeWindow: '1 minute',
   });
 
   await registerPrisma(app);
+
+  app.addHook('onResponse', async () => {
+    await clearRlsSession();
+  });
 
   app.get('/health', async () => {
     let database: 'connected' | 'disconnected' = 'disconnected';
