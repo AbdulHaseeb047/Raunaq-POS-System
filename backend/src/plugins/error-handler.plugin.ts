@@ -28,13 +28,29 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
 
     app.log.error(error);
+
+    const prismaCode =
+      error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : '';
+
+    // Surface actionable DB/RLS hints in production (still no stack traces).
+    let message = 'An unexpected error occurred';
+    if (process.env.NODE_ENV !== 'production') {
+      message = error.message || message;
+    } else if (prismaCode.startsWith('P') || /row-level security|RLS|set_config/i.test(error.message)) {
+      message =
+        'Database rejected the sale (RLS/connection). Ensure migrate deploy ran and DATABASE_URL is not a transaction pooler (:6543).';
+    } else if (/prepared statement|pgbouncer|40P01/i.test(error.message)) {
+      message =
+        'Database pooler error. Use a direct or session-mode DATABASE_URL (port 5432), not transaction mode.';
+    }
+
     return reply.status(500).send({
       statusCode: 500,
       error: 'Internal Server Error',
-      message:
-        process.env.NODE_ENV === 'production'
-          ? 'An unexpected error occurred'
-          : error.message || 'An unexpected error occurred',
+      message,
+      code: prismaCode || 'INTERNAL_ERROR',
     });
   });
 }

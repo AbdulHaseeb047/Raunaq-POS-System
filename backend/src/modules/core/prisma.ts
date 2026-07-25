@@ -66,12 +66,23 @@ function injectTenantData<T extends { data?: Record<string, unknown> | Record<st
   return { ...args, data: { ...args.data, tenantId: ctx.tenantId } };
 }
 
+async function applyRlsLocalOnTx(tx: {
+  $executeRaw: (query: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
+}): Promise<void> {
+  const ctx = getTenantContext();
+  if (!ctx) return;
+  const tenantId = ctx.tenantId ?? '';
+  const bypass = ctx.bypass ? 'true' : 'false';
+  await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+  await tx.$executeRaw`SELECT set_config('app.bypass_rls', ${bypass}, true)`;
+}
+
 function createPrismaClient(): PrismaClient {
   const base = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
 
-  return base.$extends({
+  const extended = base.$extends({
     name: 'tenantRls',
     query: {
       $allModels: {
@@ -111,7 +122,27 @@ function createPrismaClient(): PrismaClient {
         },
       },
     },
-  }) as unknown as PrismaClient;
+  });
+
+  // SET LOCAL on the same connection as interactive transactions (fixes pooled RLS 500s).
+  const client = extended as unknown as PrismaClient;
+  const originalTransaction = client.$transaction.bind(client) as PrismaClient['$transaction'];
+
+  (client as unknown as { $transaction: PrismaClient['$transaction'] }).$transaction = ((
+    ...args: unknown[]
+  ) => {
+    if (typeof args[0] === 'function') {
+      const fn = args[0] as (tx: TransactionClient) => Promise<unknown>;
+      const options = args[1] as Parameters<PrismaClient['$transaction']>[1];
+      return originalTransaction(async (tx) => {
+        await applyRlsLocalOnTx(tx);
+        return fn(tx);
+      }, options);
+    }
+    return (originalTransaction as (...a: unknown[]) => unknown)(...args);
+  }) as PrismaClient['$transaction'];
+
+  return client;
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
