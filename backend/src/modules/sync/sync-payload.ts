@@ -2,8 +2,13 @@ import type { Prisma } from '@prisma/client';
 import type { SyncOperation } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
+import { appConfig } from '../../config.js';
 import type { TransactionClient } from '../core/prisma.js';
 import { enqueueSyncOutbox } from './outbox.service.js';
+
+function syncOutboxEnabled(): boolean {
+  return appConfig.deploymentMode === 'hybrid';
+}
 
 /** DB table names as stored in `sync_outbox.table_name`. */
 export const SYNC_TABLES = {
@@ -54,6 +59,7 @@ export async function syncInsert(
   tableName: string,
   record: SyncableRow,
 ): Promise<void> {
+  if (!syncOutboxEnabled()) return;
   const tenantId = record.tenantId;
   if (!tenantId) return;
 
@@ -73,6 +79,7 @@ export async function syncUpdate(
   record: SyncableRow,
   options?: { recordId?: string },
 ): Promise<void> {
+  if (!syncOutboxEnabled()) return;
   const tenantId = record.tenantId;
   if (!tenantId) return;
 

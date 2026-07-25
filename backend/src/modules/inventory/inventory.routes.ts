@@ -64,6 +64,8 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
       stockStatus?: 'all' | 'healthy' | 'low' | 'out';
       page?: string;
       pageSize?: string;
+      activeOnly?: string;
+      skipCount?: string;
     };
     return listProducts(resolveTenantId(request), {
       search: q.search,
@@ -72,6 +74,8 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
       stockStatus: q.stockStatus,
       page: q.page ? Number(q.page) : 1,
       pageSize: q.pageSize ? Number(q.pageSize) : 50,
+      activeOnly: q.activeOnly === 'true' || q.activeOnly === '1',
+      skipCount: q.skipCount === 'true' || q.skipCount === '1',
     });
   });
 

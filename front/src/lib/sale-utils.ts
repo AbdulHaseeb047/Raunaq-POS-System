@@ -61,3 +61,14 @@ export function canAddToCart(product: Product, addQty = 1, currentQty = 0): bool
   if (!product.trackStock) return true;
   return parseFloat(product.stockQuantity) >= currentQty + addQty;
 }
+
+/** Instant client-side filter for name / SKU / barcode. */
+export function productMatchesKeyword(product: Product, keyword: string): boolean {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    product.name.toLowerCase().includes(q) ||
+    (product.sku?.toLowerCase().includes(q) ?? false) ||
+    (product.barcode?.toLowerCase().includes(q) ?? false)
+  );
+}

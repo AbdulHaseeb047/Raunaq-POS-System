@@ -61,108 +61,109 @@ export async function createSale(
 
   const productIds = input.items.map((i) => i.productId);
   const saleId = randomUUID();
-  const settings = await getSettings(tenantId);
 
-  // Load products + write sale inside one transaction so RLS SET LOCAL applies
-  // on the same pooled connection (fixes production 500s).
-  const sale = await prisma.$transaction(async (tx) => {
-    const products = await tx.product.findMany({
+  const [products, settings] = await Promise.all([
+    prisma.product.findMany({
       where: { tenantId, id: { in: productIds }, deletedAt: null, isActive: true },
-    });
+    }),
+    getSettings(tenantId),
+  ]);
 
-    if (products.length !== productIds.length) {
-      throw new NotFoundError('One or more products not found');
-    }
+  if (products.length !== productIds.length) {
+    throw new NotFoundError('One or more products not found');
+  }
 
-    const productMap = new Map(products.map((p) => [p.id, p]));
+  const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const totals = calculateSaleTotals(
-      input.items.map((item) => {
-        const product = productMap.get(item.productId)!;
-        return {
-          unitPrice: item.unitPrice ?? product.sellPrice,
-          quantity: item.quantity,
-          discountAmount: item.discountAmount ?? 0,
-          taxRatePercent: product.taxRate,
-        };
-      }),
-      input.billDiscountAmount ?? 0,
-    );
-
-    if (!options?.canDiscountUnlimited && options?.maxDiscountPercent != null && totals.discountTotal.gt(0)) {
-      const maxAllowed = totals.subtotal.times(options.maxDiscountPercent).div(100);
-      if (totals.discountTotal.gt(maxAllowed)) {
-        throw new ForbiddenError(`Discount exceeds allowed maximum of ${options.maxDiscountPercent}%`);
-      }
-    }
-
-    const { subtotal, discountTotal, taxTotal, grandTotal } = totals;
-
-    let amountReceived: ReturnType<typeof toDecimal> | null = null;
-    let changeGiven: ReturnType<typeof toDecimal> | null = null;
-
-    if (input.paymentMethod === 'CASH') {
-      if (input.amountReceived == null) {
-        throw new ValidationError('Amount received is required for cash sales');
-      }
-      amountReceived = toDecimal(input.amountReceived);
-      if (amountReceived.lt(grandTotal)) {
-        throw new ValidationError('Amount received must be at least the bill total');
-      }
-      changeGiven = amountReceived.minus(grandTotal);
-    } else if (input.paymentMethod === 'SPLIT' && (input.cashAmount ?? 0) > 0) {
-      if (input.amountReceived == null) {
-        throw new ValidationError('Amount received is required for the cash portion');
-      }
-      const cashDue = toDecimal(input.cashAmount ?? 0);
-      amountReceived = toDecimal(input.amountReceived);
-      if (amountReceived.lt(cashDue)) {
-        throw new ValidationError('Amount received must cover the cash portion');
-      }
-      changeGiven = amountReceived.minus(cashDue);
-    }
-
-    if (input.paymentMethod === 'SPLIT') {
-      const cash = toDecimal(input.cashAmount ?? 0);
-      const credit = toDecimal(input.creditAmount ?? 0);
-      const sum = cash.plus(credit);
-      if (!sum.eq(grandTotal)) {
-        throw new ValidationError(
-          `Split amounts (${sum.toFixed(2)}) must equal grand total (${grandTotal.toFixed(2)})`,
-        );
-      }
-    }
-
-    const lineItems = input.items.map((item, index) => {
+  const totals = calculateSaleTotals(
+    input.items.map((item) => {
       const product = productMap.get(item.productId)!;
-      const calc = totals.lines[index]!;
-      const customName = item.productName?.trim();
       return {
-        productId: product.id,
-        productName: customName || product.name,
-        unitPrice: toDecimal(item.unitPrice ?? product.sellPrice),
-        quantity: toDecimal(item.quantity),
-        discountAmount: calc.discountAmount,
-        taxAmount: calc.taxAmount,
-        lineTotal: calc.lineTotal,
-        trackStock: product.trackStock,
+        unitPrice: item.unitPrice ?? product.sellPrice,
+        quantity: item.quantity,
+        discountAmount: item.discountAmount ?? 0,
+        taxRatePercent: product.taxRate,
       };
-    });
+    }),
+    input.billDiscountAmount ?? 0,
+  );
 
-    if (input.paymentMethod === 'CREDIT' && input.customerId) {
-      const customer = await tx.customer.findFirst({
-        where: { id: input.customerId, tenantId, deletedAt: null },
-      });
-      if (!customer) throw new NotFoundError('Customer not found');
+  if (!options?.canDiscountUnlimited && options?.maxDiscountPercent != null && totals.discountTotal.gt(0)) {
+    const maxAllowed = totals.subtotal.times(options.maxDiscountPercent).div(100);
+    if (totals.discountTotal.gt(maxAllowed)) {
+      throw new ForbiddenError(`Discount exceeds allowed maximum of ${options.maxDiscountPercent}%`);
     }
+  }
 
-    const paymentStatus =
-      input.paymentMethod === 'CREDIT'
-        ? ('ON_CREDIT' as const)
-        : input.paymentMethod === 'SPLIT' && (input.creditAmount ?? 0) > 0
-          ? ('PARTIAL' as const)
-          : ('PAID' as const);
+  const { subtotal, discountTotal, taxTotal, grandTotal } = totals;
 
+  let amountReceived: ReturnType<typeof toDecimal> | null = null;
+  let changeGiven: ReturnType<typeof toDecimal> | null = null;
+
+  if (input.paymentMethod === 'CASH') {
+    if (input.amountReceived == null) {
+      throw new ValidationError('Amount received is required for cash sales');
+    }
+    amountReceived = toDecimal(input.amountReceived);
+    if (amountReceived.lt(grandTotal)) {
+      throw new ValidationError('Amount received must be at least the bill total');
+    }
+    changeGiven = amountReceived.minus(grandTotal);
+  } else if (input.paymentMethod === 'SPLIT' && (input.cashAmount ?? 0) > 0) {
+    if (input.amountReceived == null) {
+      throw new ValidationError('Amount received is required for the cash portion');
+    }
+    const cashDue = toDecimal(input.cashAmount ?? 0);
+    amountReceived = toDecimal(input.amountReceived);
+    if (amountReceived.lt(cashDue)) {
+      throw new ValidationError('Amount received must cover the cash portion');
+    }
+    changeGiven = amountReceived.minus(cashDue);
+  }
+
+  if (input.paymentMethod === 'SPLIT') {
+    const cash = toDecimal(input.cashAmount ?? 0);
+    const credit = toDecimal(input.creditAmount ?? 0);
+    const sum = cash.plus(credit);
+    if (!sum.eq(grandTotal)) {
+      throw new ValidationError(
+        `Split amounts (${sum.toFixed(2)}) must equal grand total (${grandTotal.toFixed(2)})`,
+      );
+    }
+  }
+
+  const lineItems = input.items.map((item, index) => {
+    const product = productMap.get(item.productId)!;
+    const calc = totals.lines[index]!;
+    const customName = item.productName?.trim();
+    return {
+      productId: product.id,
+      productName: customName || product.name,
+      unitPrice: toDecimal(item.unitPrice ?? product.sellPrice),
+      quantity: toDecimal(item.quantity),
+      discountAmount: calc.discountAmount,
+      taxAmount: calc.taxAmount,
+      lineTotal: calc.lineTotal,
+      trackStock: product.trackStock,
+    };
+  });
+
+  if (input.paymentMethod === 'CREDIT' && input.customerId) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: input.customerId, tenantId, deletedAt: null },
+    });
+    if (!customer) throw new NotFoundError('Customer not found');
+  }
+
+  const paymentStatus =
+    input.paymentMethod === 'CREDIT'
+      ? ('ON_CREDIT' as const)
+      : input.paymentMethod === 'SPLIT' && (input.creditAmount ?? 0) > 0
+        ? ('PARTIAL' as const)
+        : ('PAID' as const);
+
+  // Writes only — keep TX short; default timeout raised to 60s for remote DB latency.
+  const sale = await prisma.$transaction(async (tx) => {
     const saleNumber = await nextSaleNumber(tx, tenantId);
 
     let invoiceNo: string | null = null;

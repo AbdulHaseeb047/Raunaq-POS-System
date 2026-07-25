@@ -251,6 +251,8 @@ export const api = {
       stockStatus?: string;
       page?: number;
       pageSize?: number;
+      activeOnly?: boolean;
+      skipCount?: boolean;
     }) => {
       const params = new URLSearchParams({
         page: String(opts?.page ?? 1),
@@ -260,6 +262,8 @@ export const api = {
       if (opts?.categoryId) params.set('categoryId', opts.categoryId);
       if (opts?.brandId) params.set('brandId', opts.brandId);
       if (opts?.stockStatus) params.set('stockStatus', opts.stockStatus);
+      if (opts?.activeOnly) params.set('activeOnly', 'true');
+      if (opts?.skipCount) params.set('skipCount', 'true');
       return apiRequest<Paginated<Product>>(`/products?${params}`);
     },
     summary: () => apiRequest<InventorySummary>('/products/summary'),

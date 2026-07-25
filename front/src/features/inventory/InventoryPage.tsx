@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -20,6 +20,7 @@ import {
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
+import { productMatchesKeyword } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Product } from '@/types/api';
 
@@ -79,6 +80,14 @@ export function InventoryPage() {
       }),
     placeholderData: (prev) => prev,
   });
+
+  // Filter by the live keyword so the table doesn't keep showing previous "all" results while typing.
+  const displayedProducts = useMemo(() => {
+    const rows = data?.data ?? [];
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((p) => productMatchesKeyword(p, q));
+  }, [data?.data, search]);
 
   const deleteProduct = useMutation({
     mutationFn: (id: string) => api.products.delete(id),
@@ -280,8 +289,11 @@ export function InventoryPage() {
         </select>
       </div>
 
-      {(data?.data.length ?? 0) === 0 ? (
-        <EmptyState title="No products" description="Add your first product to get started." />
+      {displayedProducts.length === 0 ? (
+        <EmptyState
+          title="No products"
+          description={search.trim() ? 'No products match your search.' : 'Add your first product to get started.'}
+        />
       ) : (
         <div className={`overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)] ${isFetching ? 'opacity-70' : ''}`}>
           <table className="w-full text-sm">
@@ -295,7 +307,7 @@ export function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {data?.data.map((p) => (
+              {displayedProducts.map((p) => (
                 <tr key={p.id} className="border-b border-border/60 hover:bg-brand-50/30">
                   <td className="px-4 py-3">
                     <p className="font-medium text-text">{p.name}</p>

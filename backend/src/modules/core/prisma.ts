@@ -69,6 +69,8 @@ function injectTenantData<T extends { data?: Record<string, unknown> | Record<st
 async function applyRlsLocalOnTx(tx: {
   $executeRaw: (query: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
 }): Promise<void> {
+  // Skip unless explicitly enabled — remote pooler latency makes SET CONFIG expensive.
+  if (process.env.ENABLE_RLS_SESSION !== 'true') return;
   const ctx = getTenantContext();
   if (!ctx) return;
   const tenantId = ctx.tenantId ?? '';
@@ -76,6 +78,8 @@ async function applyRlsLocalOnTx(tx: {
   await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
   await tx.$executeRaw`SELECT set_config('app.bypass_rls', ${bypass}, true)`;
 }
+
+const DEFAULT_TX_OPTIONS = { maxWait: 15_000, timeout: 60_000 } as const;
 
 function createPrismaClient(): PrismaClient {
   const base = new PrismaClient({
@@ -133,7 +137,10 @@ function createPrismaClient(): PrismaClient {
   ) => {
     if (typeof args[0] === 'function') {
       const fn = args[0] as (tx: TransactionClient) => Promise<unknown>;
-      const options = args[1] as Parameters<PrismaClient['$transaction']>[1];
+      const options = {
+        ...DEFAULT_TX_OPTIONS,
+        ...(args[1] as object | undefined),
+      } as Parameters<PrismaClient['$transaction']>[1];
       return originalTransaction(async (tx) => {
         await applyRlsLocalOnTx(tx);
         return fn(tx);

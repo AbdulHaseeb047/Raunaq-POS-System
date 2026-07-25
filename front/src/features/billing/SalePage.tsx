@@ -15,9 +15,12 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
-import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
+import { calcSaleTotals, canAddToCart, getStockStatus, productMatchesKeyword } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
+
+const SALE_CATALOG_STALE_MS = 5 * 60 * 1000;
+const SALE_SEARCH_LIMIT = 40;
 
 interface CartLine {
   /** Unique key so multiple misc/open lines can coexist. */
@@ -102,19 +105,18 @@ export function SalePage() {
     queryFn: () => api.discounts.list(false),
     enabled: canDiscount,
   });
-  const debouncedSearch = useDebouncedValue(search, 150);
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 150);
 
-  const { data: products, isFetching: productsFetching } = useQuery({
-    queryKey: ['products', 'sale', debouncedSearch, categoryId],
+  // Load catalog once — filter by keyword locally so typing stays instant on hosted API latency.
+  const { data: catalog, isLoading: catalogLoading, isFetching: catalogFetching } = useQuery({
+    queryKey: ['products', 'sale-catalog'],
     queryFn: () =>
       api.products.list({
-        search: debouncedSearch || undefined,
-        categoryId: categoryId || undefined,
-        pageSize: 30,
+        pageSize: 2000,
+        activeOnly: true,
+        skipCount: true,
       }),
-    enabled: debouncedSearch.length >= 1 || !!categoryId,
-    placeholderData: (prev) => prev,
+    staleTime: SALE_CATALOG_STALE_MS,
   });
   const { data: customers } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
@@ -537,7 +539,18 @@ export function SalePage() {
     searchRef.current?.focus();
   };
 
-  const searchResults = products?.data ?? [];
+  const searchResults = useMemo(() => {
+    const rows = catalog?.data ?? [];
+    const q = search.trim();
+    if (!q && !categoryId) return [];
+    return rows
+      .filter((p) => {
+        if (categoryId && p.category?.id !== categoryId) return false;
+        return productMatchesKeyword(p, q);
+      })
+      .slice(0, SALE_SEARCH_LIMIT);
+  }, [catalog?.data, search, categoryId]);
+  const productsFetching = catalogLoading || (catalogFetching && !catalog?.data);
   const cashDue = useMemo(() => {
     if (paymentMode === 'CASH') return totals.grandTotal;
     if (paymentMode === 'SPLIT') return parseFloat(cashAmount) || 0;
@@ -649,7 +662,7 @@ export function SalePage() {
                 <div className={`absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-white shadow-lg ${productsFetching ? 'opacity-80' : ''}`}>
                   {searchResults.length === 0 && (
                     <p className="px-3 py-2 text-xs text-text-muted">
-                      {productsFetching ? 'Searching…' : 'No products found'}
+                      {productsFetching ? 'Loading products…' : 'No products found'}
                     </p>
                   )}
                   {searchResults.map((p) => {
@@ -744,7 +757,9 @@ export function SalePage() {
               })}
             </div>
             {!categoryId && !search && (
-              <p className="py-10 text-center text-sm text-text-muted">Search or choose a category to start.</p>
+              <p className="py-10 text-center text-sm text-text-muted">
+                {catalogLoading ? 'Loading product catalog…' : 'Search or choose a category to start.'}
+              </p>
             )}
           </Card>
         </div>

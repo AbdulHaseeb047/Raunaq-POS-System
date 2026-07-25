@@ -109,16 +109,21 @@ export async function listProducts(
     stockStatus?: 'all' | 'healthy' | 'low' | 'out';
     page?: number;
     pageSize?: number;
+    /** Sale register catalog — active items only. */
+    activeOnly?: boolean;
+    /** Skip COUNT(*) for faster catalog loads. */
+    skipCount?: boolean;
   },
 ) {
   const page = options?.page ?? 1;
-  const pageSize = options?.pageSize ?? 50;
+  const pageSize = Math.min(options?.pageSize ?? 50, 5000);
   const skip = (page - 1) * pageSize;
   const search = options?.search?.trim();
 
   const where: Prisma.ProductWhereInput = {
     tenantId,
     deletedAt: null,
+    ...(options?.activeOnly ? { isActive: true } : {}),
     ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
     ...(options?.brandId ? { brandId: options.brandId } : {}),
     ...(search
@@ -163,20 +168,20 @@ export async function listProducts(
     };
   }
 
-  const [total, products] = await Promise.all([
-    prisma.product.count({ where }),
-    prisma.product.findMany({
-      where,
-      include,
-      orderBy: { name: 'asc' },
-      skip,
-      take: pageSize,
-    }),
-  ]);
+  const products = await prisma.product.findMany({
+    where,
+    include,
+    orderBy: { name: 'asc' },
+    skip,
+    take: pageSize,
+  });
+  const total = options?.skipCount
+    ? products.length + skip
+    : await prisma.product.count({ where });
 
   return {
     data: products.map(serializeProduct),
-    meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+    meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
   };
 }
 
