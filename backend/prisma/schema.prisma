@@ -719,6 +719,8 @@ model BusinessSettings {
   defaultTaxRate           Decimal  @default(0) @map("default_tax_rate") @db.Decimal(5, 2)
   printReceiptsDefault     Boolean  @default(false) @map("print_receipts_default")
   receiptFooter            String?  @map("receipt_footer") @db.Text
+  /// NAME | LOGO | BOTH — what to print at the top of receipts
+  receiptHeaderMode        String   @default("NAME") @map("receipt_header_mode") @db.VarChar(20)
   maxDiscountPercentStaff  Decimal? @map("max_discount_percent_staff") @db.Decimal(5, 2)
   fbrEnabled               Boolean  @default(false) @map("fbr_enabled")
   fbrPosId                 String?  @map("fbr_pos_id") @db.VarChar(50)

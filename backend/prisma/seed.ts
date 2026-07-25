@@ -13,6 +13,7 @@ import { hashPassword } from '../src/modules/auth/auth.service.js';
 import { createDefaultBranch } from '../src/modules/core/branch.js';
 import { applyTierPreset } from '../src/modules/permissions/permissions.service.js';
 import { ensureBusinessSettings } from '../src/modules/settings/settings.service.js';
+import { ensureMiscProduct } from '../src/modules/billing/misc-product.js';
 
 const prisma = new PrismaClient();
 
@@ -143,6 +144,7 @@ async function main() {
     }
     await ensureBusinessSettings(tenant.id, 'Demo Shop');
     await createDefaultBranch(tenant.id, 'Demo Shop');
+    await ensureMiscProduct(tenant.id);
 
     await prisma.category.create({
       data: {
@@ -191,6 +193,37 @@ async function main() {
     console.log(`Demo shop created — login: ${demoOwnerEmail} / ${demoOwnerPassword}`);
   } else {
     console.log(`Demo shop already exists: ${demoSlug}`);
+    await ensureMiscProduct(existingDemo.id);
+    const superAdmin = await prisma.user.findFirst({
+      where: { email: superAdminEmail, tenantId: null, deletedAt: null },
+    });
+    if (superAdmin) {
+      await applyTierPreset(existingDemo.id, TENANT_TIERS.STANDARD, superAdmin.id);
+      console.log('Demo shop features refreshed to STANDARD (includes void/return)');
+    }
+
+    const demoOwner = await prisma.user.findFirst({
+      where: {
+        email: demoOwnerEmail.toLowerCase(),
+        tenantId: existingDemo.id,
+        deletedAt: null,
+      },
+    });
+
+    if (!demoOwner) {
+      await prisma.user.create({
+        data: {
+          tenantId: existingDemo.id,
+          email: demoOwnerEmail.toLowerCase(),
+          passwordHash: await hashPassword(demoOwnerPassword),
+          fullName: 'Demo Shop Owner',
+          role: 'CLIENT_ADMIN',
+          mustChangePassword: false,
+        },
+      });
+      console.log(`Demo owner created: ${demoOwnerEmail} / ${demoOwnerPassword}`);
+    }
+
     if (salesRep) {
       await prisma.tenant.updateMany({
         where: { slug: demoSlug, deletedAt: null, acquiredById: null },

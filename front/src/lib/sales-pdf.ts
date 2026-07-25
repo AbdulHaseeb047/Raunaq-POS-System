@@ -1,6 +1,7 @@
 import { buildReceiptHtml } from '@/components/billing/ReceiptView';
 import { BRAND } from '@pos/shared';
 import { formatMoney } from '@/lib/format';
+import { printDocumentFooterHtml, printDocumentStyles } from '@/lib/print-document';
 import type { SaleDetail, SaleListItem } from '@/types/api';
 
 /** Opens a print dialog — user chooses "Save as PDF" for a proper PDF file. */
@@ -47,16 +48,19 @@ export function buildSalesReportHtml(
     .map(
       (s) => `
       <tr>
-        <td>${s.saleNumber}</td>
+        <td>${s.saleNumber}${s.hasReturns ? ' <span style="font-size:10px;color:#666">(Adjusted)</span>' : ''}</td>
         <td>${new Date(s.createdAt).toLocaleString('en-PK')}</td>
         <td>${s.customer?.name ?? 'Walk-in'}</td>
         <td>${s.paymentStatus}</td>
-        <td class="num">${formatMoney(s.grandTotal, currency)}</td>
+        <td class="num">${formatMoney(s.hasReturns && s.netTotal ? s.netTotal : s.grandTotal, currency)}</td>
       </tr>`,
     )
     .join('');
 
-  const total = sales.reduce((sum, s) => sum + parseFloat(s.grandTotal), 0);
+  const total = sales.reduce(
+    (sum, s) => sum + parseFloat(s.hasReturns && s.netTotal ? s.netTotal : s.grandTotal),
+    0,
+  );
 
   return `<!DOCTYPE html>
 <html>
@@ -64,24 +68,23 @@ export function buildSalesReportHtml(
   <meta charset="utf-8" />
   <title>Sales Report</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    ${printDocumentStyles()}
     @page { size: A4; margin: 14mm; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; padding: 24px; }
-    .brand-logo { display: block; width: 150px; height: auto; margin: 0 0 12px; }
-    h1 { font-size: 22px; margin-bottom: 4px; }
-    .meta { color: #555; font-size: 13px; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
-    th { background: #f3f4f6; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
-    td.num, th.num { text-align: right; }
-    tfoot td { font-weight: 700; background: #fafafa; }
-    .footer { margin-top: 24px; font-size: 11px; color: #888; text-align: center; }
+    .brand-logo { display: block; width: 140px; height: auto; margin: 0 0 12px; }
   </style>
 </head>
 <body>
   <img class="brand-logo" src="${window.location.origin}/raunaq-logo-light.png" alt="${BRAND.productName}" />
-  <h1>${businessName}</h1>
-  <p class="meta">Sales Report · ${period} · ${sales.length} transaction(s)</p>
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">${businessName}</div>
+      <div class="doc-sub">Sales report · ${period}</div>
+    </div>
+    <div class="meta">
+      <div><strong>${sales.length}</strong> transaction(s)</div>
+      <div>Generated ${new Date().toLocaleString('en-PK')}</div>
+    </div>
+  </div>
   <table>
     <thead>
       <tr>
@@ -92,15 +95,14 @@ export function buildSalesReportHtml(
         <th class="num">Total (${currency})</th>
       </tr>
     </thead>
-    <tbody>${rows}</tbody>
-    <tfoot>
-      <tr>
-        <td colspan="4">Grand total</td>
-        <td class="num">${formatMoney(total, currency)}</td>
-      </tr>
-    </tfoot>
+    <tbody>${rows || `<tr><td colspan="5" style="text-align:center;color:#888;padding:24px">No sales</td></tr>`}</tbody>
   </table>
-  <p class="footer">Generated ${new Date().toLocaleString('en-PK')} · ${BRAND.productName}</p>
+  <div class="summary">
+    <div class="summary-box">
+      <div class="summary-row total"><span>Grand total</span><span>${formatMoney(total, currency)}</span></div>
+    </div>
+  </div>
+  ${printDocumentFooterHtml()}
 </body>
 </html>`;
 }

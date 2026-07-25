@@ -14,6 +14,7 @@ export const settingsSchema = z.object({
   defaultTaxRate: z.number().nonnegative().optional(),
   printReceiptsDefault: z.boolean().optional(),
   receiptFooter: z.string().optional().nullable(),
+  receiptHeaderMode: z.enum(['NAME', 'LOGO', 'BOTH']).optional(),
   maxDiscountPercentStaff: z.number().nonnegative().optional().nullable(),
   fbrEnabled: z.boolean().optional(),
   fbrPosId: z.string().max(50).optional().nullable(),
@@ -59,6 +60,7 @@ export async function updateSettings(tenantId: string, input: z.infer<typeof set
         defaultTaxRate: input.defaultTaxRate != null ? toDecimal(input.defaultTaxRate) : undefined,
         printReceiptsDefault: input.printReceiptsDefault,
         receiptFooter: input.receiptFooter,
+        ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
         maxDiscountPercentStaff:
           input.maxDiscountPercentStaff != null ? toDecimal(input.maxDiscountPercentStaff) : undefined,
         fbrEnabled: input.fbrEnabled,
@@ -134,6 +136,7 @@ function serializeSettings(s: {
   defaultTaxRate: { toFixed: (n: number) => string };
   printReceiptsDefault: boolean;
   receiptFooter: string | null;
+  receiptHeaderMode?: string;
   maxDiscountPercentStaff: { toFixed: (n: number) => string } | null;
   fbrEnabled: boolean;
   fbrPosId: string | null;
@@ -155,6 +158,9 @@ function serializeSettings(s: {
     defaultTaxRate: s.defaultTaxRate.toFixed(2),
     printReceiptsDefault: s.printReceiptsDefault,
     receiptFooter: s.receiptFooter,
+    receiptHeaderMode: (s.receiptHeaderMode === 'LOGO' || s.receiptHeaderMode === 'BOTH'
+      ? s.receiptHeaderMode
+      : 'NAME') as 'NAME' | 'LOGO' | 'BOTH',
     maxDiscountPercentStaff: s.maxDiscountPercentStaff?.toFixed(2) ?? null,
     fbrEnabled: s.fbrEnabled,
     fbrPosId: s.fbrPosId,

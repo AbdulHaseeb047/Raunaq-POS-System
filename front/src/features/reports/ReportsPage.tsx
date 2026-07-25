@@ -339,8 +339,8 @@ export function ReportsPage() {
       <Card className="mb-6">
         <CardHeader title="Stock movement" subtitle="Recent movements and low-stock alerts" />
         {(stockMovement?.lowStockAlerts?.length ?? 0) > 0 && (
-          <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3">
-            <p className="text-sm font-semibold text-amber-900">Low stock alerts</p>
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-900">Low stock alerts</p>
             <ul className="mt-2 space-y-1 text-sm">
               {stockMovement?.lowStockAlerts.map((p) => (
                 <li key={p.id}>
@@ -418,7 +418,7 @@ export function ReportsPage() {
                 label={row.name}
                 value={toNumber(row.total)}
                 max={maxAging}
-                color="bg-amber-500"
+                color="bg-slate-500"
                 valueLabel={formatMoney(row.total, currency)}
               />
             </div>

@@ -4,7 +4,7 @@ const accentColors = {
   brand: 'from-brand-500 to-brand-600',
   accent: 'from-accent-400 to-accent-500',
   info: 'from-sky-400 to-sky-500',
-  warning: 'from-amber-400 to-amber-500',
+  warning: 'from-slate-500 to-slate-600',
 } as const;
 
 export function StatCard({

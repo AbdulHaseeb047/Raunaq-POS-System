@@ -45,10 +45,14 @@ export function SettingsPage() {
         businessName: String(formValue('businessName', data?.businessName)),
         address: String(formValue('address', data?.address ?? '')) || null,
         phone: String(formValue('phone', data?.phone ?? '')) || null,
+        logoUrl: String(formValue('logoUrl', data?.logoUrl ?? '')) || null,
         currency: String(formValue('currency', data?.currency ?? 'PKR')),
         taxLabel: String(formValue('taxLabel', data?.taxLabel ?? 'Tax')),
         defaultTaxRate: parseFloat(String(formValue('defaultTaxRate', data?.defaultTaxRate ?? '0'))),
         receiptFooter: String(formValue('receiptFooter', data?.receiptFooter ?? '')) || null,
+        receiptHeaderMode: String(
+          formValue('receiptHeaderMode', data?.receiptHeaderMode ?? 'NAME'),
+        ) as 'NAME' | 'LOGO' | 'BOTH',
         printReceiptsDefault: Boolean(formValue('printReceiptsDefault', data?.printReceiptsDefault ?? true)),
         maxDiscountPercentStaff: formValue('maxDiscountPercentStaff', data?.maxDiscountPercentStaff ?? '')
           ? parseFloat(String(formValue('maxDiscountPercentStaff', data?.maxDiscountPercentStaff ?? '')))
@@ -132,6 +136,69 @@ export function SettingsPage() {
       </Card>
 
       <Card className="mb-6">
+        <CardHeader
+          title="Invoice header"
+          subtitle="Choose whether slips show your shop name, logo, or both"
+        />
+        <div className="space-y-4">
+          <Select
+            label="Header style"
+            value={String(formValue('receiptHeaderMode', data.receiptHeaderMode ?? 'NAME'))}
+            onChange={(e) => setForm({ ...form, receiptHeaderMode: e.target.value })}
+            disabled={!canEdit}
+            options={[
+              { value: 'NAME', label: 'Print shop name only' },
+              { value: 'LOGO', label: 'Print logo only' },
+              { value: 'BOTH', label: 'Print logo + shop name' },
+            ]}
+          />
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-text">Shop logo</p>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              disabled={!canEdit}
+              className="block w-full text-sm text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-800"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 400_000) {
+                  window.alert('Logo must be under 400KB. Compress the image and try again.');
+                  e.target.value = '';
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  setForm({ ...form, logoUrl: String(reader.result ?? '') });
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+            <p className="mt-1 text-xs text-text-muted">PNG/JPG/WebP under 400KB works best on thermal slips.</p>
+          </div>
+          {(String(formValue('logoUrl', data.logoUrl ?? '')) || data.logoUrl) && (
+            <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-muted/40 p-3">
+              <img
+                src={String(formValue('logoUrl', data.logoUrl ?? ''))}
+                alt="Shop logo preview"
+                className="max-h-14 max-w-[140px] object-contain"
+              />
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger"
+                  onClick={() => setForm({ ...form, logoUrl: '' })}
+                >
+                  Remove logo
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card className="mb-6">
         <CardHeader title="Receipts & tax" />
         <div className="space-y-4">
           <Input
@@ -154,11 +221,20 @@ export function SettingsPage() {
             disabled={!canEdit}
           />
           <Input
-            label="Receipt footer"
+            label="Your receipt footer (optional)"
             value={String(formValue('receiptFooter'))}
             onChange={(e) => setForm({ ...form, receiptFooter: e.target.value })}
             disabled={!canEdit}
+            placeholder="e.g. Exchange within 7 days · Follow us on Instagram"
           />
+          <div className="rounded-xl border border-border bg-surface-muted/50 px-3 py-3 text-xs text-text-muted">
+            <p className="mb-1 font-semibold text-text">Locked on every slip (cannot be removed)</p>
+            <p>System developed by NexMindSystems</p>
+            <div className="mt-1 flex justify-between gap-2">
+              <span>www.NexMindSystems.com</span>
+              <span className="font-medium text-text">03462734539</span>
+            </div>
+          </div>
           {canPrint && (
             <label className="flex items-center gap-3 text-sm">
               <input

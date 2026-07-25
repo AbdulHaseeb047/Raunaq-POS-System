@@ -10,6 +10,7 @@ import { applyTierPreset, getTenantFeatures, setTenantFeatures } from '../permis
 import { writeAuditLog } from '../audit/audit.service.js';
 import { ensureBusinessSettings } from '../settings/settings.service.js';
 import { createDefaultBranch } from '../core/branch.js';
+import { ensureMiscProduct } from '../billing/misc-product.js';
 import {
   computeSubscriptionEndsAt,
   restoreTenantAccess,
@@ -200,6 +201,7 @@ export async function createTenant(input: CreateTenantInput, createdById: string
   }
   await ensureBusinessSettings(tenant.id, input.name);
   await createDefaultBranch(tenant.id, input.name);
+  await ensureMiscProduct(tenant.id);
 
   return getTenantById(tenant.id);
 }

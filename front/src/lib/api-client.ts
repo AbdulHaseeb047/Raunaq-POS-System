@@ -35,7 +35,7 @@ import type {
   UdhaarAgingRow,
 } from '@/types/api';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/$/, '');
 
 const STORAGE_ACCESS = 'pos_access_token';
 const STORAGE_REFRESH = 'pos_refresh_token';
@@ -201,6 +201,11 @@ export const api = {
       const q = params.toString();
       return apiRequest<SalesSummaryReport>(`/reports/sales-summary${q ? `?${q}` : ''}`);
     },
+    salesTrend: (days = 14, branchId?: string) => {
+      const params = new URLSearchParams({ days: String(days) });
+      if (branchId) params.set('branchId', branchId);
+      return apiRequest<import('@/types/api').SalesTrendReport>(`/reports/sales-trend?${params}`);
+    },
     stockMovement: (from?: string, to?: string) => {
       const params = new URLSearchParams();
       if (from) params.set('from', from);
@@ -243,6 +248,7 @@ export const api = {
     summary: () => apiRequest<InventorySummary>('/products/summary'),
     byBarcode: (barcode: string) =>
       apiRequest<Product>(`/products/barcode/${encodeURIComponent(barcode)}`),
+    miscOpen: () => apiRequest<Product>('/products/misc-open'),
     create: (body: Record<string, unknown>) =>
       apiRequest<Product>('/products', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
@@ -316,8 +322,14 @@ export const api = {
   },
 
   sales: {
-    list: (page = 1, pageSize = 20) =>
-      apiRequest<Paginated<SaleListItem>>(`/sales?page=${page}&pageSize=${pageSize}`),
+    list: (page = 1, pageSize = 20, search?: string) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+      if (search?.trim()) params.set('search', search.trim());
+      return apiRequest<Paginated<SaleListItem>>(`/sales?${params.toString()}`);
+    },
     get: (saleId: string) => apiRequest<SaleDetail>(`/sales/${saleId}`),
     create: (body: Record<string, unknown>) =>
       apiRequest<CreateSaleResponse>('/sales', {
@@ -389,6 +401,8 @@ export const api = {
       apiRequest<Customer>('/customers', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       apiRequest<Customer>(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    delete: (id: string) =>
+      apiRequest<{ success: boolean }>(`/customers/${id}`, { method: 'DELETE' }),
     ledger: (id: string) => apiRequest<LedgerEntry[]>(`/customers/${id}/ledger`),
     payment: (id: string, body: Record<string, unknown>) =>
       apiRequest<Customer>(`/customers/${id}/payments`, {

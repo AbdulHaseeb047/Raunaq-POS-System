@@ -5,6 +5,7 @@ import { ReceiptView } from '@/components/billing/ReceiptView';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -13,26 +14,20 @@ import { api } from '@/lib/api-client';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
+import { buildCustomerStatementHtml, openPrintDocument } from '@/lib/print-document';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import type { Customer, LedgerEntry, SaleDetail } from '@/types/api';
 
-function printStatement(customer: Customer, ledger: Array<{ entryType: string; amount: string; balanceAfter: string; createdAt: string }>, currency: string) {
-  const rows = ledger
-    .map(
-      (e) =>
-        `<tr><td>${formatDate(e.createdAt)}</td><td>${e.entryType}</td><td style="text-align:right">${formatMoney(e.amount, currency)}</td><td style="text-align:right">${formatMoney(e.balanceAfter, currency)}</td></tr>`,
-    )
-    .join('');
-  const html = `<!DOCTYPE html><html><head><title>Statement - ${customer.name}</title></head><body>
-    <h2>${customer.name}</h2><p>Phone: ${customer.phone ?? '—'}</p><p>Balance: ${formatMoney(customer.balance, currency)}</p>
-    <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th></tr></thead><tbody>${rows}</tbody></table>
-    </body></html>`;
-  const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    w.print();
-  }
+function printStatement(
+  customer: Customer,
+  ledger: Array<{ entryType: string; amount: string; balanceAfter: string; createdAt: string; description?: string }>,
+  currency: string,
+  businessName: string,
+) {
+  openPrintDocument(
+    `Statement - ${customer.name}`,
+    buildCustomerStatementHtml(customer, ledger, currency, businessName),
+  );
 }
 
 export function CustomersPage() {
@@ -48,6 +43,8 @@ export function CustomersPage() {
   const [voidEntryId, setVoidEntryId] = useState<string | null>(null);
   const [receiptSale, setReceiptSale] = useState<SaleDetail | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   const canEdit = hasFeature(user, FEATURES.CUSTOMERS_EDIT);
   const canLedger = hasFeature(user, FEATURES.CUSTOMERS_LEDGER_VIEW);
@@ -59,9 +56,10 @@ export function CustomersPage() {
     queryFn: () => api.settings.get(),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['customers', search, sortByBalance],
     queryFn: () => api.customers.list(search || undefined, 1, 100, sortByBalance ? 'balance' : 'name'),
+    placeholderData: (prev) => prev,
   });
 
   const { data: aging } = useQuery({
@@ -133,6 +131,20 @@ export function CustomersPage() {
     },
   });
 
+  const removeCustomer = useMutation({
+    mutationFn: (id: string) => api.customers.delete(id),
+    onSuccess: (_, id) => {
+      if (selected?.id === id) setSelected(null);
+      setDeleteTarget(null);
+      setDeleteError('');
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports', 'aging'] });
+    },
+    onError: (err) => {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete customer');
+    },
+  });
+
   const currency = settings?.currency ?? 'PKR';
 
   const openLedgerReceipt = async (entry: LedgerEntry) => {
@@ -145,7 +157,7 @@ export function CustomersPage() {
     }
   };
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading && !data) return <PageLoader />;
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
@@ -172,6 +184,7 @@ export function CustomersPage() {
             className="flex-1"
             placeholder="Search name or phone..."
             value={search}
+            autoComplete="off"
             onChange={(e) => setSearch(e.target.value)}
           />
           <Button
@@ -182,7 +195,7 @@ export function CustomersPage() {
             {sortByBalance ? 'By balance' : 'By name'}
           </Button>
         </div>
-        <div className="max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto">
+        <div className={`max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}>
           {(data?.data ?? []).map((c) => {
             const overdue = overdueMap.get(c.id);
             return (
@@ -286,9 +299,28 @@ export function CustomersPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => printStatement(selected, ledger, currency)}
+                    onClick={() =>
+                      printStatement(
+                        selected,
+                        ledger,
+                        currency,
+                        settings?.businessName ?? 'Statement',
+                      )
+                    }
                   >
                     Print statement
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteError('');
+                      setDeleteTarget(selected);
+                    }}
+                  >
+                    Delete customer
                   </Button>
                 )}
               </div>
@@ -304,12 +336,12 @@ export function CustomersPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
-                          <th className="px-4 py-3">Date</th>
                           <th className="px-4 py-3">Description</th>
                           <th className="px-4 py-3">Due / Age</th>
                           <th className="px-4 py-3 text-right">Amount</th>
                           <th className="px-4 py-3 text-right">Balance</th>
-                          <th className="px-4 py-3" />
+                          <th className="px-4 py-3 text-right">Actions</th>
+                          <th className="px-4 py-3">Date</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -319,7 +351,6 @@ export function CustomersPage() {
                             className={`border-t border-border/60 ${e.saleId ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${e.voidedAt ? 'opacity-50' : ''}`}
                             onClick={() => e.saleId && void openLedgerReceipt(e)}
                           >
-                            <td className="px-4 py-3 text-text-muted">{formatDate(e.createdAt)}</td>
                             <td className="px-4 py-3">
                               <p className="font-medium">{e.description}</p>
                               {e.saleNumber && (
@@ -363,6 +394,9 @@ export function CustomersPage() {
                                   Void
                                 </button>
                               )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-text-muted">
+                              {formatDate(e.createdAt)}
                             </td>
                           </tr>
                         ))}
@@ -450,6 +484,45 @@ export function CustomersPage() {
       >
         <Input label="Reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
       </Modal>
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteError('');
+        }}
+        onConfirm={() => {
+          if (deleteTarget && parseFloat(deleteTarget.balance) <= 0) {
+            removeCustomer.mutate(deleteTarget.id);
+          }
+        }}
+        title="Delete customer"
+        message={
+          deleteTarget ? (
+            parseFloat(deleteTarget.balance) > 0 ? (
+              <>
+                <strong className="text-text">{deleteTarget.name}</strong> still owes{' '}
+                <strong className="text-text">{formatMoney(deleteTarget.balance, currency)}</strong>.
+                <span className="mt-2 block text-danger">
+                  You cannot delete this customer until the udhaar is fully repaid. Record a payment
+                  first, then delete.
+                </span>
+              </>
+            ) : (
+              <>
+                Delete <strong className="text-text">{deleteTarget.name}</strong>? Past sales stay in
+                history; the customer is removed from udhaar accounts.
+                {deleteError && <span className="mt-2 block text-danger">{deleteError}</span>}
+              </>
+            )
+          ) : null
+        }
+        confirmLabel={
+          deleteTarget && parseFloat(deleteTarget.balance) > 0 ? 'Cannot delete' : 'Delete customer'
+        }
+        confirmDisabled={!!deleteTarget && parseFloat(deleteTarget.balance) > 0}
+        loading={removeCustomer.isPending}
+      />
     </div>
   );
 }

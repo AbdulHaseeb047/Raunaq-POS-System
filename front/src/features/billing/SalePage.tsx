@@ -19,10 +19,14 @@ import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
 
 interface CartLine {
+  /** Unique key so multiple misc/open lines can coexist. */
+  key: string;
   product: Product;
   quantity: number;
   unitPrice: number;
   discountAmount: number;
+  /** Receipt label override for open/misc amounts. */
+  customName?: string;
 }
 
 type PaymentMode = 'CASH' | 'CREDIT' | 'SPLIT';
@@ -97,7 +101,7 @@ export function SalePage() {
     queryFn: () => api.discounts.list(false),
     enabled: canDiscount,
   });
-  const { data: products } = useQuery({
+  const { data: products, isFetching: productsFetching } = useQuery({
     queryKey: ['products', 'sale', search, categoryId],
     queryFn: () =>
       api.products.list({
@@ -106,11 +110,13 @@ export function SalePage() {
         pageSize: 30,
       }),
     enabled: search.length >= 1 || !!categoryId,
+    placeholderData: (prev) => prev,
   });
   const { data: customers } = useQuery({
     queryKey: ['customers', 'sale', customerSearch],
     queryFn: () => api.customers.list(customerSearch || undefined, 1, 15),
     enabled: customerSearch.length >= 1,
+    placeholderData: (prev) => prev,
   });
   const { data: heldCarts, refetch: refetchHeld } = useQuery({
     queryKey: ['held-carts'],
@@ -146,24 +152,62 @@ export function SalePage() {
   }, [customer, paymentMode, totals.grandTotal, creditAmount, currency]);
 
   const addToCart = useCallback(
-    (product: Product) => {
-      const existing = cart.find((l) => l.product.id === product.id);
+    (product: Product, opts?: { quantity?: number; unitPrice?: number; customName?: string }) => {
+      const qty = opts?.quantity ?? 1;
+      const unitPrice = opts?.unitPrice ?? parseFloat(product.sellPrice);
+      const customName = opts?.customName?.trim();
+      const existing = cart.find(
+        (l) =>
+          l.product.id === product.id &&
+          (l.customName ?? '') === (customName ?? '') &&
+          l.unitPrice === unitPrice &&
+          !customName,
+      );
       const currentQty = existing?.quantity ?? 0;
-      if (!canAddToCart(product, 1, currentQty)) {
+      if (!canAddToCart(product, qty, currentQty)) {
         setError(`${product.name} is out of stock`);
         return;
       }
       setError('');
       setCart((prev) => {
-        const ex = prev.find((l) => l.product.id === product.id);
+        // Misc/open lines always add as their own row (or merge same description+price)
+        if (customName) {
+          const ex = prev.find(
+            (l) =>
+              l.product.id === product.id &&
+              (l.customName ?? '') === customName &&
+              l.unitPrice === unitPrice,
+          );
+          if (ex) {
+            return prev.map((l) => (l.key === ex.key ? { ...l, quantity: l.quantity + qty } : l));
+          }
+          return [
+            ...prev,
+            {
+              key: `misc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              product,
+              quantity: qty,
+              unitPrice,
+              discountAmount: 0,
+              customName,
+            },
+          ];
+        }
+        const ex = prev.find((l) => l.product.id === product.id && !l.customName);
         if (ex) {
           return prev.map((l) =>
-            l.product.id === product.id ? { ...l, quantity: l.quantity + 1 } : l,
+            l.key === ex.key ? { ...l, quantity: l.quantity + qty } : l,
           );
         }
         return [
           ...prev,
-          { product, quantity: 1, unitPrice: parseFloat(product.sellPrice), discountAmount: 0 },
+          {
+            key: product.id,
+            product,
+            quantity: qty,
+            unitPrice,
+            discountAmount: 0,
+          },
         ];
       });
       setSearch('');
@@ -341,6 +385,7 @@ export function SalePage() {
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           discountAmount: l.discountAmount,
+          ...(l.customName ? { productName: l.customName } : {}),
         })),
         billDiscountAmount: billDiscount,
         appliedDiscounts: appliedDiscounts.length > 0 ? appliedDiscounts : undefined,
@@ -357,27 +402,37 @@ export function SalePage() {
       return api.sales.create(body);
     },
     onSuccess: async (result) => {
-      if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
-      const detail = await api.sales.get(result.sale.id);
-      setReceiptSale(detail);
-      setShowCheckout(false);
-      if (canPrint && settings?.printReceiptsDefault) {
-        void printSaleReceipt(detail, settings, currency).catch((err) => {
-          setWarning(err instanceof Error ? err.message : 'Receipt print failed');
-        });
+      try {
+        if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
+        const detail = await api.sales.get(result.sale.id);
+        setShowCheckout(false);
+        setReceiptSale(detail);
+        if (canPrint && settings?.printReceiptsDefault) {
+          void printSaleReceipt(detail, settings, currency).catch((err) => {
+            setWarning(err instanceof Error ? err.message : 'Receipt print failed');
+          });
+        }
+      } catch (err) {
+        setShowCheckout(false);
+        setError(err instanceof ApiError ? err.message : 'Sale saved, but receipt failed to load');
+      } finally {
+        setCart([]);
+        setCustomer(null);
+        setCustomerSearch('');
+        setBillDiscount(0);
+        setDiscountInput('');
+        setSelectedRuleId('');
+        setAppliedDiscounts([]);
+        setNotes('');
+        setPaymentMode('CASH');
+        setAmountReceived('');
+        setCashAmount('');
+        setCreditAmount('');
+        void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        void queryClient.invalidateQueries({ queryKey: ['sales'] });
+        void queryClient.invalidateQueries({ queryKey: ['customers'] });
+        void queryClient.invalidateQueries({ queryKey: ['products'] });
       }
-      setCart([]);
-      setCustomer(null);
-      setBillDiscount(0);
-      setDiscountInput('');
-      setSelectedRuleId('');
-      setAppliedDiscounts([]);
-      setNotes('');
-      setPaymentMode('CASH');
-      setAmountReceived('');
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      void queryClient.invalidateQueries({ queryKey: ['sales'] });
-      void queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Sale failed'),
   });
@@ -442,7 +497,14 @@ export function SalePage() {
       cashAmount?: string;
       creditAmount?: string;
     };
-    if (data.cart) setCart(data.cart);
+    if (data.cart) {
+      setCart(
+        data.cart.map((l, i) => ({
+          ...l,
+          key: l.key || (l.customName ? `misc-held-${i}` : l.product.id),
+        })),
+      );
+    }
     if (data.customer) setCustomer(data.customer);
     if (data.customerSearch) setCustomerSearch(data.customerSearch);
     else if (data.customer) setCustomerSearch(data.customer.name);
@@ -561,6 +623,7 @@ export function SalePage() {
                 className="w-full rounded-xl border border-border bg-surface-muted py-2.5 pl-10 pr-3 text-sm shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                 placeholder="Search by Name, SKU code or scan Barcode..."
                 value={search}
+                autoComplete="off"
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setShowDropdown(true);
@@ -572,9 +635,11 @@ export function SalePage() {
                 }}
               />
               {showDropdown && search.length >= 1 && (
-                <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-white shadow-lg">
+                <div className={`absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-white shadow-lg ${productsFetching ? 'opacity-80' : ''}`}>
                   {searchResults.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-text-muted">No products found</p>
+                    <p className="px-3 py-2 text-xs text-text-muted">
+                      {productsFetching ? 'Searching…' : 'No products found'}
+                    </p>
                   )}
                   {searchResults.map((p) => {
                     const status = getStockStatus(p);
@@ -693,6 +758,7 @@ export function SalePage() {
                 className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 placeholder="Walk-in Customer (Cash Sale)"
                 value={customerDisplay}
+                autoComplete="off"
                 onChange={(e) => {
                   const v = e.target.value;
                   setCustomerSearch(v);
@@ -737,19 +803,22 @@ export function SalePage() {
             ) : (
               <div className="space-y-2">
                 {cart.map((line) => (
-                  <div key={line.product.id} className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5">
+                  <div key={line.key} className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-2 text-sm font-medium leading-tight">{line.product.name}</p>
+                      <p className="line-clamp-2 text-sm font-medium leading-tight">
+                        {line.customName ?? line.product.name}
+                      </p>
                       <button
                         type="button"
                         className="shrink-0 text-[10px] text-danger"
-                        onClick={() => setCart((c) => c.filter((l) => l.product.id !== line.product.id))}
+                        onClick={() => setCart((c) => c.filter((l) => l.key !== line.key))}
                       >
                         ✕
                       </button>
                     </div>
                     <p className="mt-0.5 text-[10px] text-text-muted">
                       {formatMoney(line.unitPrice, currency)} × {line.quantity}
+                      {line.customName ? ' · Other' : ''}
                     </p>
                     <div className="mt-2 flex items-center gap-1.5">
                       <button
@@ -758,7 +827,7 @@ export function SalePage() {
                         onClick={() =>
                           setCart((c) =>
                             c.map((l) =>
-                              l.product.id === line.product.id ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l,
+                              l.key === line.key ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l,
                             ),
                           )
                         }
@@ -773,7 +842,7 @@ export function SalePage() {
                           if (canAddToCart(line.product, 1, line.quantity)) {
                             setCart((c) =>
                               c.map((l) =>
-                                l.product.id === line.product.id ? { ...l, quantity: l.quantity + 1 } : l,
+                                l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l,
                               ),
                             );
                           } else setError('Insufficient stock');
@@ -848,7 +917,7 @@ export function SalePage() {
             </div>
 
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-            {warning && <p className="mt-1 text-xs text-amber-700">{warning}</p>}
+            {warning && <p className="mt-1 text-xs text-slate-600">{warning}</p>}
 
             <Button
               className="mt-3 w-full"
@@ -985,7 +1054,7 @@ export function SalePage() {
           )}
 
           {paymentMode === 'CREDIT' && (
-            <div className="rounded-2xl border border-border bg-amber-50 px-4 py-4 text-sm text-amber-900">
+            <div className="rounded-2xl border border-brand-200 bg-brand-50/70 px-4 py-4 text-sm text-brand-900">
               Full invoice will be posted to customer udhaar.
             </div>
           )}
@@ -1048,7 +1117,7 @@ export function SalePage() {
           </div>
 
           {creditLimitWarning && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800">
               {creditLimitWarning}
             </p>
           )}

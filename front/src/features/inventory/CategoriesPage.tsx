@@ -5,6 +5,7 @@ import { ProductListPanel } from '@/components/catalog/ProductListPanel';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -18,6 +19,7 @@ export function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<Category | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [search, setSearch] = useState('');
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.get() });
@@ -53,6 +55,16 @@ export function CategoriesPage() {
       setEditing(null);
       setName('');
       void queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.categories.delete(id),
+    onSuccess: (_, id) => {
+      if (selected?.id === id) setSelected(null);
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ['categories'] });
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 
@@ -103,7 +115,7 @@ export function CategoriesPage() {
                   <p className="font-semibold text-text">{cat.name}</p>
                   <p className="text-xs text-text-muted">{count} products</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <Badge variant={cat.isActive ? 'brand' : 'default'}>
                     {cat.isActive ? 'Active' : 'Inactive'}
                   </Badge>
@@ -118,6 +130,17 @@ export function CategoriesPage() {
                     }}
                   >
                     Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(cat);
+                    }}
+                  >
+                    Del
                   </Button>
                 </div>
               </button>
@@ -151,13 +174,36 @@ export function CategoriesPage() {
         title={editing ? 'Edit category' : 'New category'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModal(false)}>Cancel</Button>
-            <Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button>
+            <Button variant="ghost" onClick={() => setModal(false)}>
+              Cancel
+            </Button>
+            <Button loading={save.isPending} onClick={() => save.mutate()}>
+              Save
+            </Button>
           </>
         }
       >
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
       </Modal>
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.id);
+        }}
+        title="Delete category"
+        message={
+          deleteTarget ? (
+            <>
+              Delete category <strong className="text-text">{deleteTarget.name}</strong>? Products
+              linked to it will remain but lose the category tag.
+            </>
+          ) : null
+        }
+        confirmLabel="Delete category"
+        loading={remove.isPending}
+      />
     </div>
   );
 }

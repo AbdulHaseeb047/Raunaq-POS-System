@@ -35,7 +35,7 @@ export function AdminAppShell() {
               end={item.end}
               title={item.label}
               className={({ isActive }) =>
-                `sidebar-nav-link flex min-h-[38px] items-center rounded-xl py-2 text-[13px] font-semibold tracking-wide transition-all ${
+                `sidebar-nav-link flex min-h-[38px] cursor-pointer items-center rounded-xl py-2 text-[13px] font-semibold tracking-wide transition-all ${
                   collapsed ? 'justify-center px-2' : 'gap-2.5 px-3'
                 } ${
                   isActive

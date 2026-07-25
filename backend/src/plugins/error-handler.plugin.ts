@@ -31,7 +31,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
     return reply.status(500).send({
       statusCode: 500,
       error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
+      message:
+        process.env.NODE_ENV === 'production'
+          ? 'An unexpected error occurred'
+          : error.message || 'An unexpected error occurred',
     });
   });
 }

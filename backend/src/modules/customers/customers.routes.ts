@@ -7,6 +7,7 @@ import { authenticate, requireFeature } from '../permissions/permissions.middlew
 import {
   createCustomer,
   customerSchema,
+  deleteCustomer,
   fetchCustomerLedger,
   getCustomer,
   listCustomers,
@@ -44,6 +45,11 @@ export async function registerCustomerRoutes(app: FastifyInstance): Promise<void
     const parsed = customerSchema.partial().safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
     return updateCustomer(resolveTenantId(request), id, parsed.data);
+  });
+
+  app.delete('/customers/:id', { preHandler: [authenticate, requireFeature(FEATURES.CUSTOMERS_EDIT)] }, async (request) => {
+    const { id } = request.params as { id: string };
+    return deleteCustomer(resolveTenantId(request), id);
   });
 
   app.get(

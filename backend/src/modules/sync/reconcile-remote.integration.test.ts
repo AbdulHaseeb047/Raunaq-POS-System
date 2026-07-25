@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../core/prisma.js';
-import { getCloudRecord } from './cloud-record.service.js';
 import { reconcileLocalWithRemote } from './reconcile-remote.service.js';
 import { SYNC_TABLES } from './sync-payload.js';
 import {
@@ -26,28 +25,34 @@ describeIfDb('reconcile local with remote', () => {
 
   it('overwrites local customer with cloud snapshot on dismiss reconcile', async () => {
     const customerId = crypto.randomUUID();
+    const cloudUpdatedAt = new Date(Date.now() + 60_000).toISOString();
 
     await prisma.customer.create({
       data: {
         id: customerId,
         tenantId: fixture.tenantId,
-        name: 'Local Name',
+        name: 'Stale Local',
         balance: 0,
+        version: 1,
       },
     });
 
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { name: 'Cloud Authoritative', version: 2 },
-    });
-
-    const remote = await getCloudRecord(fixture.tenantId, SYNC_TABLES.customers, customerId);
-    expect(remote).not.toBeNull();
-
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { name: 'Stale Local' },
-    });
+    const remote = {
+      tableName: SYNC_TABLES.customers,
+      recordId: customerId,
+      operation: 'UPDATE' as const,
+      payload: {
+        id: customerId,
+        tenant_id: fixture.tenantId,
+        name: 'Cloud Authoritative',
+        balance: '0',
+        version: 2,
+        updated_at: cloudUpdatedAt,
+        created_at: cloudUpdatedAt,
+        is_active: true,
+      },
+      recordVersion: 2,
+    };
 
     await prisma.$transaction(async (tx) => {
       await reconcileLocalWithRemote(

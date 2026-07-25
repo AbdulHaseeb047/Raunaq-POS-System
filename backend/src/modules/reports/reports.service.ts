@@ -13,7 +13,7 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     ...(branchId ? { branchId } : {}),
   };
 
-  const [todaySales, todayCount, lowStock, udhaarTotal] = await Promise.all([
+  const [todaySales, todayCount, lowStock, udhaarTotal, todayReturns] = await Promise.all([
     prisma.sale.aggregate({ where: saleWhere, _sum: { grandTotal: true } }),
     prisma.sale.count({ where: saleWhere }),
     prisma.product.findMany({
@@ -30,7 +30,27 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
       where: { tenantId, deletedAt: null, balance: { gt: 0 } },
       _sum: { balance: true },
     }),
+    prisma.saleReturn.aggregate({
+      where: {
+        tenantId,
+        createdAt: { gte: startOfDay },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    }),
   ]);
+
+  const returnItemsAgg = await prisma.saleReturnItem.aggregate({
+    where: {
+      tenantId,
+      saleReturn: {
+        createdAt: { gte: startOfDay },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+    },
+    _sum: { quantity: true },
+  });
 
   const lowStockAlerts = lowStock
     .filter((p) => p.lowStockThreshold && p.stockQuantity.lte(p.lowStockThreshold))
@@ -46,6 +66,9 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     todayTransactionCount: todayCount,
     lowStockAlerts,
     outstandingUdhaar: udhaarTotal._sum.balance?.toFixed(2) ?? '0.00',
+    todayReturnsAmount: todayReturns._sum.totalAmount?.toFixed(2) ?? '0.00',
+    todayReturnsCount: todayReturns._count,
+    todayReturnedUnits: returnItemsAgg._sum.quantity?.toFixed(3) ?? '0.000',
   };
 }
 
@@ -165,6 +188,90 @@ export async function getSalesSummary(
     discountTotal: discounts.toFixed(2),
     averageTicket: sales.length > 0 ? revenue.div(sales.length).toFixed(2) : '0.00',
     topProducts,
+  };
+}
+
+/** Daily series for dashboard mountain/area charts (default last 14 days). */
+export async function getSalesTrend(tenantId: string, days = 14, branchId?: string) {
+  const dayCount = Math.min(Math.max(days, 7), 90);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (dayCount - 1));
+
+  const localDateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const [sales, returns] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        tenantId,
+        status: 'COMPLETED',
+        createdAt: { gte: start, lte: end },
+        ...(branchId ? { branchId } : {}),
+      },
+      select: { grandTotal: true, createdAt: true },
+    }),
+    prisma.saleReturn.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: start, lte: end },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      select: { totalAmount: true, createdAt: true },
+    }),
+  ]);
+
+  const byDay = new Map<string, { sales: number; transactions: number; returns: number }>();
+  for (let i = 0; i < dayCount; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    byDay.set(localDateKey(d), { sales: 0, transactions: 0, returns: 0 });
+  }
+
+  for (const s of sales) {
+    const row = byDay.get(localDateKey(s.createdAt));
+    if (!row) continue;
+    row.sales += Number(s.grandTotal);
+    row.transactions += 1;
+  }
+
+  for (const r of returns) {
+    const row = byDay.get(localDateKey(r.createdAt));
+    if (!row) continue;
+    row.returns += Number(r.totalAmount);
+  }
+
+  const series = [...byDay.entries()].map(([date, row]) => ({
+    date,
+    sales: row.sales.toFixed(2),
+    transactions: row.transactions,
+    returns: row.returns.toFixed(2),
+  }));
+
+  const totalSales = series.reduce((sum, d) => sum + parseFloat(d.sales), 0);
+  const totalTx = series.reduce((sum, d) => sum + d.transactions, 0);
+  const totalReturns = series.reduce((sum, d) => sum + parseFloat(d.returns), 0);
+  const mid = Math.floor(series.length / 2);
+  const firstHalf = series.slice(0, mid).reduce((sum, d) => sum + parseFloat(d.sales), 0);
+  const secondHalf = series.slice(mid).reduce((sum, d) => sum + parseFloat(d.sales), 0);
+  const growthPct =
+    firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf) * 100 : secondHalf > 0 ? 100 : 0;
+
+  return {
+    from: localDateKey(start),
+    to: localDateKey(end),
+    days: dayCount,
+    totalSales: totalSales.toFixed(2),
+    totalTransactions: totalTx,
+    totalReturns: totalReturns.toFixed(2),
+    growthPct: Math.round(growthPct * 10) / 10,
+    series,
   };
 }
 

@@ -66,6 +66,16 @@ export async function printSaleSlip(tenantId: string, saleId: string): Promise<{
     changeGiven: sale.changeGiven,
     items: sale.items,
     payments: sale.payments,
+    returns: sale.returns.map((r) => ({
+      returnNumber: r.returnNumber,
+      reason: r.reason,
+      totalAmount: r.totalAmount,
+      items: r.items.map((ri) => ({
+        productName: ri.productName,
+        quantity: ri.quantity,
+        refundAmount: ri.refundAmount,
+      })),
+    })),
     receipt: {
       businessName: sale.receipt.businessName,
       address: sale.receipt.address ?? null,

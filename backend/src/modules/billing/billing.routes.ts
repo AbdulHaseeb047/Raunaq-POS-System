@@ -39,8 +39,14 @@ import { printSaleSlip } from '../printer/printer.service.js';
 export async function registerBillingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/sales', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
     const tenantId = resolveTenantId(request);
-    const q = request.query as { page?: string; pageSize?: string };
-    return listSales(tenantId, q.page ? Number(q.page) : 1, q.pageSize ? Number(q.pageSize) : 20);
+    const q = request.query as { page?: string; pageSize?: string; search?: string };
+    return listSales(
+      tenantId,
+      q.page ? Number(q.page) : 1,
+      q.pageSize ? Number(q.pageSize) : 20,
+      undefined,
+      q.search,
+    );
   });
 
   app.get('/sales/:saleId', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
@@ -103,7 +109,7 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
 
   app.post(
     '/sales/:saleId/return',
-    { preHandler: [authenticate, requireFeature(FEATURES.BILLING_VOID_SALE)] },
+    { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
       const { saleId } = request.params as { saleId: string };

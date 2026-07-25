@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { NotFoundError } from '../core/errors.js';
+import { NotFoundError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
 import { getCustomerLedger, getUdhaarAging, recordPayment, voidLedgerEntry } from './ledger.service.js';
@@ -107,6 +107,27 @@ export async function updateCustomer(
     return updated;
   });
   return serializeCustomer(customer);
+}
+
+export async function deleteCustomer(tenantId: string, id: string) {
+  const existing = await prisma.customer.findFirst({ where: { id, tenantId, deletedAt: null } });
+  if (!existing) throw new NotFoundError('Customer not found');
+
+  if (existing.balance.gt(0)) {
+    throw new ValidationError(
+      `Cannot delete customer with outstanding udhaar of ${existing.balance.toFixed(2)}. Clear the balance first.`,
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.customer.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false },
+    });
+    await syncUpdate(tx, SYNC_TABLES.customers, updated);
+  });
+
+  return { success: true };
 }
 
 export async function recordCustomerPayment(

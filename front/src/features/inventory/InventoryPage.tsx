@@ -67,7 +67,7 @@ export function InventoryPage() {
   const { data: brands } = useQuery({ queryKey: ['brands'], queryFn: () => api.brands.list() });
   const { data: suppliers } = useQuery({ queryKey: ['suppliers'], queryFn: () => api.suppliers.list() });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['products', search, stockStatus, categoryFilter],
     queryFn: () =>
       api.products.list({
@@ -75,6 +75,7 @@ export function InventoryPage() {
         stockStatus: stockStatus === 'all' ? undefined : stockStatus,
         categoryId: categoryFilter || undefined,
       }),
+    placeholderData: (prev) => prev,
   });
 
   const deleteProduct = useMutation({
@@ -205,7 +206,7 @@ export function InventoryPage() {
 
   const currency = settings?.currency ?? 'PKR';
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading && !data) return <PageLoader />;
 
   return (
     <div>
@@ -251,14 +252,20 @@ export function InventoryPage() {
       {summary && (
         <div className="mb-4 grid gap-3 sm:grid-cols-4">
           <div className="rounded-xl border bg-surface p-3 text-sm"><p className="text-text-muted">Healthy</p><p className="text-lg font-bold">{summary.healthyCount}</p></div>
-          <div className="rounded-xl border bg-amber-50 p-3 text-sm"><p className="text-text-muted">Low stock</p><p className="text-lg font-bold text-amber-800">{summary.lowStockCount}</p></div>
+          <div className="rounded-xl border bg-slate-50 p-3 text-sm"><p className="text-text-muted">Low stock</p><p className="text-lg font-bold text-slate-800">{summary.lowStockCount}</p></div>
           <div className="rounded-xl border bg-rose-50 p-3 text-sm"><p className="text-text-muted">Out of stock</p><p className="text-lg font-bold text-rose-800">{summary.outOfStockCount}</p></div>
           <div className="rounded-xl border bg-brand-50 p-3 text-sm"><p className="text-text-muted">Projected profit</p><p className="text-lg font-bold text-brand-800">{formatMoney(summary.projectedProfit, currency)}</p></div>
         </div>
       )}
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Input className="flex-1 min-w-[200px]" placeholder="Search name, SKU, or barcode..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input
+          className="flex-1 min-w-[200px]"
+          placeholder="Search name, SKU, or barcode..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+        />
         <select className="rounded-xl border border-border px-3 py-2 text-sm" value={stockStatus} onChange={(e) => setStockStatus(e.target.value)}>
           <option value="all">All stock</option>
           <option value="healthy">Healthy</option>
@@ -274,7 +281,7 @@ export function InventoryPage() {
       {(data?.data.length ?? 0) === 0 ? (
         <EmptyState title="No products" description="Add your first product to get started." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)]">
+        <div className={`overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)] ${isFetching ? 'opacity-70' : ''}`}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -453,7 +460,7 @@ export function InventoryPage() {
               match by SKU or barcode and will be updated.
             </p>
             {importPreview.errors.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-800">
                 <p className="font-medium">Parse warnings ({importPreview.errors.length})</p>
                 <ul className="mt-2 max-h-32 list-disc space-y-1 overflow-y-auto pl-4 text-xs">
                   {importPreview.errors.map((err) => (

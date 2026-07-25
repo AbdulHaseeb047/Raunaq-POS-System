@@ -13,6 +13,13 @@ export interface EscPosSalePayment {
   amount: string;
 }
 
+export interface EscPosSaleReturn {
+  returnNumber: string;
+  reason: string;
+  totalAmount: string;
+  items: Array<{ productName: string; quantity: string; refundAmount: string }>;
+}
+
 export interface EscPosReceiptInput {
   saleNumber: string;
   createdAt: string;
@@ -28,6 +35,7 @@ export interface EscPosReceiptInput {
   changeGiven: string | null;
   items: EscPosSaleItem[];
   payments: EscPosSalePayment[];
+  returns?: EscPosSaleReturn[];
   receipt: {
     businessName: string;
     address: string | null;
@@ -156,24 +164,64 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   if (parseFloat(input.taxTotal) > 0) {
     chunks.push(textLine(padLine(r.taxLabel, formatMoney(input.taxTotal, currency), width)));
   }
+  const returns = input.returns ?? [];
+  const returnedTotal = returns.reduce((sum, ret) => sum + parseFloat(ret.totalAmount), 0);
+  const hasReturns = returns.length > 0;
+  const netTotal = Math.max(0, parseFloat(input.grandTotal) - returnedTotal);
+
   chunks.push(esc(0x1b, 0x45, 1));
-  chunks.push(textLine(padLine('GRAND TOTAL', formatMoney(input.grandTotal, currency), width)));
+  chunks.push(
+    textLine(
+      padLine(hasReturns ? 'ORIGINAL TOTAL' : 'GRAND TOTAL', formatMoney(input.grandTotal, currency), width),
+    ),
+  );
   chunks.push(esc(0x1b, 0x45, 0));
 
-  if (input.payments.length > 0) {
+  if (hasReturns) {
     chunks.push(textLine(''));
-    chunks.push(textLine('PAYMENT RECEIVED'));
+    chunks.push(esc(0x1b, 0x45, 1));
+    chunks.push(textLine('ADJUSTED INVOICE'));
+    chunks.push(esc(0x1b, 0x45, 0));
+    chunks.push(textLine('Original slip superseded'));
+    for (const ret of returns) {
+      chunks.push(textLine(padLine(ret.returnNumber, `-${formatMoney(ret.totalAmount, currency)}`, width)));
+      chunks.push(textLine(ret.reason));
+      for (const ri of ret.items) {
+        chunks.push(
+          textLine(
+            `  ${ri.productName} x${parseFloat(ri.quantity)} (-${formatMoney(ri.refundAmount, currency)})`,
+          ),
+        );
+      }
+    }
+    chunks.push(textLine(padLine('Returned', `-${formatMoney(returnedTotal.toFixed(2), currency)}`, width)));
+    chunks.push(esc(0x1b, 0x45, 1));
+    chunks.push(textLine(padLine('NET TOTAL', formatMoney(netTotal.toFixed(2), currency), width)));
+    chunks.push(esc(0x1b, 0x45, 0));
+  }
+
+  const showChange = input.changeGiven != null && parseFloat(input.changeGiven) > 0;
+  const isCashSale =
+    input.amountReceived != null &&
+    input.payments.length > 0 &&
+    input.payments.every((p) => p.paymentMethod === 'CASH');
+
+  chunks.push(textLine(''));
+  chunks.push(textLine('PAYMENT'));
+  if (isCashSale) {
+    chunks.push(textLine(padLine('Cash from customer', formatMoney(input.amountReceived!, currency), width)));
+    chunks.push(textLine(padLine('Bill total', formatMoney(input.grandTotal, currency), width)));
+  } else {
     for (const p of input.payments) {
       chunks.push(textLine(padLine(paymentLabel(p.paymentMethod), formatMoney(p.amount, currency), width)));
     }
+    if (input.amountReceived != null) {
+      chunks.push(textLine(padLine('Cash tendered', formatMoney(input.amountReceived, currency), width)));
+    }
   }
-
-  if (input.amountReceived != null) {
-    chunks.push(textLine(padLine('Cash tendered', formatMoney(input.amountReceived, currency), width)));
-  }
-  if (input.changeGiven != null && parseFloat(input.changeGiven) > 0) {
+  if (showChange) {
     chunks.push(esc(0x1b, 0x45, 1));
-    chunks.push(textLine(padLine('Change back', formatMoney(input.changeGiven, currency), width)));
+    chunks.push(textLine(padLine('Change back', formatMoney(input.changeGiven!, currency), width)));
     chunks.push(esc(0x1b, 0x45, 0));
   }
 
@@ -189,8 +237,17 @@ export function buildEscPosReceipt(input: EscPosReceiptInput, paperWidth: Printe
   chunks.push(esc(0x1b, 0x45, 1));
   chunks.push(textLine('Thank you!'));
   chunks.push(esc(0x1b, 0x45, 0));
-  chunks.push(textLine(`${BRAND.productName}`));
+  chunks.push(textLine(BRAND.developer?.line ?? 'System developed by NexMindSystems'));
   chunks.push(esc(0x1b, 0x61, 0));
+  chunks.push(
+    textLine(
+      padLine(
+        BRAND.developer?.website ?? 'www.NexMindSystems.com',
+        BRAND.developer?.phone ?? '03462734539',
+        width,
+      ),
+    ),
+  );
 
   chunks.push(esc(0x1b, 0x64, 3)); // feed
   chunks.push(esc(0x1d, 0x56, 0)); // cut

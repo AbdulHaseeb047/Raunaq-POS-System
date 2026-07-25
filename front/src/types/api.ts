@@ -52,6 +52,27 @@ export interface DashboardSummary {
     lowStockThreshold: string;
   }>;
   outstandingUdhaar: string;
+  todayReturnsAmount?: string;
+  todayReturnsCount?: number;
+  todayReturnedUnits?: string;
+}
+
+export interface SalesTrendPoint {
+  date: string;
+  sales: string;
+  transactions: number;
+  returns: string;
+}
+
+export interface SalesTrendReport {
+  from: string;
+  to: string;
+  days: number;
+  totalSales: string;
+  totalTransactions: number;
+  totalReturns: string;
+  growthPct: number;
+  series: SalesTrendPoint[];
 }
 
 export interface Product {
@@ -166,6 +187,8 @@ export interface SaleDetail {
     discountAmount: string;
     taxAmount: string;
     lineTotal: string;
+    returnedQuantity?: string;
+    returnableQuantity?: string;
   }>;
   payments: Array<{ id: string; paymentMethod: string; amount: string }>;
   returns: Array<{
@@ -186,6 +209,8 @@ export interface SaleDetail {
     businessName: string;
     address: string | null;
     phone: string | null;
+    logoUrl?: string | null;
+    receiptHeaderMode?: 'NAME' | 'LOGO' | 'BOTH';
     taxLabel: string;
     receiptFooter: string | null;
     currency: string;
@@ -286,10 +311,20 @@ export interface LedgerEntry {
 export interface SaleListItem {
   id: string;
   saleNumber: string;
+  status?: string;
+  subtotal?: string;
+  discountTotal?: string;
+  taxTotal?: string;
   grandTotal: string;
   paymentStatus: string;
   createdAt: string;
-  customer: { id: string; name: string } | null;
+  customer: { id: string; name: string; phone?: string | null } | null;
+  cashier?: { id: string; fullName: string };
+  itemCount?: number;
+  payments?: Array<{ paymentMethod: string; amount: string }>;
+  hasReturns?: boolean;
+  returnedTotal?: string;
+  netTotal?: string;
 }
 
 export interface CreateSaleResponse {
@@ -329,6 +364,7 @@ export interface BusinessSettings {
   defaultTaxRate: string;
   printReceiptsDefault: boolean;
   receiptFooter: string | null;
+  receiptHeaderMode: 'NAME' | 'LOGO' | 'BOTH';
   maxDiscountPercentStaff: string | null;
   fbrEnabled: boolean;
   fbrPosId: string | null;

@@ -8,6 +8,7 @@ import {
   getDailySalesReport,
   getDashboardSummary,
   getSalesSummary,
+  getSalesTrend,
   getStaffPerformanceReport,
   getStockMovementReport,
   getUdhaarAgingReport,
@@ -50,6 +51,14 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const q = request.query as { from?: string; to?: string; branchId?: string };
     const branchId = await optionalBranchId(request, tenantId, q.branchId);
     return getSalesSummary(tenantId, q.from, q.to, branchId);
+  });
+
+  app.get('/reports/sales-trend', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] }, async (request) => {
+    const tenantId = resolveTenantId(request);
+    const q = request.query as { days?: string; branchId?: string };
+    const branchId = await optionalBranchId(request, tenantId, q.branchId);
+    const days = q.days ? Number(q.days) : 14;
+    return getSalesTrend(tenantId, Number.isFinite(days) ? days : 14, branchId);
   });
 
   app.get('/reports/stock-movement', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] }, async (request) => {

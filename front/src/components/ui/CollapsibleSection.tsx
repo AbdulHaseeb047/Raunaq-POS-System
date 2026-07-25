@@ -11,7 +11,7 @@ type CollapsibleSectionProps = {
 
 const accentStyles = {
   default: 'border-border bg-surface',
-  warning: 'border-amber-200 bg-amber-50/50',
+  warning: 'border-slate-200 bg-slate-50/80',
   danger: 'border-rose-200 bg-rose-50/50',
 };
 

@@ -22,6 +22,8 @@ export const saleItemSchema = z.object({
   quantity: z.number().positive(),
   unitPrice: z.number().nonnegative().optional(),
   discountAmount: z.number().nonnegative().optional(),
+  /** Display name override (e.g. miscellaneous / open amount description). */
+  productName: z.string().min(1).max(255).optional(),
 });
 
 export const createSaleSchema = z.object({
@@ -126,9 +128,10 @@ export async function createSale(
   const lineItems = input.items.map((item, index) => {
     const product = productMap.get(item.productId)!;
     const calc = totals.lines[index]!;
+    const customName = item.productName?.trim();
     return {
       productId: product.id,
-      productName: product.name,
+      productName: customName || product.name,
       unitPrice: toDecimal(item.unitPrice ?? product.sellPrice),
       quantity: toDecimal(item.quantity),
       discountAmount: calc.discountAmount,
@@ -475,6 +478,14 @@ export async function getSaleDetail(tenantId: string, saleId: string) {
 
   const settings = await prisma.businessSettings.findUnique({ where: { tenantId } });
 
+  const returnedByItem = new Map<string, number>();
+  for (const ret of sale.returns) {
+    for (const ri of ret.items) {
+      const prev = returnedByItem.get(ri.saleItemId) ?? 0;
+      returnedByItem.set(ri.saleItemId, prev + Number(ri.quantity));
+    }
+  }
+
   return {
     id: sale.id,
     saleNumber: sale.saleNumber,
@@ -494,16 +505,23 @@ export async function getSaleDetail(tenantId: string, saleId: string) {
     fbrQrData: sale.fbrQrData,
     customer: sale.customer,
     cashier: sale.cashier,
-    items: sale.items.map((i) => ({
-      id: i.id,
-      productId: i.productId,
-      productName: i.productName,
-      unitPrice: i.unitPrice.toFixed(2),
-      quantity: i.quantity.toFixed(3),
-      discountAmount: i.discountAmount.toFixed(2),
-      taxAmount: i.taxAmount.toFixed(2),
-      lineTotal: i.lineTotal.toFixed(2),
-    })),
+    items: sale.items.map((i) => {
+      const sold = Number(i.quantity);
+      const returnedQuantity = returnedByItem.get(i.id) ?? 0;
+      const returnableQuantity = Math.max(0, sold - returnedQuantity);
+      return {
+        id: i.id,
+        productId: i.productId,
+        productName: i.productName,
+        unitPrice: i.unitPrice.toFixed(2),
+        quantity: i.quantity.toFixed(3),
+        discountAmount: i.discountAmount.toFixed(2),
+        taxAmount: i.taxAmount.toFixed(2),
+        lineTotal: i.lineTotal.toFixed(2),
+        returnedQuantity: returnedQuantity.toFixed(3),
+        returnableQuantity: returnableQuantity.toFixed(3),
+      };
+    }),
     payments: sale.payments.map((p) => ({
       id: p.id,
       paymentMethod: p.paymentMethod,
@@ -525,10 +543,12 @@ export async function getSaleDetail(tenantId: string, saleId: string) {
     })),
     receipt: {
       businessName: settings?.businessName ?? 'POS',
-      address: settings?.address,
-      phone: settings?.phone,
+      address: settings?.address ?? null,
+      phone: settings?.phone ?? null,
+      logoUrl: settings?.logoUrl ?? null,
+      receiptHeaderMode: settings?.receiptHeaderMode ?? 'NAME',
       taxLabel: settings?.taxLabel ?? 'Tax',
-      receiptFooter: settings?.receiptFooter,
+      receiptFooter: settings?.receiptFooter ?? null,
       currency: settings?.currency ?? 'PKR',
       fbrEnabled: settings?.fbrEnabled ?? false,
       fbrPosId: settings?.fbrPosId ?? null,
@@ -558,9 +578,20 @@ export async function partialReturn(
   return prisma.$transaction(async (tx) => {
     const sale = await tx.sale.findFirst({
       where: { id: saleId, tenantId, status: 'COMPLETED' },
-      include: { items: true },
+      include: {
+        items: true,
+        returns: { include: { items: true } },
+      },
     });
     if (!sale) throw new NotFoundError('Sale not found or not eligible for return');
+
+    const alreadyReturned = new Map<string, ReturnType<typeof toDecimal>>();
+    for (const ret of sale.returns) {
+      for (const ri of ret.items) {
+        const prev = alreadyReturned.get(ri.saleItemId) ?? toDecimal(0);
+        alreadyReturned.set(ri.saleItemId, prev.plus(ri.quantity));
+      }
+    }
 
     const returnCount = await tx.saleReturn.count({ where: { tenantId } });
     const returnNumber = `RET-${String(returnCount + 1).padStart(5, '0')}`;
@@ -578,8 +609,15 @@ export async function partialReturn(
       const saleItem = sale.items.find((i) => i.id === req.saleItemId);
       if (!saleItem) throw new NotFoundError(`Sale item ${req.saleItemId} not found`);
       const qty = toDecimal(req.quantity);
-      if (qty.gt(saleItem.quantity)) {
-        throw new ValidationError(`Return quantity exceeds sold quantity for ${saleItem.productName}`);
+      const prior = alreadyReturned.get(saleItem.id) ?? toDecimal(0);
+      const returnable = saleItem.quantity.minus(prior);
+      if (qty.gt(returnable)) {
+        throw new ValidationError(
+          `Return quantity exceeds remaining returnable qty for ${saleItem.productName} (sold ${saleItem.quantity.toFixed(3)}, already returned ${prior.toFixed(3)}, returnable ${returnable.toFixed(3)})`,
+        );
+      }
+      if (saleItem.quantity.lte(0)) {
+        throw new ValidationError(`Invalid sold quantity for ${saleItem.productName}`);
       }
       const unitRefund = saleItem.lineTotal.div(saleItem.quantity);
       const refundAmount = unitRefund.times(qty);
@@ -654,12 +692,37 @@ export async function partialReturn(
   });
 }
 
-export async function listSales(tenantId: string, page = 1, pageSize = 20, branchId?: string) {
+export async function listSales(
+  tenantId: string,
+  page = 1,
+  pageSize = 20,
+  branchId?: string,
+  search?: string,
+) {
   const skip = (page - 1) * pageSize;
+  const term = search?.trim();
+  const statusMatches = term
+    ? (['PAID', 'ON_CREDIT', 'PARTIAL'] as const).filter((s) =>
+        s.toLowerCase().includes(term.toLowerCase()) ||
+        (term.toLowerCase().includes('credit') && s === 'ON_CREDIT') ||
+        (term.toLowerCase().includes('udhaar') && s === 'ON_CREDIT'),
+      )
+    : [];
   const where = {
     tenantId,
     status: 'COMPLETED' as const,
     ...(branchId ? { branchId } : {}),
+    ...(term
+      ? {
+          OR: [
+            { saleNumber: { contains: term, mode: 'insensitive' as const } },
+            { customer: { name: { contains: term, mode: 'insensitive' as const } } },
+            ...(statusMatches.length > 0
+              ? [{ paymentStatus: { in: [...statusMatches] } }]
+              : []),
+          ],
+        }
+      : {}),
   };
   const [data, total] = await prisma.$transaction([
     prisma.sale.findMany({
@@ -670,21 +733,48 @@ export async function listSales(tenantId: string, page = 1, pageSize = 20, branc
       select: {
         id: true,
         saleNumber: true,
+        status: true,
+        subtotal: true,
+        discountTotal: true,
+        taxTotal: true,
         grandTotal: true,
         paymentStatus: true,
         createdAt: true,
-        customer: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        cashier: { select: { id: true, fullName: true } },
+        payments: { select: { paymentMethod: true, amount: true } },
+        _count: { select: { items: true } },
+        returns: { select: { totalAmount: true } },
       },
     }),
     prisma.sale.count({ where }),
   ]);
 
   return {
-    data: data.map((s) => ({
-      ...s,
+    data: data.map((s) => {
+      const returnedTotal = s.returns.reduce((sum, r) => sum + Number(r.totalAmount), 0);
+      return {
+      id: s.id,
+      saleNumber: s.saleNumber,
+      status: s.status,
+      subtotal: s.subtotal.toFixed(2),
+      discountTotal: s.discountTotal.toFixed(2),
+      taxTotal: s.taxTotal.toFixed(2),
       grandTotal: s.grandTotal.toFixed(2),
+      paymentStatus: s.paymentStatus,
       createdAt: s.createdAt.toISOString(),
-    })),
-    meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
+      customer: s.customer,
+      cashier: s.cashier,
+      itemCount: s._count.items,
+      payments: s.payments.map((p) => ({
+        paymentMethod: p.paymentMethod,
+        amount: p.amount.toFixed(2),
+      })),
+      hasReturns: s.returns.length > 0,
+      returnedTotal: returnedTotal.toFixed(2),
+      netTotal: Math.max(0, Number(s.grandTotal) - returnedTotal).toFixed(2),
+    };
+    }),
+    meta: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
   };
 }

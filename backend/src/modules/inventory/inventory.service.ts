@@ -4,6 +4,7 @@ import { NotFoundError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
 import { SYNC_TABLES, syncInsert, syncUpdate } from '../sync/sync-payload.js';
+import { ensureMiscProduct } from '../billing/misc-product.js';
 
 export const categorySchema = z.object({
   name: z.string().min(1).max(255),
@@ -325,6 +326,11 @@ export async function deleteProduct(tenantId: string, id: string) {
     await syncUpdate(tx, SYNC_TABLES.products, updated);
     return { success: true };
   });
+}
+
+export async function getMiscOpenProduct(tenantId: string) {
+  const product = await ensureMiscProduct(tenantId);
+  return serializeProduct(product);
 }
 
 function serializeProduct(p: {

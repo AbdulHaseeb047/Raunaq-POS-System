@@ -44,6 +44,7 @@ describeIfDb('sync outbox integration', () => {
       {
         customerId: customer.id,
         paymentMethod: 'CASH',
+        amountReceived: 50,
         items: [{ productId: fixture.productId, quantity: 1, unitPrice: 50 }],
       },
       { branchId: fixture.branchId },
@@ -70,6 +71,7 @@ describeIfDb('sync outbox integration', () => {
     await createSale(fixture.tenantId, fixture.userId, {
       customerId: customer.id,
       paymentMethod: 'CASH',
+      amountReceived: 25,
       items: [{ productId: fixture.productId, quantity: 1, unitPrice: 25 }],
     });
 

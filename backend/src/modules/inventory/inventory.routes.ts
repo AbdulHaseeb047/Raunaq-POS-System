@@ -17,6 +17,7 @@ import {
   importProductsSchema,
   listCategories,
   listProducts,
+  getMiscOpenProduct,
   productSchema,
   purgeAllProducts,
   stockAdjustSchema,
@@ -49,6 +50,10 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
 
   app.get('/products/summary', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_VIEW)] }, async (request) => {
     return getInventorySummary(resolveTenantId(request));
+  });
+
+  app.get('/products/misc-open', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
+    return getMiscOpenProduct(resolveTenantId(request));
   });
 
   app.get('/products', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_VIEW)] }, async (request) => {
