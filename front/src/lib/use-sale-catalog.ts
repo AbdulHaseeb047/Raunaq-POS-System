@@ -61,22 +61,32 @@ export function useSaleCatalog() {
     void (async () => {
       const acc: Product[] = [];
       try {
-        for (let page = 2; page <= MAX_PAGES; page++) {
-          const next = await queryClient.fetchQuery({
-            queryKey: ['products', 'sale-catalog', 'chunk', page],
-            queryFn: () =>
-              api.products.list({
-                page,
-                pageSize: CHUNK_SIZE,
-                activeOnly: true,
-                skipCount: true,
+        // Fetch remaining pages in small parallel batches to cut wall-clock time.
+        for (let page = 2; page <= MAX_PAGES; page += 2) {
+          const batch = [page, page + 1].filter((p) => p <= MAX_PAGES);
+          const results = await Promise.all(
+            batch.map((p) =>
+              queryClient.fetchQuery({
+                queryKey: ['products', 'sale-catalog', 'chunk', p],
+                queryFn: () =>
+                  api.products.list({
+                    page: p,
+                    pageSize: CHUNK_SIZE,
+                    activeOnly: true,
+                    skipCount: true,
+                  }),
+                staleTime: SALE_CATALOG_STALE_MS,
               }),
-            staleTime: SALE_CATALOG_STALE_MS,
-          });
+            ),
+          );
           if (cancelled) return;
-          acc.push(...next.data);
+          let shortPage = false;
+          for (const next of results) {
+            acc.push(...next.data);
+            if (next.data.length < CHUNK_SIZE) shortPage = true;
+          }
           setExtraProducts([...acc]);
-          if (next.data.length < CHUNK_SIZE) break;
+          if (shortPage) break;
         }
       } finally {
         if (!cancelled) setLoadingMore(false);

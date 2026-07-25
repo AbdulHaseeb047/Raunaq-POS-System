@@ -191,8 +191,16 @@ export async function listProducts(
 }
 
 export async function getInventorySummary(tenantId: string) {
+  // Only columns needed for aggregates — avoid loading full product rows over Railway↔DB.
   const products = await prisma.product.findMany({
     where: { tenantId, deletedAt: null, isActive: true },
+    select: {
+      costPrice: true,
+      sellPrice: true,
+      stockQuantity: true,
+      trackStock: true,
+      lowStockThreshold: true,
+    },
   });
 
   let totalValue = 0;

@@ -8,6 +8,13 @@ import { prisma } from '../core/prisma.js';
 import { applyRlsSession } from '../core/rls.js';
 import { enterTenantContext } from '../core/tenant-context.js';
 import { assertTenantPortalAccess } from '../tenants/subscription.service.js';
+import {
+  getCachedPortalAccess,
+  getCachedUserFeatures,
+  setCachedPortalAccessError,
+  setCachedPortalAccessOk,
+  setCachedUserFeatures,
+} from './access-cache.js';
 import { userHasFeature } from './permissions.service.js';
 
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set([
@@ -15,6 +22,21 @@ const PASSWORD_CHANGE_ALLOWED_PATHS = new Set([
   '/auth/logout',
   '/auth/refresh',
 ]);
+
+async function assertTenantPortalAccessCached(tenantId: string): Promise<void> {
+  const cached = getCachedPortalAccess(tenantId);
+  if (cached) {
+    if (!cached.ok) throw cached.error;
+    return;
+  }
+  try {
+    await assertTenantPortalAccess(tenantId);
+    setCachedPortalAccessOk(tenantId);
+  } catch (error) {
+    setCachedPortalAccessError(tenantId, error);
+    throw error;
+  }
+}
 
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   const header = request.headers.authorization;
@@ -31,12 +53,14 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
   await applyRlsSession(tenantCtx);
 
   if (request.user.tenantId) {
-    await assertTenantPortalAccess(request.user.tenantId);
-
-    const dbUser = await prisma.user.findFirst({
-      where: { id: request.user.id, deletedAt: null },
-      select: { isActive: true },
-    });
+    // Parallelize the two DB checks that used to run sequentially on every request.
+    const [, dbUser] = await Promise.all([
+      assertTenantPortalAccessCached(request.user.tenantId),
+      prisma.user.findFirst({
+        where: { id: request.user.id, deletedAt: null },
+        select: { isActive: true },
+      }),
+    ]);
     if (!dbUser?.isActive) {
       throw new UnauthorizedError(
         'Your account has been deactivated. Contact your shop administrator.',
@@ -109,13 +133,18 @@ export function requireFeature(...features: FeatureKey[]) {
       return;
     }
 
-    // Re-resolve from DB so soft-lock applies mid-session without waiting for token refresh.
+    // Soft-lock can change mid-session; cache briefly so parallel page APIs don't each re-hit DB.
     const { resolveUserFeatures } = await import('./permissions.service.js');
-    const liveFeatures = await resolveUserFeatures(
-      request.user.id,
-      request.user.role,
-      request.user.tenantId,
-    );
+    const cacheKey = `${request.user.tenantId ?? 'none'}:${request.user.id}:${request.user.role}`;
+    let liveFeatures = getCachedUserFeatures(cacheKey);
+    if (!liveFeatures) {
+      liveFeatures = await resolveUserFeatures(
+        request.user.id,
+        request.user.role,
+        request.user.tenantId,
+      );
+      setCachedUserFeatures(cacheKey, liveFeatures);
+    }
     request.user.features = liveFeatures;
 
     const allowed = features.some((f) => userHasFeature(liveFeatures, f));

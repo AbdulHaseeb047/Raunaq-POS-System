@@ -8,7 +8,6 @@ import {
   logout,
   refreshAccessToken,
   registerAuthDecorators,
-  buildAuthenticatedUser,
 } from './auth.service.js';
 import { changePasswordSchema, loginSchema, refreshSchema } from './auth.schemas.js';
 import { authenticate } from '../permissions/permissions.middleware.js';
@@ -94,30 +93,51 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/auth/me', { preHandler: [authenticate] }, async (request) => {
-    const user = await buildAuthenticatedUser(request.user!.id);
-    let planEntitlement: Record<string, unknown> | null = null;
-    if (user.tenantId) {
-      const { prisma } = await import('../core/prisma.js');
-      const { serializeSubscriptionFields } = await import('../tenants/subscription.service.js');
-      const { appConfig } = await import('../../config.js');
-      const tenant = await prisma.tenant.findFirst({
-        where: { id: user.tenantId, deletedAt: null },
-      });
-      if (tenant) {
-        planEntitlement = {
+    const jwtUser = request.user!;
+    const { prisma } = await import('../core/prisma.js');
+    const { resolveUserFeatures } = await import('../permissions/permissions.service.js');
+    const { serializeSubscriptionFields } = await import('../tenants/subscription.service.js');
+    const { appConfig } = await import('../../config.js');
+
+    // One user row + features (+ tenant for plan) instead of stacked sequential lookups.
+    const [dbUser, features, tenant] = await Promise.all([
+      prisma.user.findFirst({
+        where: { id: jwtUser.id, deletedAt: null, isActive: true },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          role: true,
+          tenantId: true,
+          mustChangePassword: true,
+        },
+      }),
+      resolveUserFeatures(jwtUser.id, jwtUser.role, jwtUser.tenantId),
+      jwtUser.tenantId
+        ? prisma.tenant.findFirst({ where: { id: jwtUser.tenantId, deletedAt: null } })
+        : Promise.resolve(null),
+    ]);
+
+    if (!dbUser) {
+      const { UnauthorizedError } = await import('../core/errors.js');
+      throw new UnauthorizedError('User not found or inactive');
+    }
+
+    const planEntitlement = tenant
+      ? {
           ...serializeSubscriptionFields(tenant),
           upgradeUrl: appConfig.upgradeWhatsappUrl,
-        };
-      }
-    }
+        }
+      : null;
+
     return {
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      tenantId: user.tenantId,
-      features: user.features,
-      mustChangePassword: user.mustChangePassword,
+      id: dbUser.id,
+      email: dbUser.email,
+      fullName: dbUser.fullName,
+      role: dbUser.role,
+      tenantId: dbUser.tenantId,
+      features,
+      mustChangePassword: dbUser.mustChangePassword,
       planEntitlement,
     };
   });

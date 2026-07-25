@@ -60,13 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!localStorage.getItem('pos_access_token')) return null;
     return readCachedUser();
   });
-  // Cached user + token → show shell immediately; revalidate in background.
-  const [isLoading, setIsLoading] = useState(() => {
-    if (typeof localStorage === 'undefined') return true;
-    const token = localStorage.getItem('pos_access_token');
-    if (!token) return false;
-    return !readCachedUser();
-  });
+  // Never block first paint on /me — token + optional cache paint immediately.
+  const [isLoading, setIsLoading] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchIdState] = useState<string | null>(getStoredBranchId());
 
@@ -121,12 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void (async () => {
       const accessToken = localStorage.getItem('pos_access_token');
-      if (accessToken) {
-        await refreshUser();
-      } else {
+      if (!accessToken) {
         applyUser(null);
+        setIsLoading(false);
+        return;
       }
+      // Paint shell immediately; refresh session without blocking navigation.
       setIsLoading(false);
+      await refreshUser();
     })();
   }, [refreshUser, applyUser]);
 

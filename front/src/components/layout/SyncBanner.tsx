@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { IconAlert, IconSync } from '@/components/icons';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -21,13 +21,23 @@ export function SyncBanner() {
   const [issuesOpen, setIssuesOpen] = useState(false);
   const [dismissReason, setDismissReason] = useState('');
   const [dismissTarget, setDismissTarget] = useState<SyncIssue | null>(null);
+  // Defer sync status so it doesn't compete with dashboard/first-page APIs.
+  const [pollReady, setPollReady] = useState(false);
+  useEffect(() => {
+    if (!user) {
+      setPollReady(false);
+      return;
+    }
+    const t = window.setTimeout(() => setPollReady(true), 2500);
+    return () => window.clearTimeout(t);
+  }, [user]);
 
   const { data: status } = useQuery({
     queryKey: ['sync', 'status'],
     queryFn: () => api.sync.status(),
     // Only keep polling in hybrid mode — cloud/offline Railway should not pay this RTT every minute.
     refetchInterval: (q) => (q.state.data?.deploymentMode === 'hybrid' ? 60_000 : false),
-    enabled: !!user,
+    enabled: !!user && pollReady,
     staleTime: 5 * 60_000,
   });
 

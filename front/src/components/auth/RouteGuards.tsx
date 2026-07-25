@@ -7,8 +7,13 @@ import { useAuth } from '@/lib/auth';
 export function ProtectedRoute() {
   const { user, isLoading } = useAuth();
   const location = useLocation();
+  const hasToken =
+    typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('pos_access_token'));
 
   if (isLoading) return <PageLoader />;
+
+  // Token present but /me still hydrating — keep shell instead of bouncing to login.
+  if (!user && hasToken) return <PageLoader />;
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
@@ -35,8 +40,11 @@ export function PublicOnlyRoute() {
 
 export function PosShellRoute() {
   const { user, isLoading } = useAuth();
+  const hasToken =
+    typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('pos_access_token'));
 
   if (isLoading) return <PageLoader />;
+  if (!user && hasToken) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (isPlatformAdmin(user)) return <Navigate to="/admin" replace />;
   if (!canUsePosApp(user)) return <Navigate to="/login" replace />;
@@ -46,8 +54,11 @@ export function PosShellRoute() {
 
 export function AdminShellRoute() {
   const { user, isLoading } = useAuth();
+  const hasToken =
+    typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('pos_access_token'));
 
   if (isLoading) return <PageLoader />;
+  if (!user && hasToken) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (!isPlatformAdmin(user)) return <Navigate to="/" replace />;
 

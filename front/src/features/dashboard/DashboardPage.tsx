@@ -30,10 +30,13 @@ export function DashboardPage() {
   const { user, branchId } = useAuth();
   const queryClient = useQueryClient();
 
-  // Warm the sale catalog while the user is on the dashboard.
+  // Warm sale catalog after first paint — don't steal bandwidth from dashboard APIs.
   useEffect(() => {
     if (!hasFeature(user, FEATURES.BILLING_CREATE_SALE)) return;
-    void prefetchSaleCatalog(queryClient);
+    const t = window.setTimeout(() => {
+      void prefetchSaleCatalog(queryClient);
+    }, 2000);
+    return () => window.clearTimeout(t);
   }, [user, queryClient]);
 
   const { data: settings } = useQuery({

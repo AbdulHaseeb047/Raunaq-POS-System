@@ -1,6 +1,15 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 
-import { SettingsDialog, type SettingsTabId } from './SettingsDialog';
+import type { SettingsTabId } from './SettingsDialog';
 
 type SettingsDialogContextValue = {
   openSettings: (tab?: SettingsTabId) => void;
@@ -8,6 +17,10 @@ type SettingsDialogContextValue = {
 };
 
 const SettingsDialogContext = createContext<SettingsDialogContextValue | null>(null);
+
+const SettingsDialogLazy = lazy(() =>
+  import('./SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
+);
 
 export function SettingsDialogProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -25,7 +38,11 @@ export function SettingsDialogProvider({ children }: { children: ReactNode }) {
   return (
     <SettingsDialogContext.Provider value={value}>
       {children}
-      <SettingsDialog open={open} tab={tab} onTabChange={setTab} onClose={closeSettings} />
+      {open && (
+        <Suspense fallback={null}>
+          <SettingsDialogLazy open={open} tab={tab} onTabChange={setTab} onClose={closeSettings} />
+        </Suspense>
+      )}
     </SettingsDialogContext.Provider>
   );
 }

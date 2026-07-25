@@ -13,44 +13,45 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     ...(branchId ? { branchId } : {}),
   };
 
-  const [todaySales, todayCount, lowStock, udhaarTotal, todayReturns] = await Promise.all([
-    prisma.sale.aggregate({ where: saleWhere, _sum: { grandTotal: true } }),
-    prisma.sale.count({ where: saleWhere }),
-    prisma.product.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        isActive: true,
-        trackStock: true,
-        lowStockThreshold: { not: null },
-      },
-      select: { id: true, name: true, stockQuantity: true, lowStockThreshold: true },
-    }),
-    prisma.customer.aggregate({
-      where: { tenantId, deletedAt: null, balance: { gt: 0 } },
-      _sum: { balance: true },
-    }),
-    prisma.saleReturn.aggregate({
-      where: {
-        tenantId,
-        createdAt: { gte: startOfDay },
-        ...(branchId ? { sale: { branchId } } : {}),
-      },
-      _sum: { totalAmount: true },
-      _count: true,
-    }),
-  ]);
-
-  const returnItemsAgg = await prisma.saleReturnItem.aggregate({
-    where: {
-      tenantId,
-      saleReturn: {
-        createdAt: { gte: startOfDay },
-        ...(branchId ? { sale: { branchId } } : {}),
-      },
-    },
-    _sum: { quantity: true },
-  });
+  const [todaySales, todayCount, lowStock, udhaarTotal, todayReturns, returnItemsAgg] =
+    await Promise.all([
+      prisma.sale.aggregate({ where: saleWhere, _sum: { grandTotal: true } }),
+      prisma.sale.count({ where: saleWhere }),
+      prisma.product.findMany({
+        where: {
+          tenantId,
+          deletedAt: null,
+          isActive: true,
+          trackStock: true,
+          lowStockThreshold: { not: null },
+        },
+        select: { id: true, name: true, stockQuantity: true, lowStockThreshold: true },
+        take: 200,
+      }),
+      prisma.customer.aggregate({
+        where: { tenantId, deletedAt: null, balance: { gt: 0 } },
+        _sum: { balance: true },
+      }),
+      prisma.saleReturn.aggregate({
+        where: {
+          tenantId,
+          createdAt: { gte: startOfDay },
+          ...(branchId ? { sale: { branchId } } : {}),
+        },
+        _sum: { totalAmount: true },
+        _count: true,
+      }),
+      prisma.saleReturnItem.aggregate({
+        where: {
+          tenantId,
+          saleReturn: {
+            createdAt: { gte: startOfDay },
+            ...(branchId ? { sale: { branchId } } : {}),
+          },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
 
   const lowStockAlerts = lowStock
     .filter((p) => p.lowStockThreshold && p.stockQuantity.lte(p.lowStockThreshold))

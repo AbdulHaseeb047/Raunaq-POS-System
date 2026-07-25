@@ -69,10 +69,6 @@ export function InventoryPage() {
     queryFn: () => api.settings.get(),
   });
 
-  const { data: summary } = useQuery({
-    queryKey: ['inventory-summary'],
-    queryFn: () => api.products.summary(),
-  });
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.categories.list(),
@@ -92,6 +88,14 @@ export function InventoryPage() {
         categoryId: categoryFilter || undefined,
       }),
     placeholderData: (prev) => prev,
+  });
+
+  // Heavy full-catalog aggregate — load after the product list paints.
+  const { data: summary } = useQuery({
+    queryKey: ['inventory-summary'],
+    queryFn: () => api.products.summary(),
+    enabled: Boolean(data),
+    staleTime: 60_000,
   });
 
   // Filter + rank by live keyword: starts-with first, then contains.
