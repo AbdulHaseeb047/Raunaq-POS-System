@@ -8,8 +8,10 @@ export function feeBadgeVariant(status: string): 'default' | 'success' | 'warnin
 export function accessStatusBadgeVariant(
   status: string,
 ): 'default' | 'success' | 'warning' | 'danger' | 'brand' {
-  if (status === 'active') return 'success';
+  if (status === 'active_paid' || status === 'trial_active' || status === 'active') return 'success';
   if (status === 'expiring_soon') return 'warning';
+  if (status === 'trial_expired_starter' || status === 'subscription_expired_starter') return 'warning';
+  if (status === 'access_revoked' || status === 'revoked' || status === 'expired') return 'danger';
   if (status === 'payment_overdue') return 'warning';
   return 'danger';
 }
@@ -17,15 +19,23 @@ export function accessStatusBadgeVariant(
 export function accessStatusLabel(status: string): string {
   switch (status) {
     case 'active':
-      return 'Access active';
+    case 'active_paid':
+      return 'Active paid';
+    case 'trial_active':
+      return 'In trial';
     case 'expiring_soon':
       return 'Expiring soon';
+    case 'trial_expired_starter':
+      return 'Trial expired (Starter access)';
+    case 'subscription_expired_starter':
+      return 'Subscription ended (Starter access)';
     case 'expired':
-      return 'Subscription ended';
+      return 'Subscription ended (Starter access)';
+    case 'access_revoked':
     case 'revoked':
-      return 'Access revoked';
+      return 'Access revoked (blocked)';
     case 'payment_overdue':
-      return 'Payment overdue';
+      return 'Payment overdue (Starter access)';
     case 'suspended':
       return 'Suspended';
     default:

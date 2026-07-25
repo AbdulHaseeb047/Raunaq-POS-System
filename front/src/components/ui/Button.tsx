@@ -7,7 +7,8 @@ const variants = {
     'bg-white text-text border border-border hover:bg-brand-50 hover:border-brand-300 active:bg-brand-100',
   ghost: 'text-text-muted hover:bg-brand-50 hover:text-brand-700',
   danger: 'bg-danger text-white hover:bg-rose-700 shadow-sm',
-  accent: 'bg-accent-500 text-white hover:bg-accent-600 shadow-sm shadow-accent-500/25',
+  accent:
+    'bg-brand-700 text-white hover:bg-brand-800 shadow-sm shadow-brand-700/25 active:bg-brand-900',
 } as const;
 
 const sizes = {

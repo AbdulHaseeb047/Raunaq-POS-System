@@ -14,8 +14,29 @@ import { createDefaultBranch } from '../src/modules/core/branch.js';
 import { applyTierPreset } from '../src/modules/permissions/permissions.service.js';
 import { ensureBusinessSettings } from '../src/modules/settings/settings.service.js';
 import { ensureMiscProduct } from '../src/modules/billing/misc-product.js';
+import { computeSubscriptionEndsAt } from '../src/modules/tenants/subscription.service.js';
 
 const prisma = new PrismaClient();
+
+async function refreshDemoSubscription(tenantId: string): Promise<void> {
+  const subscriptionDays = 365;
+  const subscriptionStartAt = new Date();
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      tier: TenantTier.STANDARD,
+      trialPlanTier: TenantTier.STANDARD,
+      feeStatus: 'ACTIVE',
+      isActive: true,
+      accessRevokedAt: null,
+      accessRevokeReason: null,
+      subscriptionDays,
+      subscriptionStartAt,
+      subscriptionEndsAt: computeSubscriptionEndsAt(subscriptionStartAt, subscriptionDays),
+      monthlyFee: 5000,
+    },
+  });
+}
 
 async function main() {
   // RLS (when enabled) blocks writes unless bypass is set for seed/migrations.
@@ -117,14 +138,20 @@ async function main() {
       where: { email: superAdminEmail, tenantId: null, deletedAt: null },
     });
 
+    const subscriptionDays = 365;
+    const subscriptionStartAt = new Date();
     const tenant = await prisma.$transaction(async (tx) => {
       const created = await tx.tenant.create({
         data: {
           name: 'Demo Shop',
           slug: demoSlug,
           tier: TenantTier.STANDARD,
+          trialPlanTier: TenantTier.STANDARD,
           feeStatus: 'ACTIVE',
           monthlyFee: 5000,
+          subscriptionDays,
+          subscriptionStartAt,
+          subscriptionEndsAt: computeSubscriptionEndsAt(subscriptionStartAt, subscriptionDays),
           acquiredById: salesRep?.id ?? null,
         },
       });
@@ -198,12 +225,13 @@ async function main() {
   } else {
     console.log(`Demo shop already exists: ${demoSlug}`);
     await ensureMiscProduct(existingDemo.id);
+    await refreshDemoSubscription(existingDemo.id);
     const superAdmin = await prisma.user.findFirst({
       where: { email: superAdminEmail, tenantId: null, deletedAt: null },
     });
     if (superAdmin) {
       await applyTierPreset(existingDemo.id, TENANT_TIERS.STANDARD, superAdmin.id);
-      console.log('Demo shop features refreshed to STANDARD (includes void/return)');
+      console.log('Demo shop refreshed: STANDARD plan, yearly window, full Standard features');
     }
 
     const demoOwner = await prisma.user.findFirst({

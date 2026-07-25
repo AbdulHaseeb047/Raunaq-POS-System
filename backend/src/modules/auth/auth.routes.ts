@@ -95,6 +95,19 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/auth/me', { preHandler: [authenticate] }, async (request) => {
     const user = await buildAuthenticatedUser(request.user!.id);
+    let planEntitlement: Record<string, unknown> | null = null;
+    if (user.tenantId) {
+      const { prisma } = await import('../core/prisma.js');
+      const { serializeSubscriptionFields } = await import('../tenants/subscription.service.js');
+      const { appConfig } = await import('../../config.js');
+      const tenant = await prisma.tenant.findFirst({ where: { id: user.tenantId, deletedAt: null } });
+      if (tenant) {
+        planEntitlement = {
+          ...serializeSubscriptionFields(tenant),
+          upgradeUrl: appConfig.upgradeWhatsappUrl,
+        };
+      }
+    }
     return {
       id: user.id,
       email: user.email,
@@ -103,6 +116,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       tenantId: user.tenantId,
       features: user.features,
       mustChangePassword: user.mustChangePassword,
+      planEntitlement,
     };
   });
 }

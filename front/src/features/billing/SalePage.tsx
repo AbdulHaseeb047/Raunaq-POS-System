@@ -120,10 +120,12 @@ export function SalePage() {
     enabled: debouncedCustomerSearch.length >= 1,
     placeholderData: (prev) => prev,
   });
+  const canHoldBills = hasFeature(user, FEATURES.BILLING_HELD_CARTS);
   const { data: heldCarts, refetch: refetchHeld } = useQuery({
     queryKey: ['held-carts'],
     queryFn: () => api.heldCarts.list(),
     staleTime: 60_000,
+    enabled: canHoldBills,
   });
 
   const defaultTax = parseFloat(settings?.defaultTaxRate ?? '0');
@@ -654,16 +656,18 @@ export function SalePage() {
       <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-bold text-text">Sales Register</h1>
         <div className="flex flex-wrap gap-2">
-          {(heldCarts?.length ?? 0) > 0 && (
+          {canHoldBills && (heldCarts?.length ?? 0) > 0 && (
             <Button size="sm" variant="secondary" onClick={() => setShowHeld(true)}>
               Held bills ({heldCarts?.length})
             </Button>
           )}
           {cart.length > 0 && (
             <>
+              {canHoldBills && (
               <Button size="sm" variant="secondary" onClick={openHoldModal}>
                 Hold bill
               </Button>
+              )}
               <Button size="sm" variant="danger" onClick={cancelSale}>
                 Cancel
               </Button>

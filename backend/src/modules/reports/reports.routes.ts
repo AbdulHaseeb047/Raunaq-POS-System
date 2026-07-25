@@ -42,7 +42,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     return getDailySalesReport(tenantId, q.date, branchId);
   });
 
-  app.get('/reports/udhaar-aging', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] }, async (request) => {
+  app.get('/reports/udhaar-aging', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_ADVANCED)] }, async (request) => {
     return getUdhaarAgingReport(resolveTenantId(request));
   });
 
@@ -67,7 +67,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     return getStockMovementReport(tenantId, q.from, q.to);
   });
 
-  app.get('/reports/staff-performance', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] }, async (request) => {
+  app.get('/reports/staff-performance', { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_ADVANCED)] }, async (request) => {
     const tenantId = resolveTenantId(request);
     const q = request.query as { from?: string; to?: string };
     return getStaffPerformanceReport(tenantId, q.from, q.to);

@@ -18,6 +18,7 @@ import { registerPermissionRoutes } from './modules/permissions/permissions.rout
 import { registerSyncRoutes } from './modules/sync/sync.routes.js';
 import { startSyncWorker, stopSyncWorker } from './modules/sync/worker.js';
 import { registerAdminRoutes } from './modules/admin/admin.routes.js';
+import { registerSupportRoutes } from './modules/support/support.routes.js';
 import { registerTenantRoutes } from './modules/tenants/tenants.routes.js';
 import { registerUserRoutes } from './modules/users/users.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.plugin.js';
@@ -89,6 +90,7 @@ export async function buildApp() {
   await registerBranchRoutes(app);
   await registerReportRoutes(app);
   await registerSyncRoutes(app);
+  await registerSupportRoutes(app);
 
   return app;
 }

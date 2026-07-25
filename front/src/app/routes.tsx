@@ -15,6 +15,8 @@ import { PageLoader } from '@/components/ui/Spinner';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage';
 import { AccountPasswordPage } from '@/features/auth/AccountPasswordPage';
+import { AdminAccountPasswordPage } from '@/features/auth/AdminAccountPasswordPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
 import { hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 
@@ -51,8 +53,11 @@ const BrandsPage = lazy(() =>
 const SuppliersPage = lazy(() =>
   import('@/features/catalog/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
 );
-const SettingsPage = lazy(() =>
-  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+const SupportPage = lazy(() =>
+  import('@/features/support/SupportPage').then((m) => ({ default: m.SupportPage })),
+);
+const UpgradePlansPage = lazy(() =>
+  import('@/features/billing/UpgradePlansPage').then((m) => ({ default: m.UpgradePlansPage })),
 );
 const AdminDashboardPage = lazy(() =>
   import('@/features/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
@@ -76,7 +81,7 @@ function FeatureRoute({
 }) {
   const { user } = useAuth();
   if (feature && !hasFeature(user, feature)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/upgrade" replace state={{ fromFeature: feature }} />;
   }
   return <>{children}</>;
 }
@@ -94,7 +99,6 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/change-password" element={<ChangePasswordPage />} />
-        <Route path="/account/password" element={<AccountPasswordPage />} />
 
         <Route element={<AdminShellRoute />}>
           <Route element={<AdminAppShell />}>
@@ -130,6 +134,7 @@ export function AppRoutes() {
                 </LazyPage>
               }
             />
+            <Route path="/admin/account/password" element={<AdminAccountPasswordPage />} />
           </Route>
         </Route>
 
@@ -143,6 +148,7 @@ export function AppRoutes() {
                 </LazyPage>
               }
             />
+            <Route path="account/password" element={<AccountPasswordPage />} />
 
             <Route
               path="sale"
@@ -227,7 +233,7 @@ export function AppRoutes() {
             <Route
               path="brands"
               element={
-                <FeatureRoute feature={FEATURES.INVENTORY_VIEW}>
+                <FeatureRoute feature={FEATURES.INVENTORY_BRANDS}>
                   <LazyPage>
                     <BrandsPage />
                   </LazyPage>
@@ -237,21 +243,28 @@ export function AppRoutes() {
             <Route
               path="suppliers"
               element={
-                <FeatureRoute feature={FEATURES.INVENTORY_VIEW}>
+                <FeatureRoute feature={FEATURES.INVENTORY_SUPPLIERS}>
                   <LazyPage>
                     <SuppliersPage />
                   </LazyPage>
                 </FeatureRoute>
               }
             />
+            <Route path="settings" element={<SettingsPage />} />
             <Route
-              path="settings"
+              path="support"
               element={
-                <FeatureRoute feature={FEATURES.SETTINGS_VIEW}>
-                  <LazyPage>
-                    <SettingsPage />
-                  </LazyPage>
-                </FeatureRoute>
+                <LazyPage>
+                  <SupportPage />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="upgrade"
+              element={
+                <LazyPage>
+                  <UpgradePlansPage />
+                </LazyPage>
               }
             />
           </Route>

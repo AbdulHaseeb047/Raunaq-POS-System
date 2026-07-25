@@ -203,3 +203,79 @@ export function IconEyeOff(p: IconProps) {
     </svg>
   );
 }
+
+export function IconHelp(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconUpgrade(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16V8M8 12l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconKey(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M10.5 12.5L21 2m-5 1l3 3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconUser(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20a8 8 0 0116 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconStore(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <path d="M3 9l1.5-6h15L21 9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9" />
+      <path d="M9 21V13h6v8" />
+      <path d="M3 9h18" />
+    </svg>
+  );
+}
+
+export function IconReceipt(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <path d="M6 2h12v20l-2-1.5L14 22l-2-1.5L10 22l-2-1.5L6 22V2z" strokeLinejoin="round" />
+      <path d="M9 7h6M9 11h6M9 15h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconPrinter(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <path d="M7 17h10v4H7v-4zM7 3h10v5H7V3z" />
+      <path d="M7 8H5a2 2 0 00-2 2v5a2 2 0 002 2h2M17 8h2a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+      <circle cx="18" cy="12" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function IconDownload(p: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...p}>
+      <path d="M12 3v12M7 11l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 19h14" strokeLinecap="round" />
+    </svg>
+  );
+}

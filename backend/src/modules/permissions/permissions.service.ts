@@ -1,12 +1,18 @@
-import type { FeatureKey } from '@pos/shared';
-import { FEATURES, USER_ROLES } from '@pos/shared';
+import type { FeatureKey, TenantTier } from '@pos/shared';
+import { FEATURES, USER_ROLES, getEffectivePlan, getTierFeaturePreset } from '@pos/shared';
 import type { UserRole } from '@pos/shared';
 
 import { ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
+import { toPlanInput } from '../tenants/subscription.service.js';
 
 const ALL_FEATURE_KEYS = Object.values(FEATURES) as FeatureKey[];
 
+/**
+ * Resolve features for a user.
+ * Soft-locked tenants get Starter features only (ignores custom overrides).
+ * Active trial/paid uses stored TenantFeature rows (plan defaults + admin overrides).
+ */
 export async function resolveUserFeatures(
   userId: string,
   role: string,
@@ -20,24 +26,52 @@ export async function resolveUserFeatures(
     return [];
   }
 
-  const tenantFeatures = await prisma.tenantFeature.findMany({
-    where: { tenantId },
-    select: { featureKey: true },
-  });
-  const tenantKeys = new Set(tenantFeatures.map((f) => f.featureKey as FeatureKey));
+  const tenantKeys = await resolveTenantEffectiveFeatureKeys(tenantId);
 
   if (role === USER_ROLES.CLIENT_ADMIN) {
-    return [...tenantKeys];
+    return tenantKeys;
   }
 
   const staffFeatures = await prisma.staffFeature.findMany({
     where: { userId },
     select: { featureKey: true },
   });
+  const tenantSet = new Set(tenantKeys);
 
   return staffFeatures
     .map((f) => f.featureKey as FeatureKey)
-    .filter((key) => tenantKeys.has(key));
+    .filter((key) => tenantSet.has(key));
+}
+
+export async function resolveTenantEffectiveFeatureKeys(tenantId: string): Promise<FeatureKey[]> {
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId, deletedAt: null },
+  });
+  if (!tenant) return [];
+
+  const effective = getEffectivePlan(toPlanInput(tenant));
+  if (effective.isAccessRevoked) return [];
+
+  // Soft-lock: Starter only — ignore per-client overrides above Starter.
+  if (effective.isSoftLocked) {
+    return effective.featureKeys;
+  }
+
+  const stored = await getTenantFeatures(tenantId);
+  if (stored.length === 0) {
+    return effective.featureKeys;
+  }
+
+  // Plan entitlement is the floor while trial/paid is active. Stale TenantFeature
+  // rows (from before plan expansions) must not hide brands/suppliers/etc.
+  // Keep any extra stored keys outside the plan for legacy admin grants.
+  const planKeys = effective.featureKeys;
+  const storedSet = new Set(stored);
+  const missingFromPlan = planKeys.filter((k) => !storedSet.has(k));
+  if (missingFromPlan.length === 0) {
+    return stored;
+  }
+  return [...new Set([...stored, ...planKeys])];
 }
 
 export async function getTenantFeatures(tenantId: string): Promise<FeatureKey[]> {
@@ -75,12 +109,7 @@ export async function applyTierPreset(
   tier: string,
   enabledById: string,
 ): Promise<FeatureKey[]> {
-  const presets = await prisma.tierPreset.findMany({
-    where: { tier: tier as 'STARTER' | 'STANDARD' | 'PRO' | 'ENTERPRISE' },
-    select: { featureKey: true },
-  });
-
-  const keys = presets.map((p) => p.featureKey as FeatureKey);
+  const keys = getTierFeaturePreset(tier as TenantTier);
   await setTenantFeatures(tenantId, keys, enabledById);
   return keys;
 }
@@ -91,7 +120,7 @@ export async function setStaffFeatures(
   grantedById: string,
   tenantId: string,
 ): Promise<void> {
-  const tenantKeys = new Set(await getTenantFeatures(tenantId));
+  const tenantKeys = new Set(await resolveTenantEffectiveFeatureKeys(tenantId));
   const valid = featureKeys.filter((k) => tenantKeys.has(k));
 
   await prisma.$transaction(async (tx) => {

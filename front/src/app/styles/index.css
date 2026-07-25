@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Brand — fresh teal with warm coral accent */
+  /* Brand — fresh teal; accent = deeper teal for CTAs (no orange/yellow) */
   --color-brand-50: #ecfdf8;
   --color-brand-100: #d1faf0;
   --color-brand-200: #a7f3e0;
@@ -13,9 +13,9 @@
   --color-brand-800: #065f46;
   --color-brand-900: #064e3b;
 
-  --color-accent-400: #fb923c;
-  --color-accent-500: #f97316;
-  --color-accent-600: #ea580c;
+  --color-accent-400: #2dd4bf;
+  --color-accent-500: #0f766e;
+  --color-accent-600: #115e59;
 
   --color-sidebar: #0c3d38;
   --color-sidebar-hover: #14534c;

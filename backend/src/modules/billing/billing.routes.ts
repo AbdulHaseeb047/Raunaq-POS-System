@@ -119,11 +119,11 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     },
   );
 
-  app.get('/held-carts', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
+  app.get('/held-carts', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_HELD_CARTS)] }, async (request) => {
     return listHeldCarts(resolveTenantId(request), request.user!.id);
   });
 
-  app.post('/held-carts', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
+  app.post('/held-carts', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_HELD_CARTS)] }, async (request) => {
     const tenantId = resolveTenantId(request);
     const parsed = heldCartSchema.safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
@@ -131,7 +131,7 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     return saveHeldCart(tenantId, request.user!.id, parsed.data, branchId);
   });
 
-  app.delete('/held-carts/:id', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] }, async (request) => {
+  app.delete('/held-carts/:id', { preHandler: [authenticate, requireFeature(FEATURES.BILLING_HELD_CARTS)] }, async (request) => {
     const { id } = request.params as { id: string };
     return deleteHeldCart(resolveTenantId(request), id, request.user!.id);
   });

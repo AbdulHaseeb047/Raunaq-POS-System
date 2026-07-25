@@ -78,7 +78,7 @@ export function AdminDashboardPage() {
           <p className="mt-1 text-xs text-text-muted">Track who brought each client</p>
         </Link>
         <Link
-          to="/account/password"
+          to="/admin/account/password"
           className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-card)] transition hover:border-brand-300 hover:shadow-[var(--shadow-card-hover)]"
         >
           <p className="text-sm font-semibold text-text">Your password</p>

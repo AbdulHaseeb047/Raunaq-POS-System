@@ -35,6 +35,11 @@ enum TenantFeeStatus {
   SUSPENDED
 }
 
+enum SupportQueryStatus {
+  OPEN
+  CLOSED
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & Auth
 // ---------------------------------------------------------------------------
@@ -44,6 +49,8 @@ model Tenant {
   name      String     @db.VarChar(255)
   slug      String     @unique @db.VarChar(100)
   tier      TenantTier @default(STARTER)
+  /// Plan features granted while feeStatus=TRIAL and subscription window is open.
+  trialPlanTier TenantTier? @map("trial_plan_tier")
   isActive  Boolean    @default(true) @map("is_active")
   feeStatus TenantFeeStatus @default(TRIAL) @map("fee_status")
   monthlyFee Decimal?  @map("monthly_fee") @db.Decimal(12, 2)
@@ -79,6 +86,7 @@ model Tenant {
   syncState          SyncState?
   syncChangelog      SyncChangelog[]
   syncDevices        SyncDevice[]
+  supportQueries     SupportQuery[]
   acquiredBy         User?    @relation("TenantAcquiredBy", fields: [acquiredById], references: [id])
 
   @@map("tenants")
@@ -116,8 +124,28 @@ model User {
   supplierLedgerEntries SupplierLedgerEntry[]  @relation("SupplierLedgerRecordedBy")
   heldCarts             HeldCart[]
   tenantsAcquired       Tenant[]               @relation("TenantAcquiredBy")
+  supportQueries        SupportQuery[]
 
   @@map("users")
+}
+
+model SupportQuery {
+  id        String             @id @default(uuid()) @db.Uuid
+  tenantId  String             @map("tenant_id") @db.Uuid
+  userId    String             @map("user_id") @db.Uuid
+  topic     String             @db.VarChar(80)
+  subject   String             @db.VarChar(200)
+  message   String             @db.Text
+  status    SupportQueryStatus @default(OPEN)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("support_queries")
 }
 
 model RefreshToken {

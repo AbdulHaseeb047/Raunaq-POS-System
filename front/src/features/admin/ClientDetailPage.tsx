@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { FEATURE_REGISTRY, TENANT_TIERS } from '@pos/shared';
+import { FEATURE_REGISTRY, TENANT_TIERS, getTierFeaturePreset, type TenantTier } from '@pos/shared';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -30,8 +30,21 @@ const feeStatusOptions = ['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => 
 const tierOptions = Object.values(TENANT_TIERS).map((t) => ({ value: t, label: t }));
 
 function accessAccent(status: TenantDetail['accessStatus']): 'default' | 'warning' | 'danger' {
-  if (status === 'active' || status === 'expiring_soon') return 'default';
-  if (status === 'payment_overdue') return 'warning';
+  if (
+    status === 'active' ||
+    status === 'active_paid' ||
+    status === 'trial_active' ||
+    status === 'expiring_soon'
+  ) {
+    return 'default';
+  }
+  if (
+    status === 'payment_overdue' ||
+    status === 'trial_expired_starter' ||
+    status === 'subscription_expired_starter'
+  ) {
+    return 'warning';
+  }
   return 'danger';
 }
 
@@ -42,6 +55,7 @@ export function ClientDetailPage() {
   const [form, setForm] = useState({
     name: '',
     tier: TENANT_TIERS.STANDARD as string,
+    trialPlanTier: TENANT_TIERS.STANDARD as string,
     feeStatus: 'TRIAL',
     monthlyFee: '',
     feeDueDate: '',
@@ -50,6 +64,7 @@ export function ClientDetailPage() {
   });
   const [featureKeys, setFeatureKeys] = useState<string[]>([]);
   const [actionError, setActionError] = useState('');
+  const [pendingPlanReset, setPendingPlanReset] = useState<string | null>(null);
 
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState('');
@@ -91,6 +106,7 @@ export function ClientDetailPage() {
     setForm({
       name: tenant.name,
       tier: tenant.tier,
+      trialPlanTier: tenant.trialPlanTier ?? tenant.tier,
       feeStatus: tenant.feeStatus,
       monthlyFee: tenant.monthlyFee ?? '',
       feeDueDate: tenant.feeDueDate ?? '',
@@ -108,17 +124,30 @@ export function ClientDetailPage() {
   };
 
   const saveSettings = useMutation({
-    mutationFn: () =>
-      api.platform.updateTenant(tenantId, {
+    mutationFn: (opts?: { resetFeaturesToPlan?: boolean; tier?: string }) => {
+      const tier = opts?.tier ?? form.tier;
+      return api.platform.updateTenant(tenantId, {
         name: form.name,
-        tier: form.tier,
+        tier,
+        trialPlanTier: opts?.tier ?? form.trialPlanTier,
         feeStatus: form.feeStatus,
         monthlyFee: form.monthlyFee ? Number(form.monthlyFee) : null,
         feeDueDate: form.feeDueDate || null,
         subscriptionStartAt: new Date(form.subscriptionStartAt).toISOString(),
         subscriptionDays: Number(form.subscriptionDays),
-      }),
-    onSuccess: invalidate,
+        resetFeaturesToPlan: opts?.resetFeaturesToPlan ?? false,
+      });
+    },
+    onSuccess: (_data, vars) => {
+      if (vars?.tier) {
+        setForm((f) => ({ ...f, tier: vars.tier!, trialPlanTier: vars.tier! }));
+      }
+      if (vars?.resetFeaturesToPlan && vars.tier) {
+        setFeatureKeys(getTierFeaturePreset(vars.tier as TenantTier));
+      }
+      setPendingPlanReset(null);
+      invalidate();
+    },
     onError: (e) => setActionError(e instanceof ApiError ? e.message : 'Save failed'),
   });
 
@@ -274,8 +303,8 @@ export function ClientDetailPage() {
           )}
 
           <p className="text-xs text-text-muted">
-            Revoking ends all shop logins immediately and invalidates active sessions. After 30 days,
-            access auto-expires unless you restore it.
+            Trial/subscription end soft-locks the shop to Starter (sales still work). Only{' '}
+            <strong>Revoke portal access</strong> fully blocks login — use that for non-payment or abuse.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -296,9 +325,22 @@ export function ClientDetailPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <Input label="Shop name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select
-            label="Tier"
+            label="Plan pack"
             value={form.tier}
-            onChange={(e) => setForm({ ...form, tier: e.target.value })}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next !== tenant.tier && featureKeys.length > 0) {
+                setPendingPlanReset(next);
+                return;
+              }
+              setForm({ ...form, tier: next, trialPlanTier: next });
+            }}
+            options={tierOptions}
+          />
+          <Select
+            label="Trial plan (features during trial)"
+            value={form.trialPlanTier}
+            onChange={(e) => setForm({ ...form, trialPlanTier: e.target.value })}
             options={tierOptions}
           />
           <Select
@@ -321,18 +363,19 @@ export function ClientDetailPage() {
             onChange={(e) => setForm({ ...form, feeDueDate: e.target.value })}
           />
           <Input
-            label="Subscription start"
+            label="Trial / subscription start"
             type="datetime-local"
             value={form.subscriptionStartAt}
             onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
           />
           <Input
-            label="Subscription days"
+            label="Trial length (days)"
             type="number"
             min={1}
             max={365}
             value={form.subscriptionDays}
             onChange={(e) => setForm({ ...form, subscriptionDays: e.target.value })}
+            hint={`Ends ${tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).toLocaleString() : '—'}`}
           />
           <Select
             label="Sales rep"
@@ -344,12 +387,56 @@ export function ClientDetailPage() {
             ]}
           />
         </div>
-        <div className="mt-4">
-          <Button loading={saveSettings.isPending} onClick={() => saveSettings.mutate()}>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button loading={saveSettings.isPending} onClick={() => saveSettings.mutate({})}>
             Save settings
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const start = new Date();
+              setForm({
+                ...form,
+                feeStatus: 'TRIAL',
+                subscriptionStartAt: toDatetimeLocalValue(start.toISOString()),
+              });
+            }}
+          >
+            Restart trial from now
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const ended = new Date(Date.now() - 60_000);
+              setForm({
+                ...form,
+                subscriptionStartAt: toDatetimeLocalValue(
+                  new Date(ended.getTime() - Number(form.subscriptionDays || 30) * 86400000).toISOString(),
+                ),
+              });
+            }}
+          >
+            End trial early (set dates past)
           </Button>
         </div>
       </CollapsibleSection>
+
+      <ConfirmDialog
+        open={!!pendingPlanReset}
+        onClose={() => setPendingPlanReset(null)}
+        onConfirm={() => {
+          if (!pendingPlanReset) return;
+          saveSettings.mutate({ resetFeaturesToPlan: true, tier: pendingPlanReset });
+        }}
+        title="Reset features to plan defaults?"
+        message={
+          <>
+            Changing plan to <strong>{pendingPlanReset}</strong> will reset feature checkboxes to that pack’s
+            defaults. Custom overrides will be replaced.
+          </>
+        }
+        confirmLabel="Change plan & reset features"
+      />
 
       <CollapsibleSection
         title="POS features"

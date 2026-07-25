@@ -1,4 +1,10 @@
-import type { Tenant, TenantFeeStatus } from '@prisma/client';
+import type { Tenant, TenantFeeStatus, TenantTier } from '@prisma/client';
+import {
+  getEffectivePlan,
+  getSubscriptionDaysRemaining,
+  type EffectivePlanResult,
+  type TenantPlanInput,
+} from '@pos/shared';
 
 import { ForbiddenError, UnauthorizedError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
@@ -10,42 +16,48 @@ export function computeSubscriptionEndsAt(start: Date, days: number): Date {
   return new Date(start.getTime() + days * MS_PER_DAY);
 }
 
-export function getSubscriptionDaysRemaining(endsAt: Date | null | undefined, now = new Date()): number | null {
-  if (!endsAt) return null;
-  const diffMs = endsAt.getTime() - now.getTime();
-  if (diffMs <= 0) return 0;
-  return Math.ceil(diffMs / MS_PER_DAY);
+export { getSubscriptionDaysRemaining };
+
+export function toPlanInput(tenant: Tenant): TenantPlanInput {
+  return {
+    tier: tenant.tier as TenantPlanInput['tier'],
+    trialPlanTier: (tenant.trialPlanTier ?? tenant.tier) as TenantPlanInput['trialPlanTier'],
+    feeStatus: tenant.feeStatus,
+    subscriptionStartAt: tenant.subscriptionStartAt,
+    subscriptionEndsAt: tenant.subscriptionEndsAt,
+    subscriptionDays: tenant.subscriptionDays,
+    isActive: tenant.isActive,
+    accessRevokedAt: tenant.accessRevokedAt,
+    accessRevokeReason: tenant.accessRevokeReason,
+  };
+}
+
+export function getTenantEffectivePlan(tenant: Tenant, now = new Date()): EffectivePlanResult {
+  return getEffectivePlan(toPlanInput(tenant), now);
 }
 
 export function serializeSubscriptionFields(tenant: Tenant, now = new Date()) {
-  const daysRemaining = getSubscriptionDaysRemaining(tenant.subscriptionEndsAt, now);
-  const subscriptionExpired =
-    tenant.subscriptionEndsAt != null && now.getTime() >= tenant.subscriptionEndsAt.getTime();
+  const effective = getTenantEffectivePlan(tenant, now);
 
-  let accessStatus: 'active' | 'expiring_soon' | 'expired' | 'revoked' | 'payment_overdue' | 'suspended' =
-    'active';
-
-  if (!tenant.isActive || tenant.accessRevokedAt) {
-    accessStatus = tenant.accessRevokeReason?.includes('Subscription') ? 'expired' : 'revoked';
-  } else if (tenant.feeStatus === 'OVERDUE') {
-    accessStatus = 'payment_overdue';
-  } else if (tenant.feeStatus === 'SUSPENDED') {
-    accessStatus = 'suspended';
-  } else if (subscriptionExpired) {
-    accessStatus = 'expired';
-  } else if (daysRemaining != null && daysRemaining <= 7) {
-    accessStatus = 'expiring_soon';
-  }
+  const billingCycle = tenant.subscriptionDays >= 300 ? 'yearly' : 'monthly';
 
   return {
+    trialPlanTier: tenant.trialPlanTier ?? tenant.tier,
     subscriptionStartAt: tenant.subscriptionStartAt?.toISOString() ?? null,
     subscriptionEndsAt: tenant.subscriptionEndsAt?.toISOString() ?? null,
     subscriptionDays: tenant.subscriptionDays,
+    billingCycle,
     accessRevokedAt: tenant.accessRevokedAt?.toISOString() ?? null,
     accessRevokeReason: tenant.accessRevokeReason,
-    daysRemaining,
-    subscriptionExpired,
-    accessStatus,
+    daysRemaining: effective.daysRemaining,
+    subscriptionExpired: effective.isSoftLocked,
+    isTrialActive: effective.isTrialActive,
+    isPaidActive: effective.isPaidActive,
+    isSoftLocked: effective.isSoftLocked,
+    effectivePlan: effective.effectivePlan,
+    assignedPlan: effective.assignedPlan,
+    trialPlan: effective.trialPlan,
+    accessStatus: effective.accessStatus,
   };
 }
 
@@ -67,6 +79,7 @@ function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+/** Mark fee overdue for ops visibility — does NOT hard-block portal access. */
 async function applyAutoFeeOverdue(tenant: Tenant): Promise<TenantFeeStatus> {
   if (tenant.feeStatus !== 'ACTIVE' || !tenant.feeDueDate) {
     return tenant.feeStatus;
@@ -86,47 +99,16 @@ async function applyAutoFeeOverdue(tenant: Tenant): Promise<TenantFeeStatus> {
   return 'OVERDUE';
 }
 
-/** Expire subscription and revoke sessions when the 30-day window ends. */
-export async function processTenantSubscriptionExpiry(tenantId: string): Promise<void> {
-  const tenant = await prisma.tenant.findFirst({
-    where: { id: tenantId, deletedAt: null },
-  });
-  if (!tenant?.subscriptionEndsAt || !tenant.isActive) return;
-
-  if (new Date().getTime() < tenant.subscriptionEndsAt.getTime()) return;
-
-  await prisma.tenant.update({
-    where: { id: tenantId },
-    data: {
-      isActive: false,
-      feeStatus: 'SUSPENDED',
-      accessRevokedAt: new Date(),
-      accessRevokeReason: 'Subscription period ended automatically after 30 days',
-    },
-  });
-
-  await revokeTenantRefreshTokens(tenantId);
+/**
+ * Legacy hard-expiry removed. Subscription/trial end soft-locks to Starter via getEffectivePlan.
+ * Kept as a no-op so the interval job does not deactivate shops.
+ */
+export async function processTenantSubscriptionExpiry(_tenantId: string): Promise<void> {
+  // Soft-lock is computed at read time — no destructive update.
 }
 
 export async function processAllExpiredTenants(): Promise<number> {
-  const { withRlsBypass } = await import('../core/rls.js');
-  return withRlsBypass(async () => {
-    const now = new Date();
-    const expired = await prisma.tenant.findMany({
-      where: {
-        deletedAt: null,
-        isActive: true,
-        subscriptionEndsAt: { lte: now },
-      },
-      select: { id: true },
-    });
-
-    for (const t of expired) {
-      await processTenantSubscriptionExpiry(t.id);
-    }
-
-    return expired.length;
-  });
+  return 0;
 }
 
 export class TenantAccessBlockedError extends ForbiddenError {
@@ -135,12 +117,14 @@ export class TenantAccessBlockedError extends ForbiddenError {
   }
 }
 
+/**
+ * Hard-block ONLY for explicit admin revoke (or missing tenant).
+ * Trial / paid window expiry → allow login (soft-lock handled by feature resolution).
+ */
 export async function assertTenantPortalAccess(
   tenantId: string,
   options: { forLogin?: boolean } = {},
 ): Promise<void> {
-  await processTenantSubscriptionExpiry(tenantId);
-
   const tenant = await prisma.tenant.findFirst({
     where: { id: tenantId, deletedAt: null },
   });
@@ -151,35 +135,18 @@ export async function assertTenantPortalAccess(
     throw new TenantAccessBlockedError(message, 'TENANT_NOT_FOUND');
   }
 
-  const feeStatus = await applyAutoFeeOverdue(tenant);
+  await applyAutoFeeOverdue(tenant);
 
-  if (!tenant.isActive || tenant.accessRevokedAt) {
+  // Hard block: only manual revoke. isActive=false without revoke is treated as revoked too.
+  const manuallyRevoked = Boolean(tenant.accessRevokedAt);
+  const inactiveBlocked = !tenant.isActive;
+
+  if (manuallyRevoked || inactiveBlocked) {
     const message =
       tenant.accessRevokeReason ??
       'Portal access has been revoked for this shop. Contact your administrator.';
-    const code = tenant.accessRevokeReason?.includes('Subscription')
-      ? 'SUBSCRIPTION_EXPIRED'
-      : 'TENANT_ACCESS_REVOKED';
-    if (options.forLogin) throw new UnauthorizedError(message, code);
-    throw new TenantAccessBlockedError(message, code);
-  }
-
-  if (feeStatus === 'OVERDUE') {
-    const message = 'Payment is overdue. Portal access is suspended until payment is received.';
-    if (options.forLogin) throw new UnauthorizedError(message, 'PAYMENT_OVERDUE');
-    throw new TenantAccessBlockedError(message, 'PAYMENT_OVERDUE');
-  }
-
-  if (feeStatus === 'SUSPENDED') {
-    const message = 'This shop account is suspended. Contact your administrator.';
-    if (options.forLogin) throw new UnauthorizedError(message, 'TENANT_SUSPENDED');
-    throw new TenantAccessBlockedError(message, 'TENANT_SUSPENDED');
-  }
-
-  if (tenant.subscriptionEndsAt && new Date().getTime() >= tenant.subscriptionEndsAt.getTime()) {
-    const message = 'Your 30-day subscription period has ended. Contact your administrator to renew.';
-    if (options.forLogin) throw new UnauthorizedError(message, 'SUBSCRIPTION_EXPIRED');
-    throw new TenantAccessBlockedError(message, 'SUBSCRIPTION_EXPIRED');
+    if (options.forLogin) throw new UnauthorizedError(message, 'TENANT_ACCESS_REVOKED');
+    throw new TenantAccessBlockedError(message, 'TENANT_ACCESS_REVOKED');
   }
 }
 
@@ -224,6 +191,7 @@ export async function restoreTenantAccess(
     subscriptionDays?: number;
     feeStatus?: TenantFeeStatus;
     clearRevoke?: boolean;
+    trialPlanTier?: TenantTier;
   },
   restoredById: string,
   ipAddress?: string,
@@ -245,6 +213,7 @@ export async function restoreTenantAccess(
       subscriptionStartAt: start,
       subscriptionEndsAt: endsAt,
       subscriptionDays: days,
+      trialPlanTier: input.trialPlanTier ?? tenant.trialPlanTier ?? tenant.tier,
       accessRevokedAt: input.clearRevoke !== false ? null : undefined,
       accessRevokeReason: input.clearRevoke !== false ? null : undefined,
     },
@@ -267,14 +236,10 @@ export async function restoreTenantAccess(
 }
 
 export function startSubscriptionInterval(logger: { info: (obj: unknown, msg?: string) => void }): NodeJS.Timeout {
+  // Soft-lock needs no sweep; keep a light heartbeat for ops visibility.
   const run = () => {
-    void processAllExpiredTenants()
-      .then((count) => {
-        if (count > 0) logger.info({ count }, 'Auto-expired tenant subscriptions');
-      })
-      .catch((err) => logger.info({ err }, 'Subscription expiry sweep failed'));
+    logger.info('Subscription soft-lock mode active (no auto hard-expire)');
   };
-
   run();
-  return setInterval(run, 15 * 60 * 1000);
+  return setInterval(run, 24 * 60 * 60 * 1000);
 }

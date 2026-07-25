@@ -13,13 +13,13 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     key: FEATURES.BILLING_CREATE_SALE,
     module: 'billing',
     label: 'Create Sale',
-    description: 'POS billing, cart, checkout, sales history, held bills, gift cards',
+    description: 'POS billing, cart, checkout, sales history',
   },
   {
     key: FEATURES.BILLING_VOID_SALE,
     module: 'billing',
-    label: 'Void Sale',
-    description: 'Void completed sales from sales history',
+    label: 'Void / Returns',
+    description: 'Void sales and process partial returns',
   },
   {
     key: FEATURES.BILLING_DISCOUNT,
@@ -37,31 +37,49 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     key: FEATURES.BILLING_PRINT_RECEIPT,
     module: 'billing',
     label: 'Print Receipts',
-    description: 'Browser and network thermal printer setup and receipt printing',
+    description: 'Browser and network thermal receipt printing',
+  },
+  {
+    key: FEATURES.BILLING_HELD_CARTS,
+    module: 'billing',
+    label: 'Held Bills',
+    description: 'Park and resume carts',
   },
   {
     key: FEATURES.INVENTORY_VIEW,
     module: 'inventory',
     label: 'View Inventory',
-    description: 'Product list, brands, suppliers, barcode lookup',
+    description: 'Product list, stock levels, barcode lookup',
   },
   {
     key: FEATURES.INVENTORY_EDIT,
     module: 'inventory',
     label: 'Edit Inventory',
-    description: 'Add and edit products, brands, suppliers',
+    description: 'Add and edit products',
   },
   {
     key: FEATURES.INVENTORY_CATEGORIES,
     module: 'inventory',
     label: 'Manage Categories',
-    description: 'Product categories page',
+    description: 'Add/edit/organize product categories',
   },
   {
     key: FEATURES.INVENTORY_STOCK_ADJUST,
     module: 'inventory',
     label: 'Stock Adjustments',
-    description: 'Manual stock in/out adjustments on products',
+    description: 'Manual stock in/out adjustments',
+  },
+  {
+    key: FEATURES.INVENTORY_BRANDS,
+    module: 'inventory',
+    label: 'Brands',
+    description: 'Brand catalog management',
+  },
+  {
+    key: FEATURES.INVENTORY_SUPPLIERS,
+    module: 'inventory',
+    label: 'Suppliers',
+    description: 'Supplier catalog and purchases',
   },
   {
     key: FEATURES.CUSTOMERS_VIEW,
@@ -79,7 +97,7 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     key: FEATURES.CUSTOMERS_LEDGER_VIEW,
     module: 'customers',
     label: 'View Udhaar Ledger',
-    description: 'Read customer credit ledger and sale links',
+    description: 'Read customer credit ledger',
   },
   {
     key: FEATURES.CUSTOMERS_LEDGER_RECORD,
@@ -91,13 +109,19 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     key: FEATURES.CUSTOMERS_LEDGER_EDIT,
     module: 'customers',
     label: 'Edit Ledger Entries',
-    description: 'Void or correct ledger entries',
+    description: 'Void or correct ledger entries and statements',
   },
   {
     key: FEATURES.REPORTS_VIEW,
     module: 'reports',
     label: 'View Reports',
-    description: 'Sales, stock, udhaar aging, and staff performance reports',
+    description: 'Sales and growth reports',
+  },
+  {
+    key: FEATURES.REPORTS_ADVANCED,
+    module: 'reports',
+    label: 'Advanced Reports',
+    description: 'Udhaar aging and staff performance reports',
   },
   {
     key: FEATURES.USERS_MANAGE,
@@ -115,7 +139,19 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     key: FEATURES.SETTINGS_EDIT,
     module: 'settings',
     label: 'Edit Settings',
-    description: 'Update shop name, tax, printer, and export data',
+    description: 'Update shop profile, tax, and printer settings',
+  },
+  {
+    key: FEATURES.SETTINGS_RECEIPT_BRANDING,
+    module: 'settings',
+    label: 'Receipt Branding',
+    description: 'Logo, header mode, and custom footer on receipts',
+  },
+  {
+    key: FEATURES.SETTINGS_FBR,
+    module: 'settings',
+    label: 'FBR Invoice Fields',
+    description: 'FBR POS ID, STRN, and QR on invoices',
   },
   {
     key: FEATURES.MULTI_BRANCH_ACCESS,
@@ -127,61 +163,67 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
 
 export const SHIPPED_FEATURE_KEYS = FEATURE_REGISTRY.map((f) => f.key);
 
-export const TIER_FEATURE_PRESETS: Record<TenantTier, FeatureKey[]> = {
-  [TENANT_TIERS.STARTER]: [
-    FEATURES.BILLING_CREATE_SALE,
-    FEATURES.BILLING_VOID_SALE,
-    FEATURES.INVENTORY_VIEW,
-    FEATURES.CUSTOMERS_VIEW,
-    FEATURES.CUSTOMERS_LEDGER_VIEW,
-    FEATURES.CUSTOMERS_LEDGER_RECORD,
-    FEATURES.REPORTS_VIEW,
-    FEATURES.SETTINGS_VIEW,
-  ],
-  [TENANT_TIERS.STANDARD]: [
-    FEATURES.BILLING_CREATE_SALE,
-    FEATURES.BILLING_VOID_SALE,
-    FEATURES.BILLING_DISCOUNT,
-    FEATURES.BILLING_PRINT_RECEIPT,
-    FEATURES.INVENTORY_VIEW,
-    FEATURES.INVENTORY_EDIT,
-    FEATURES.INVENTORY_CATEGORIES,
-    FEATURES.INVENTORY_STOCK_ADJUST,
-    FEATURES.CUSTOMERS_VIEW,
-    FEATURES.CUSTOMERS_EDIT,
-    FEATURES.CUSTOMERS_LEDGER_VIEW,
-    FEATURES.CUSTOMERS_LEDGER_RECORD,
-    FEATURES.REPORTS_VIEW,
-    FEATURES.USERS_MANAGE,
-    FEATURES.SETTINGS_VIEW,
-    FEATURES.SETTINGS_EDIT,
-  ],
-  [TENANT_TIERS.PRO]: [
-    FEATURES.BILLING_CREATE_SALE,
-    FEATURES.BILLING_VOID_SALE,
-    FEATURES.BILLING_DISCOUNT,
-    FEATURES.BILLING_DISCOUNT_UNLIMITED,
-    FEATURES.BILLING_PRINT_RECEIPT,
-    FEATURES.INVENTORY_VIEW,
-    FEATURES.INVENTORY_EDIT,
-    FEATURES.INVENTORY_CATEGORIES,
-    FEATURES.INVENTORY_STOCK_ADJUST,
-    FEATURES.CUSTOMERS_VIEW,
-    FEATURES.CUSTOMERS_EDIT,
-    FEATURES.CUSTOMERS_LEDGER_VIEW,
-    FEATURES.CUSTOMERS_LEDGER_RECORD,
-    FEATURES.CUSTOMERS_LEDGER_EDIT,
-    FEATURES.REPORTS_VIEW,
-    FEATURES.USERS_MANAGE,
-    FEATURES.SETTINGS_VIEW,
-    FEATURES.SETTINGS_EDIT,
-    FEATURES.MULTI_BRANCH_ACCESS,
-  ],
-  [TENANT_TIERS.ENTERPRISE]: [...SHIPPED_FEATURE_KEYS],
+const STARTER_FEATURES: FeatureKey[] = [
+  FEATURES.BILLING_CREATE_SALE,
+  FEATURES.BILLING_VOID_SALE,
+  FEATURES.BILLING_PRINT_RECEIPT,
+  FEATURES.INVENTORY_VIEW,
+  FEATURES.INVENTORY_EDIT,
+  FEATURES.INVENTORY_STOCK_ADJUST,
+  FEATURES.CUSTOMERS_VIEW,
+  FEATURES.CUSTOMERS_EDIT,
+  FEATURES.CUSTOMERS_LEDGER_VIEW,
+  FEATURES.CUSTOMERS_LEDGER_RECORD,
+  FEATURES.SETTINGS_VIEW,
+];
+
+const STANDARD_FEATURES: FeatureKey[] = [
+  ...STARTER_FEATURES,
+  FEATURES.BILLING_HELD_CARTS,
+  FEATURES.BILLING_DISCOUNT,
+  FEATURES.BILLING_DISCOUNT_UNLIMITED,
+  FEATURES.INVENTORY_CATEGORIES,
+  FEATURES.INVENTORY_BRANDS,
+  FEATURES.INVENTORY_SUPPLIERS,
+  FEATURES.CUSTOMERS_LEDGER_EDIT,
+  FEATURES.REPORTS_VIEW,
+  FEATURES.USERS_MANAGE,
+  FEATURES.SETTINGS_EDIT,
+  FEATURES.SETTINGS_RECEIPT_BRANDING,
+];
+
+const PRO_FEATURES: FeatureKey[] = [
+  ...STANDARD_FEATURES,
+  FEATURES.REPORTS_ADVANCED,
+  FEATURES.SETTINGS_FBR,
+  FEATURES.MULTI_BRANCH_ACCESS,
+];
+
+/**
+ * Single source of truth: plan → feature keys.
+ * ENTERPRISE is an alias of PRO for now.
+ */
+export const PLAN_FEATURES: Record<TenantTier, FeatureKey[]> = {
+  [TENANT_TIERS.STARTER]: STARTER_FEATURES,
+  [TENANT_TIERS.STANDARD]: STANDARD_FEATURES,
+  [TENANT_TIERS.PRO]: PRO_FEATURES,
+  [TENANT_TIERS.ENTERPRISE]: PRO_FEATURES,
 };
 
+/** @deprecated Prefer PLAN_FEATURES — kept for existing imports. */
+export const TIER_FEATURE_PRESETS = PLAN_FEATURES;
+
 export function getTierFeaturePreset(tier: TenantTier): FeatureKey[] {
-  return [...TIER_FEATURE_PRESETS[tier]];
+  return [...(PLAN_FEATURES[tier] ?? PLAN_FEATURES[TENANT_TIERS.STARTER])];
+}
+
+/** Normalize ENTERPRISE → PRO for effective-plan logic. */
+export function normalizePlanTier(tier: TenantTier): TenantTier {
+  return tier === TENANT_TIERS.ENTERPRISE ? TENANT_TIERS.PRO : tier;
+}
+
+export function planHasFeature(tier: TenantTier, feature: FeatureKey): boolean {
+  return getTierFeaturePreset(tier).includes(feature);
 }
 
 export function groupFeaturesByModule(

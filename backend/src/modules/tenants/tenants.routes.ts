@@ -60,7 +60,7 @@ export async function registerTenantRoutes(app: FastifyInstance): Promise<void> 
     if (!parsed.success) {
       throw new ValidationError('Invalid request body', parsed.error.flatten());
     }
-    return updateTenant(tenantId, parsed.data);
+    return updateTenant(tenantId, parsed.data, request.user!.id);
   });
 
   app.put('/tenants/:tenantId/features', platformWrite, async (request) => {

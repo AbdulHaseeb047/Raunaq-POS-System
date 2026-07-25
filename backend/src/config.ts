@@ -7,6 +7,8 @@ export interface AppConfig {
   databaseUrl: string;
   corsOrigins: string[] | true;
   trustProxy: boolean;
+  /** WhatsApp upgrade CTA for soft-locked shops (wa.me link). */
+  upgradeWhatsappUrl: string;
   jwt: {
     secret: string;
     refreshSecret: string;
@@ -47,6 +49,10 @@ const jwtSecret = requireEnv('JWT_SECRET');
 const jwtRefreshSecret = requireEnv('JWT_REFRESH_SECRET');
 assertProductionSecrets(nodeEnv, jwtSecret, jwtRefreshSecret);
 
+const defaultUpgradeWhatsapp =
+  'https://wa.me/923462734539?text=' +
+  encodeURIComponent("Hi, I'd like to upgrade my Raunaq POS plan");
+
 export const appConfig: AppConfig = {
   port: parseInt(process.env.PORT ?? '3001', 10),
   host: process.env.HOST ?? '0.0.0.0',
@@ -56,6 +62,7 @@ export const appConfig: AppConfig = {
   databaseUrl: requireEnv('DATABASE_URL'),
   corsOrigins: parseCorsOrigins(nodeEnv),
   trustProxy: process.env.TRUST_PROXY === 'true',
+  upgradeWhatsappUrl: process.env.UPGRADE_WHATSAPP_URL?.trim() || defaultUpgradeWhatsapp,
   jwt: {
     secret: jwtSecret,
     refreshSecret: jwtRefreshSecret,

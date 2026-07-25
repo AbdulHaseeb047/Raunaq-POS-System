@@ -41,6 +41,9 @@ export const createTenantSchema = z.object({
   featureKeys: z.array(z.string()).min(1).optional(),
   subscriptionStartAt: z.string().datetime().optional(),
   subscriptionDays: z.number().int().min(1).max(365).optional(),
+  trialPlanTier: z
+    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
+    .optional(),
 });
 
 export const updateTenantSchema = z.object({
@@ -48,12 +51,18 @@ export const updateTenantSchema = z.object({
   tier: z
     .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
     .optional(),
+  trialPlanTier: z
+    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
+    .optional()
+    .nullable(),
   feeStatus: z.enum(['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED']).optional(),
   monthlyFee: z.number().nonnegative().optional().nullable(),
   feeDueDate: z.string().optional().nullable(),
   acquiredById: z.string().uuid().optional().nullable(),
   subscriptionStartAt: z.string().datetime().optional().nullable(),
   subscriptionDays: z.number().int().min(1).max(365).optional(),
+  /** When true with a tier change, reset TenantFeature rows to that plan's defaults. */
+  resetFeaturesToPlan: z.boolean().optional(),
 });
 
 export const revokeTenantAccessSchema = z.object({
@@ -166,6 +175,7 @@ export async function createTenant(input: CreateTenantInput, createdById: string
         name: input.name,
         slug: input.slug,
         tier: input.tier,
+        trialPlanTier: input.trialPlanTier ?? input.tier,
         feeStatus: input.feeStatus ?? 'TRIAL',
         monthlyFee: input.monthlyFee ?? null,
         feeDueDate: input.feeDueDate ? new Date(input.feeDueDate) : null,
@@ -206,7 +216,11 @@ export async function createTenant(input: CreateTenantInput, createdById: string
   return getTenantById(tenant.id);
 }
 
-export async function updateTenant(tenantId: string, input: UpdateTenantInput) {
+export async function updateTenant(
+  tenantId: string,
+  input: UpdateTenantInput,
+  updatedById?: string,
+) {
   const tenant = await prisma.tenant.findFirst({
     where: { id: tenantId, deletedAt: null },
   });
@@ -234,6 +248,10 @@ export async function updateTenant(tenantId: string, input: UpdateTenantInput) {
     data: {
       name: input.name,
       tier: input.tier,
+      trialPlanTier:
+        input.trialPlanTier === undefined
+          ? undefined
+          : input.trialPlanTier ?? input.tier ?? tenant.tier,
       feeStatus: input.feeStatus,
       monthlyFee: input.monthlyFee,
       feeDueDate: input.feeDueDate ? new Date(input.feeDueDate) : input.feeDueDate === null ? null : undefined,
@@ -243,6 +261,10 @@ export async function updateTenant(tenantId: string, input: UpdateTenantInput) {
       subscriptionDays: input.subscriptionDays,
     },
   });
+
+  if (input.resetFeaturesToPlan && input.tier && updatedById) {
+    await applyTierPreset(tenantId, input.tier, updatedById);
+  }
 
   return getTenantById(tenantId);
 }

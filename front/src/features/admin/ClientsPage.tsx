@@ -79,6 +79,7 @@ export function ClientsPage() {
         featureKeys: selectedFeatures,
         subscriptionStartAt: new Date(form.subscriptionStartAt).toISOString(),
         subscriptionDays: Number(form.subscriptionDays) || 30,
+        trialPlanTier: form.tier,
       }),
     onSuccess: () => {
       setCreateOpen(false);
@@ -195,7 +196,7 @@ export function ClientsPage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
-              label="Tier (loads default features — you can customize below)"
+              label="Plan pack (Starter / Standard / Pro)"
               value={form.tier}
               options={tierOptions}
               onChange={(e) => {
@@ -248,7 +249,8 @@ export function ClientsPage() {
             />
           </div>
           <p className="text-xs text-text-muted">
-            Portal access ends automatically after {form.subscriptionDays || 30} day(s) from the start date/time above.
+            Trial lasts {form.subscriptionDays || 30} day(s) from the start above. When it ends the shop soft-locks to
+            Starter (billing still works) — not a full lockout.
           </p>
 
           <FeaturePicker
@@ -259,14 +261,28 @@ export function ClientsPage() {
             />
 
           <hr />
-          <p className="text-xs font-semibold uppercase text-text-muted">Owner account (POS login)</p>
-          <Input label="Full name" value={form.adminFullName} onChange={(e) => setForm({ ...form, adminFullName: e.target.value })} />
-          <Input label="Email" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
+          <p className="text-xs font-semibold uppercase text-text-muted">Shop owner account (POS login)</p>
+          <p className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs text-brand-900">
+            Enter the <strong>client shop owner’s</strong> email and a temporary password — not your Raunaq admin
+            login. Share these with the shop so they can open the POS.
+          </p>
           <Input
-            label="Password (min 8 chars)"
+            label="Owner full name"
+            value={form.adminFullName}
+            onChange={(e) => setForm({ ...form, adminFullName: e.target.value })}
+          />
+          <Input
+            label="Owner email (their POS login)"
+            type="email"
+            value={form.adminEmail}
+            onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+          />
+          <Input
+            label="Temporary password (min 8 chars)"
             type="password"
             value={form.adminPassword}
             onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
+            hint="Set any password for the shop owner — they should change it after first login"
           />
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex justify-end gap-2">

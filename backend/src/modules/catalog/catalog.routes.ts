@@ -23,53 +23,53 @@ import {
 import { getSupplierLedger, getSupplier, recordSupplierPayment } from './supplier-ledger.service.js';
 
 export async function registerCatalogRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/brands', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_VIEW)] }, async (request) => {
+  app.get('/brands', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_BRANDS)] }, async (request) => {
     return listBrands(resolveTenantId(request));
   });
 
-  app.post('/brands', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.post('/brands', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_BRANDS)] }, async (request) => {
     const parsed = brandSchema.safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
     return createBrand(resolveTenantId(request), parsed.data);
   });
 
-  app.patch('/brands/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.patch('/brands/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_BRANDS)] }, async (request) => {
     const { id } = request.params as { id: string };
     const parsed = brandSchema.partial().safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
     return updateBrand(resolveTenantId(request), id, parsed.data);
   });
 
-  app.delete('/brands/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.delete('/brands/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_BRANDS)] }, async (request) => {
     const { id } = request.params as { id: string };
     return deleteBrand(resolveTenantId(request), id);
   });
 
-  app.get('/suppliers', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_VIEW)] }, async (request) => {
+  app.get('/suppliers', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] }, async (request) => {
     return listSuppliers(resolveTenantId(request));
   });
 
-  app.post('/suppliers', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.post('/suppliers', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] }, async (request) => {
     const parsed = supplierSchema.safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
     return createSupplier(resolveTenantId(request), parsed.data);
   });
 
-  app.patch('/suppliers/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.patch('/suppliers/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] }, async (request) => {
     const { id } = request.params as { id: string };
     const parsed = supplierSchema.partial().safeParse(request.body);
     if (!parsed.success) throw new ValidationError('Invalid request body', parsed.error.flatten());
     return updateSupplier(resolveTenantId(request), id, parsed.data);
   });
 
-  app.delete('/suppliers/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] }, async (request) => {
+  app.delete('/suppliers/:id', { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] }, async (request) => {
     const { id } = request.params as { id: string };
     return deleteSupplier(resolveTenantId(request), id);
   });
 
   app.get(
     '/suppliers/:id/ledger',
-    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_VIEW)] },
+    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] },
     async (request) => {
       const { id } = request.params as { id: string };
       return getSupplierLedger(resolveTenantId(request), id);
@@ -78,7 +78,7 @@ export async function registerCatalogRoutes(app: FastifyInstance): Promise<void>
 
   app.post(
     '/suppliers/:id/stock-in',
-    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] },
+    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
       const { id } = request.params as { id: string };
@@ -91,7 +91,7 @@ export async function registerCatalogRoutes(app: FastifyInstance): Promise<void>
 
   app.post(
     '/suppliers/:id/payments',
-    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] },
+    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
       const { id } = request.params as { id: string };

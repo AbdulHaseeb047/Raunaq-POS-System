@@ -62,9 +62,31 @@ export function SalesRepsPage() {
 
       <Modal open={open} title="New sales representative" onClose={() => setOpen(false)}>
         <div className="space-y-3">
-          <Input placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input type="password" placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <p className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs text-brand-900">
+            Enter the <strong>sales rep’s own</strong> email and a temporary password — not your admin login.
+            Give these credentials to that person so they can sign in.
+          </p>
+          <Input
+            label="Full name"
+            placeholder="e.g. Ali Khan"
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          />
+          <Input
+            label="Email (sales rep login)"
+            type="email"
+            placeholder="ali@example.com"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <Input
+            label="Temporary password"
+            type="password"
+            placeholder="Min 8 characters"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            hint="Create any new password for them — they can change it later"
+          />
           {error && <p className="text-sm text-danger">{error}</p>}
           <Button
             disabled={createRep.isPending}

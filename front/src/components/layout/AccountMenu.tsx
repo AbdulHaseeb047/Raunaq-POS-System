@@ -1,22 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { IconLogout, IconSettings } from '@/components/icons';
+import { IconHelp, IconKey, IconLogout, IconSettings, IconUpgrade } from '@/components/icons';
+import { useAdminPasswordDialogOptional } from '@/features/settings/admin-password-dialog-context';
+import { useSettingsDialogOptional } from '@/features/settings/settings-dialog-context';
 import { useAuth } from '@/lib/auth';
+import { planLabel, resolveDisplayPlan } from '@/lib/pricing-plans';
 
 type AccountMenuProps = {
-  /** Sidebar footer (Claude-style): name only, menu opens upward */
+  /** Sidebar footer (Claude-style): name + plan, menu opens upward */
   placement?: 'header' | 'sidebar';
   collapsed?: boolean;
 };
 
 export function AccountMenu({ placement = 'header', collapsed = false }: AccountMenuProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const settingsDialog = useSettingsDialogOptional();
+  const adminPasswordDialog = useAdminPasswordDialogOptional();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const firstName = user?.fullName?.split(' ')[0] ?? 'Account';
+  const currentPlan = resolveDisplayPlan(user?.planEntitlement);
+  const planName = `${planLabel(currentPlan)} plan`;
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -35,8 +42,37 @@ export function AccountMenu({ placement = 'header', collapsed = false }: Account
     }
   };
 
+  const go = (path: string) => {
+    setOpen(false);
+    navigate(path);
+  };
+
+  const openPosSettings = (tab: 'business' | 'password' = 'business') => {
+    setOpen(false);
+    if (settingsDialog) {
+      settingsDialog.openSettings(tab);
+      return;
+    }
+    go(tab === 'password' ? '/account/password' : '/settings');
+  };
+
+  const openAdminPassword = () => {
+    setOpen(false);
+    if (adminPasswordDialog) {
+      adminPasswordDialog.openPasswordSettings();
+      return;
+    }
+    go('/admin/account/password');
+  };
+
   const isSidebar = placement === 'sidebar';
   const initial = (user?.fullName?.trim()?.[0] ?? 'A').toUpperCase();
+
+  const itemClass = isSidebar
+    ? 'text-brand-100/90 hover:bg-sidebar-active hover:text-white'
+    : 'text-text hover:bg-surface-muted';
+  const iconClass = isSidebar ? 'opacity-80' : 'text-text-muted';
+  const dividerClass = isSidebar ? 'border-sidebar-border' : 'border-border';
 
   return (
     <div ref={rootRef} className={`relative ${isSidebar ? 'w-full' : ''}`}>
@@ -48,7 +84,7 @@ export function AccountMenu({ placement = 'header', collapsed = false }: Account
         title={user?.fullName ?? firstName}
         className={
           isSidebar
-            ? `flex w-full items-center rounded-xl text-left text-[13px] font-semibold tracking-wide transition-colors ${
+            ? `flex w-full items-center rounded-xl text-left transition-colors ${
                 collapsed ? 'justify-center px-1 py-2' : 'justify-between gap-2 px-2.5 py-2'
               } ${
                 open ? 'bg-sidebar-hover text-white' : 'text-brand-100/90 hover:bg-sidebar-hover hover:text-white'
@@ -60,10 +96,19 @@ export function AccountMenu({ placement = 'header', collapsed = false }: Account
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-active text-xs font-bold text-white">
             {initial}
           </span>
-        ) : (
-          <span className={`truncate ${isSidebar ? '' : 'max-w-[140px] font-medium text-text'}`}>
-            {isSidebar ? user?.fullName ?? firstName : user?.fullName}
+        ) : isSidebar ? (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold tracking-wide">
+              {user?.fullName ?? firstName}
+            </span>
+            {!isAdmin && (
+              <span className="mt-0.5 block truncate text-[11px] font-medium text-brand-200/70">
+                {planName}
+              </span>
+            )}
           </span>
+        ) : (
+          <span className="truncate max-w-[140px] font-medium text-text">{user?.fullName}</span>
         )}
         {!(isSidebar && collapsed) && (
           <svg
@@ -86,50 +131,91 @@ export function AccountMenu({ placement = 'header', collapsed = false }: Account
           className={`absolute z-[100] overflow-hidden rounded-xl border py-1 shadow-xl ${
             isSidebar
               ? collapsed
-                ? 'bottom-full left-0 mb-2 w-52 border-sidebar-border bg-sidebar'
+                ? 'bottom-full left-0 mb-2 w-56 border-sidebar-border bg-sidebar'
                 : 'bottom-full left-0 right-0 mb-2 border-sidebar-border bg-sidebar-hover'
               : 'right-0 mt-2 w-64 border-border bg-surface'
           }`}
         >
-          {!isSidebar && (
-            <div className="border-b border-border px-4 py-3">
-              <p className="truncate text-sm font-semibold text-text">{user?.fullName}</p>
-              <p className="truncate text-xs text-text-muted">{user?.email}</p>
-            </div>
+          <div className={`border-b px-4 py-2.5 ${dividerClass}`}>
+            <p
+              className={`truncate text-xs ${isSidebar ? 'text-brand-200/70' : 'text-text-muted'}`}
+            >
+              {user?.email}
+            </p>
+          </div>
+
+          {!isAdmin && (
+            <>
+              <MenuItem
+                className={itemClass}
+                icon={<IconSettings className={`h-4 w-4 shrink-0 ${iconClass}`} />}
+                onClick={() => openPosSettings('business')}
+              >
+                Settings
+              </MenuItem>
+              <MenuItem
+                className={itemClass}
+                icon={<IconHelp className={`h-4 w-4 shrink-0 ${iconClass}`} />}
+                onClick={() => go('/support')}
+              >
+                Get help
+              </MenuItem>
+
+              <div className={`my-1 border-t ${dividerClass}`} />
+
+              <MenuItem
+                className={itemClass}
+                icon={<IconUpgrade className={`h-4 w-4 shrink-0 ${iconClass}`} />}
+                onClick={() => go('/upgrade')}
+              >
+                Upgrade plan
+              </MenuItem>
+            </>
           )}
-          {isSidebar && collapsed && (
-            <div className="border-b border-sidebar-border px-4 py-2.5">
-              <p className="truncate text-sm font-semibold text-white">{user?.fullName}</p>
-              <p className="truncate text-xs text-brand-200/60">{user?.email}</p>
-            </div>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm whitespace-nowrap ${
-              isSidebar ? 'text-brand-100/90 hover:bg-sidebar-active hover:text-white' : 'text-text hover:bg-surface-muted'
-            }`}
-            onClick={() => {
-              setOpen(false);
-              navigate('/account/password');
-            }}
+
+          <MenuItem
+            className={itemClass}
+            icon={<IconKey className={`h-4 w-4 shrink-0 ${iconClass}`} />}
+            onClick={() => (isAdmin ? openAdminPassword() : openPosSettings('password'))}
           >
-            <IconSettings className={`h-4 w-4 shrink-0 ${isSidebar ? 'opacity-80' : 'text-text-muted'}`} />
             Change password
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm whitespace-nowrap ${
-              isSidebar ? 'text-brand-100/90 hover:bg-sidebar-active hover:text-white' : 'text-text hover:bg-surface-muted'
-            }`}
+          </MenuItem>
+
+          <div className={`my-1 border-t ${dividerClass}`} />
+
+          <MenuItem
+            className={itemClass}
+            icon={<IconLogout className={`h-4 w-4 shrink-0 ${iconClass}`} />}
             onClick={() => void signOut()}
           >
-            <IconLogout className={`h-4 w-4 shrink-0 ${isSidebar ? 'opacity-80' : 'text-text-muted'}`} />
-            Sign out
-          </button>
+            Log out
+          </MenuItem>
         </div>
       )}
     </div>
+  );
+}
+
+function MenuItem({
+  children,
+  icon,
+  onClick,
+  className,
+}: {
+  children: ReactNode;
+  icon: ReactNode;
+  onClick: () => void;
+  className: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm whitespace-nowrap ${className}`}
+      onClick={onClick}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }

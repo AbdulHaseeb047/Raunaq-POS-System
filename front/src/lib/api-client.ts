@@ -168,14 +168,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       );
     }
     const err = (await res.json().catch(() => ({ message: res.statusText }))) as ApiErrorBody;
-    const blockedCodes = new Set([
-      'SUBSCRIPTION_EXPIRED',
-      'TENANT_ACCESS_REVOKED',
-      'PAYMENT_OVERDUE',
-      'TENANT_SUSPENDED',
-      'TENANT_NOT_FOUND',
-      'USER_DEACTIVATED',
-    ]);
+    // Soft-lock uses UPGRADE_REQUIRED — do not log the user out.
+    // Only hard-revoke / missing tenant / deactivated user clear the session.
+    const blockedCodes = new Set(['TENANT_ACCESS_REVOKED', 'TENANT_NOT_FOUND', 'USER_DEACTIVATED']);
     if (res.status === 403 && err.code && blockedCodes.has(err.code)) {
       clearTokens();
     }
@@ -503,6 +498,20 @@ export const api = {
     salesReps: () => apiRequest<SalesRep[]>('/admin/sales-reps'),
     createSalesRep: (body: { email: string; password: string; fullName: string }) =>
       apiRequest<SalesRep>('/admin/sales-reps', { method: 'POST', body: JSON.stringify(body) }),
+  },
+
+  support: {
+    createQuery: (body: { topic: string; subject: string; message: string }) =>
+      apiRequest<{
+        id: string;
+        topic: string;
+        subject: string;
+        status: string;
+        createdAt: string;
+      }>('/support/queries', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 
   platform: {

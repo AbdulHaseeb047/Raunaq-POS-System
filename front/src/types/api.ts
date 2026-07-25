@@ -20,6 +20,25 @@ export interface Paginated<T> {
   meta: PaginatedMeta;
 }
 
+export interface PlanEntitlement {
+  tier?: string;
+  trialPlanTier?: string | null;
+  assignedPlan?: string;
+  trialPlan?: string;
+  effectivePlan?: string;
+  accessStatus?: string;
+  isTrialActive?: boolean;
+  isPaidActive?: boolean;
+  isSoftLocked?: boolean;
+  daysRemaining?: number | null;
+  subscriptionStartAt?: string | null;
+  subscriptionEndsAt?: string | null;
+  subscriptionDays?: number;
+  /** monthly when subscriptionDays < 300, yearly otherwise */
+  billingCycle?: 'monthly' | 'yearly';
+  upgradeUrl?: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -28,6 +47,7 @@ export interface AuthUser {
   tenantId?: string | null;
   features: FeatureKey[];
   mustChangePassword: boolean;
+  planEntitlement?: PlanEntitlement | null;
 }
 
 export interface LoginResponse {
@@ -502,7 +522,7 @@ export interface TenantRow {
   accessRevokeReason: string | null;
   daysRemaining: number | null;
   subscriptionExpired: boolean;
-  accessStatus: 'active' | 'expiring_soon' | 'expired' | 'revoked' | 'payment_overdue' | 'suspended';
+  accessStatus: string;
 }
 
 export interface TenantDetail {
@@ -510,6 +530,7 @@ export interface TenantDetail {
   name: string;
   slug: string;
   tier: string;
+  trialPlanTier?: string | null;
   isActive: boolean;
   feeStatus: string;
   monthlyFee: string | null;
@@ -525,7 +546,13 @@ export interface TenantDetail {
   accessRevokeReason: string | null;
   daysRemaining: number | null;
   subscriptionExpired: boolean;
-  accessStatus: 'active' | 'expiring_soon' | 'expired' | 'revoked' | 'payment_overdue' | 'suspended';
+  isTrialActive?: boolean;
+  isPaidActive?: boolean;
+  isSoftLocked?: boolean;
+  effectivePlan?: string;
+  assignedPlan?: string;
+  trialPlan?: string;
+  accessStatus: string;
 }
 
 export interface SalesRep {

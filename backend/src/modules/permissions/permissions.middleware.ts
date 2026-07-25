@@ -109,9 +109,21 @@ export function requireFeature(...features: FeatureKey[]) {
       return;
     }
 
-    const allowed = features.some((f) => userHasFeature(request.user!.features, f));
+    // Re-resolve from DB so soft-lock applies mid-session without waiting for token refresh.
+    const { resolveUserFeatures } = await import('./permissions.service.js');
+    const liveFeatures = await resolveUserFeatures(
+      request.user.id,
+      request.user.role,
+      request.user.tenantId,
+    );
+    request.user.features = liveFeatures;
+
+    const allowed = features.some((f) => userHasFeature(liveFeatures, f));
     if (!allowed) {
-      throw new ForbiddenError('Feature not enabled for this user');
+      throw new ForbiddenError(
+        'This feature requires a plan upgrade. Contact Raunaq to unlock it.',
+        'UPGRADE_REQUIRED',
+      );
     }
   };
 }

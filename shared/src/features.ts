@@ -10,12 +10,15 @@ export const FEATURES = {
   BILLING_DISCOUNT: 'billing.discount',
   BILLING_DISCOUNT_UNLIMITED: 'billing.discount_unlimited',
   BILLING_PRINT_RECEIPT: 'billing.print_receipt',
+  BILLING_HELD_CARTS: 'billing.held_carts',
 
   // Inventory
   INVENTORY_VIEW: 'inventory.view',
   INVENTORY_EDIT: 'inventory.edit',
   INVENTORY_CATEGORIES: 'inventory.categories',
   INVENTORY_STOCK_ADJUST: 'inventory.stock_adjust',
+  INVENTORY_BRANDS: 'inventory.brands',
+  INVENTORY_SUPPLIERS: 'inventory.suppliers',
 
   // Customers & Udhaar
   CUSTOMERS_VIEW: 'customers.view',
@@ -26,11 +29,14 @@ export const FEATURES = {
 
   // Reports
   REPORTS_VIEW: 'reports.view',
+  REPORTS_ADVANCED: 'reports.advanced',
 
   // Users & Settings
   USERS_MANAGE: 'users.manage',
   SETTINGS_VIEW: 'settings.view',
   SETTINGS_EDIT: 'settings.edit',
+  SETTINGS_RECEIPT_BRANDING: 'settings.receipt_branding',
+  SETTINGS_FBR: 'settings.fbr',
 
   // Multi-branch
   MULTI_BRANCH_ACCESS: 'multi_branch.access',
