@@ -2,12 +2,12 @@ import type { Prisma } from '@prisma/client';
 import type { SyncOperation } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
-import { appConfig } from '../../config.js';
 import type { TransactionClient } from '../core/prisma.js';
-import { enqueueSyncOutbox } from './outbox.service.js';
+import { enqueueSyncOutbox, isSyncOutboxActive } from './outbox.service.js';
 
+/** Live env check — must match `isSyncOutboxActive` (not frozen `appConfig`). */
 export function syncOutboxEnabled(): boolean {
-  return appConfig.deploymentMode === 'hybrid';
+  return isSyncOutboxActive();
 }
 
 /** DB table names as stored in `sync_outbox.table_name`. */
