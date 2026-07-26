@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { ReceiptView } from '@/components/billing/ReceiptView';
 import { IconSearch, IconWallet } from '@/components/icons';
@@ -10,7 +11,12 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
+import {
+  isExchangeSaleLocationState,
+  type ExchangeSaleLocationState,
+} from '@/features/billing/exchange-handoff';
 import { ApiError, api } from '@/lib/api-client';
+import { prefersDesktopInput, safeFocus } from '@/lib/device';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
@@ -67,10 +73,13 @@ function summarizeHeldCart(data: Record<string, unknown>) {
 export function SalePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const barcodeBuffer = useRef('');
   const barcodeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const exchangeAppliedRef = useRef(false);
 
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -100,6 +109,7 @@ export function SalePage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [deleteHeldTarget, setDeleteHeldTarget] = useState<HeldCart | null>(null);
+  const [exchangeBanner, setExchangeBanner] = useState<ExchangeSaleLocationState | null>(null);
 
   const canDiscount = hasFeature(user, FEATURES.BILLING_DISCOUNT);
   const canDiscountUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
@@ -147,9 +157,54 @@ export function SalePage() {
     ? parseFloat(settings.maxDiscountPercentStaff)
     : null;
 
+  useEffect(() => {
+    if (exchangeAppliedRef.current) return;
+    if (!isExchangeSaleLocationState(location.state)) return;
+    exchangeAppliedRef.current = true;
+    const state = location.state;
+    setExchangeBanner(state);
+    setNotes(`Exchange from ${state.exchangeFromSaleNumber}`);
+    if (state.customerName) {
+      setCustomerSearch(state.customerName);
+    }
+    if (state.customerId) {
+      void api.customers
+        .get(state.customerId)
+        .then((c) => {
+          setCustomer(c);
+          setCustomerSearch(c.name);
+        })
+        .catch(() => {
+          /* keep name-only hint if fetch fails */
+        });
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
   const totals = useMemo(
     () => calcSaleTotals(cart, billDiscount, defaultTax),
     [cart, billDiscount, defaultTax],
+  );
+
+  const exchangeCredit = useMemo(() => {
+    if (!exchangeBanner) return 0;
+    const n = parseFloat(exchangeBanner.creditHint);
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+  }, [exchangeBanner]);
+
+  const exchangeApplied = useMemo(
+    () => Math.min(exchangeCredit, Math.round(totals.grandTotal * 100) / 100),
+    [exchangeCredit, totals.grandTotal],
+  );
+
+  const exchangeRemaining = useMemo(
+    () => Math.max(0, Math.round((exchangeCredit - totals.grandTotal) * 100) / 100),
+    [exchangeCredit, totals.grandTotal],
+  );
+
+  const payableAfterExchange = useMemo(
+    () => Math.max(0, Math.round((totals.grandTotal - exchangeCredit) * 100) / 100),
+    [totals.grandTotal, exchangeCredit],
   );
 
   const creditLimitWarning = useMemo(() => {
@@ -228,7 +283,7 @@ export function SalePage() {
       });
       setSearch('');
       setShowDropdown(false);
-      searchRef.current?.focus();
+      safeFocus(searchRef.current);
     },
     [cart],
   );
@@ -309,11 +364,11 @@ export function SalePage() {
   };
 
   useEffect(() => {
-    searchRef.current?.focus();
+    safeFocus(searchRef.current);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault();
-        searchRef.current?.focus();
+        safeFocus(searchRef.current, { force: true });
       }
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'Enter' && barcodeBuffer.current.length >= 4) {
@@ -371,6 +426,16 @@ export function SalePage() {
     }
   }, [availablePaymentModes, paymentMode]);
 
+  // Exchange credit only applies on cash checkout.
+  useEffect(() => {
+    if (exchangeCredit > 0 && paymentMode !== 'CASH') {
+      setPaymentMode('CASH');
+      setCashAmount('');
+      setCreditAmount('');
+      setAmountReceived('');
+    }
+  }, [exchangeCredit, paymentMode]);
+
   const clearSale = () => {
     setCart([]);
     setCustomer(null);
@@ -387,6 +452,7 @@ export function SalePage() {
     setError('');
     setWarning('');
     setConfirmCancel(false);
+    setExchangeBanner(null);
   };
 
   const cancelSale = () => {
@@ -418,7 +484,12 @@ export function SalePage() {
       body.amountReceived = cash;
     }
     if (paymentMode === 'CASH') {
-      body.amountReceived = parseFloat(amountReceived) || 0;
+      const due = exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
+      const received = parseFloat(amountReceived);
+      body.amountReceived = Number.isFinite(received) ? received : due === 0 ? 0 : 0;
+      if (exchangeCredit > 0) {
+        body.exchangeCreditAmount = exchangeCredit;
+      }
     }
     return body;
   };
@@ -456,10 +527,12 @@ export function SalePage() {
       setAmountReceived('');
       setCashAmount('');
       setCreditAmount('');
-      return snapshot;
+      setExchangeBanner(null);
+      return { ...snapshot, exchangeBanner };
     },
     onSuccess: (result) => {
       if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
+      setExchangeBanner(null);
 
       const detail = result.detail;
       if (detail) {
@@ -499,6 +572,7 @@ export function SalePage() {
         setAmountReceived(snapshot.amountReceived);
         setCashAmount(snapshot.cashAmount);
         setCreditAmount(snapshot.creditAmount);
+        setExchangeBanner(snapshot.exchangeBanner);
       }
       setShowCheckout(true);
       setError(
@@ -599,7 +673,7 @@ export function SalePage() {
     setError('');
     void api.heldCarts.delete(held.id).then(() => refetchHeld());
     setShowHeld(false);
-    searchRef.current?.focus();
+    safeFocus(searchRef.current);
   };
 
   const searchResults = useMemo(() => {
@@ -615,18 +689,22 @@ export function SalePage() {
   }, [catalogProducts, search, categoryId]);
   const productsFetching = catalogLoading || (catalogFetching && catalogProducts.length === 0);
   const cashDue = useMemo(() => {
-    if (paymentMode === 'CASH') return totals.grandTotal;
+    if (paymentMode === 'CASH') {
+      return exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
+    }
     if (paymentMode === 'SPLIT') return parseFloat(cashAmount) || 0;
     return 0;
-  }, [paymentMode, totals.grandTotal, cashAmount]);
+  }, [paymentMode, totals.grandTotal, cashAmount, exchangeCredit, payableAfterExchange]);
 
   const changeDue = useMemo(() => {
     const received = parseFloat(amountReceived) || 0;
-    if (cashDue <= 0 || received < cashDue) return 0;
-    return Math.round((received - cashDue) * 100) / 100;
-  }, [amountReceived, cashDue]);
+    const tenderChange =
+      cashDue <= 0 || received < cashDue ? 0 : Math.round((received - cashDue) * 100) / 100;
+    // Unused exchange credit must be handed back as cash.
+    return Math.round((tenderChange + (exchangeRemaining > 0 ? exchangeRemaining : 0)) * 100) / 100;
+  }, [amountReceived, cashDue, exchangeRemaining]);
 
-  const needsCashTender = paymentMode === 'CASH';
+  const needsCashTender = paymentMode === 'CASH' && cashDue > 0;
   const splitCashOk =
     paymentMode !== 'SPLIT' ||
     (cashAmount !== '' &&
@@ -659,7 +737,9 @@ export function SalePage() {
       setError('Customer is required for udhaar or split payment.');
       return;
     }
-    setAmountReceived('');
+    const due = exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
+    // Fully covered by exchange — no cash to collect.
+    setAmountReceived(paymentMode === 'CASH' && due === 0 ? '0' : '');
     setShowCheckout(true);
   };
 
@@ -679,7 +759,11 @@ export function SalePage() {
   const customerDisplay = customerSearch || (customer ? customer.name : '');
 
   return (
-    <div className="relative flex h-[calc(100vh-7rem)] flex-col overflow-hidden">
+    <div
+      className={`relative flex min-h-[calc(100dvh-8.5rem)] flex-col md:h-[calc(100vh-7rem)] md:overflow-hidden ${
+        cart.length > 0 ? 'pb-20 lg:pb-0' : ''
+      }`}
+    >
       <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-bold text-text">Sales Register</h1>
         <div className="flex flex-wrap gap-2">
@@ -709,6 +793,51 @@ export function SalePage() {
         </div>
       )}
 
+      {exchangeBanner && exchangeCredit > 0 && (
+        <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">
+              Exchange from bill {exchangeBanner.exchangeFromSaleNumber}
+            </p>
+            <div className="mt-2 grid gap-1 text-amber-900/90 sm:grid-cols-3">
+              <p>
+                Exchange credit:{' '}
+                <strong>{formatMoney(exchangeCredit, currency)}</strong>
+              </p>
+              <p>
+                Applied to cart:{' '}
+                <strong>{formatMoney(exchangeApplied, currency)}</strong>
+              </p>
+              {payableAfterExchange > 0 ? (
+                <p>
+                  Collect from customer:{' '}
+                  <strong className="text-rose-700">
+                    {formatMoney(payableAfterExchange, currency)}
+                  </strong>
+                </p>
+              ) : (
+                <p>
+                  Return cash to customer:{' '}
+                  <strong className="text-emerald-800">
+                    {formatMoney(exchangeRemaining, currency)}
+                  </strong>
+                </p>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-amber-900/70">
+              {payableAfterExchange > 0
+                ? 'New items cost more than the exchange — only collect the difference.'
+                : exchangeRemaining > 0
+                  ? 'New items cost less — hand the remaining exchange amount back in cash.'
+                  : 'New items match the exchange credit — no cash to collect or return.'}
+            </p>
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setExchangeBanner(null)}>
+            Clear credit
+          </Button>
+        </div>
+      )}
+
       {completeSale.isPending && (
         <div className="mb-3 shrink-0 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-800">
           Completing sale…
@@ -726,6 +855,8 @@ export function SalePage() {
                 placeholder="Search by Name, SKU code or scan Barcode..."
                 value={search}
                 autoComplete="off"
+                inputMode="search"
+                enterKeyHint="search"
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setShowDropdown(true);
@@ -960,7 +1091,7 @@ export function SalePage() {
                     <div className="mt-2 flex items-center gap-1.5">
                       <button
                         type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
+                        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
                         onClick={() =>
                           setCart((c) =>
                             c.map((l) =>
@@ -978,7 +1109,7 @@ export function SalePage() {
                       </span>
                       <button
                         type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
+                        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
                         onClick={() => {
                           if (canAddToCart(line.product, 1, line.quantity)) {
                             setCart((c) =>
@@ -1064,6 +1195,31 @@ export function SalePage() {
               </span>
             </div>
 
+            {exchangeCredit > 0 && (
+              <div className="mt-2 space-y-1 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+                <div className="flex justify-between">
+                  <span>Exchange credit</span>
+                  <span className="font-semibold">−{formatMoney(exchangeApplied, currency)}</span>
+                </div>
+                {exchangeRemaining > 0 && (
+                  <div className="flex justify-between text-emerald-800">
+                    <span>Return cash to customer</span>
+                    <span className="font-semibold">{formatMoney(exchangeRemaining, currency)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-amber-200 pt-1 text-sm font-bold">
+                  <span>{payableAfterExchange > 0 ? 'To collect' : 'Cash movement'}</span>
+                  <span className={payableAfterExchange > 0 ? 'text-rose-700' : 'text-emerald-800'}>
+                    {payableAfterExchange > 0
+                      ? formatMoney(payableAfterExchange, currency)
+                      : exchangeRemaining > 0
+                        ? `−${formatMoney(exchangeRemaining, currency)}`
+                        : formatMoney(0, currency)}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             {warning && <p className="mt-1 text-xs text-slate-600">{warning}</p>}
 
@@ -1074,11 +1230,42 @@ export function SalePage() {
               disabled={cart.length === 0}
               onClick={openCheckout}
             >
-              Proceed to Payment
+              {exchangeCredit > 0 && payableAfterExchange === 0
+                ? exchangeRemaining > 0
+                  ? `Return ${formatMoney(exchangeRemaining, currency)} & finish`
+                  : 'Complete exchange'
+                : exchangeCredit > 0
+                  ? `Collect ${formatMoney(payableAfterExchange, currency)}`
+                  : 'Proceed to Payment'}
             </Button>
           </div>
         </div>
       </div>
+
+      {cart.length > 0 && !showCheckout && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="font-medium text-text-muted">
+              {cart.length} item{cart.length === 1 ? '' : 's'}
+            </span>
+            <span className="font-bold text-brand-800">
+              {formatMoney(
+                exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal,
+                currency,
+              )}
+            </span>
+          </div>
+          <Button className="w-full" size="lg" variant="accent" onClick={openCheckout}>
+            {exchangeCredit > 0 && payableAfterExchange === 0
+              ? exchangeRemaining > 0
+                ? `Return ${formatMoney(exchangeRemaining, currency)} & finish`
+                : 'Complete exchange'
+              : exchangeCredit > 0
+                ? `Collect ${formatMoney(payableAfterExchange, currency)}`
+                : 'Proceed to Payment'}
+          </Button>
+        </div>
+      )}
 
       <Modal
         open={showCheckout}
@@ -1097,13 +1284,23 @@ export function SalePage() {
               onClick={() => {
                 setError('');
                 if (!cashTenderOk) {
-                  setError('Enter the amount received from the customer.');
+                  setError(
+                    exchangeCredit > 0
+                      ? 'Enter the extra cash collected from the customer.'
+                      : 'Enter the amount received from the customer.',
+                  );
                   return;
                 }
                 completeSale.mutate(buildSalePayload());
               }}
             >
-              Authorize Checkout
+              {exchangeCredit > 0 && cashDue === 0
+                ? exchangeRemaining > 0
+                  ? `Complete · return ${formatMoney(exchangeRemaining, currency)}`
+                  : 'Complete exchange'
+                : exchangeCredit > 0
+                  ? `Authorize · collect ${formatMoney(cashDue, currency)}`
+                  : 'Authorize Checkout'}
             </Button>
           </>
         }
@@ -1121,60 +1318,120 @@ export function SalePage() {
               </div>
               <p className="text-4xl font-bold">{formatMoney(totals.grandTotal, currency)}</p>
             </div>
-          </div>
-
-          <div>
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-              Select Payment Mode
-            </p>
-            {!customer && (
-              <p className="mb-3 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-muted">
-                Walk-in sale — cash only. Select an udhaar customer to enable credit options.
-              </p>
-            )}
-            <div
-              className={`grid gap-3 ${availablePaymentModes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}
-            >
-              {availablePaymentModes.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode(mode);
-                    setAmountReceived('');
-                    if (mode === 'SPLIT') {
-                      setCashAmount('');
-                      setCreditAmount(String(totals.grandTotal));
-                    } else if (mode !== 'CREDIT') {
-                      setCashAmount('');
-                      setCreditAmount('');
-                    }
-                  }}
-                  className={`rounded-2xl border px-4 py-5 text-center transition ${
-                    paymentMode === mode
-                      ? 'border-brand-700 bg-brand-50 shadow-sm'
-                      : 'border-border bg-surface-muted'
-                  }`}
-                >
-                  <div className="mb-2 flex justify-center">
-                    <IconWallet
-                      className={`h-5 w-5 ${paymentMode === mode ? 'text-brand-700' : 'text-text-muted'}`}
-                    />
+            {exchangeCredit > 0 && (
+              <div className="mt-3 space-y-1 border-t border-slate-500 pt-3 text-sm text-slate-200">
+                <div className="flex justify-between">
+                  <span>Exchange credit</span>
+                  <span>−{formatMoney(exchangeApplied, currency)}</span>
+                </div>
+                {exchangeRemaining > 0 && (
+                  <div className="flex justify-between text-emerald-300">
+                    <span>Return cash to customer</span>
+                    <span>{formatMoney(exchangeRemaining, currency)}</span>
                   </div>
-                  <p
-                    className={`text-sm font-semibold ${paymentMode === mode ? 'text-brand-800' : 'text-text'}`}
-                  >
-                    {paymentModeLabels[mode]}
-                  </p>
-                </button>
-              ))}
-            </div>
+                )}
+                <div className="flex justify-between text-base font-bold text-white">
+                  <span>{payableAfterExchange > 0 ? 'Cash to collect' : 'Cash to return'}</span>
+                  <span>
+                    {payableAfterExchange > 0
+                      ? formatMoney(payableAfterExchange, currency)
+                      : formatMoney(exchangeRemaining, currency)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {paymentMode === 'CASH' && (
+          {exchangeCredit > 0 ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              Exchange checkout uses cash settlement only. Credit covers the returned value; collect
+              only any amount above that.
+            </p>
+          ) : (
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
+                Select Payment Mode
+              </p>
+              {!customer && (
+                <p className="mb-3 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-muted">
+                  Walk-in sale — cash only. Select an udhaar customer to enable credit options.
+                </p>
+              )}
+              <div
+                className={`grid gap-3 ${availablePaymentModes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}
+              >
+                {availablePaymentModes.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setPaymentMode(mode);
+                      setAmountReceived('');
+                      if (mode === 'SPLIT') {
+                        setCashAmount('');
+                        setCreditAmount(String(totals.grandTotal));
+                      } else if (mode !== 'CREDIT') {
+                        setCashAmount('');
+                        setCreditAmount('');
+                      }
+                    }}
+                    className={`rounded-2xl border px-4 py-5 text-center transition ${
+                      paymentMode === mode
+                        ? 'border-brand-700 bg-brand-50 shadow-sm'
+                        : 'border-border bg-surface-muted'
+                    }`}
+                  >
+                    <div className="mb-2 flex justify-center">
+                      <IconWallet
+                        className={`h-5 w-5 ${paymentMode === mode ? 'text-brand-700' : 'text-text-muted'}`}
+                      />
+                    </div>
+                    <p
+                      className={`text-sm font-semibold ${paymentMode === mode ? 'text-brand-800' : 'text-text'}`}
+                    >
+                      {paymentModeLabels[mode]}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {paymentMode === 'CASH' && cashDue === 0 && exchangeCredit > 0 && (
+            <div
+              className={`rounded-2xl border px-4 py-4 text-sm ${
+                exchangeRemaining > 0
+                  ? 'border-emerald-400 bg-emerald-50 text-emerald-950'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-900'
+              }`}
+            >
+              {exchangeRemaining > 0 ? (
+                <>
+                  <p className="text-base font-bold">Return cash to customer</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-800">
+                    {formatMoney(exchangeRemaining, currency)}
+                  </p>
+                  <p className="mt-2">
+                    Exchange credit {formatMoney(exchangeCredit, currency)} − replacement bill{' '}
+                    {formatMoney(totals.grandTotal, currency)}. Hand this amount back from the cash
+                    counter.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold">No cash to collect or return</p>
+                  <p className="mt-1">Replacement matches the exchange credit exactly.</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {paymentMode === 'CASH' && cashDue > 0 && (
             <div className="rounded-2xl border border-slate-400 px-4 py-4">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Amount received from customer ({currency})
+                {exchangeCredit > 0
+                  ? `Extra cash to collect (${currency})`
+                  : `Amount received from customer (${currency})`}
               </p>
               <Input
                 type="number"
@@ -1183,7 +1440,7 @@ export function SalePage() {
                 value={amountReceived}
                 onChange={(e) => setAmountReceived(e.target.value)}
                 placeholder={`Due: ${formatMoney(cashDue, currency)}`}
-                autoFocus
+                autoFocus={prefersDesktopInput()}
               />
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
@@ -1206,20 +1463,42 @@ export function SalePage() {
                   </Button>
                 ))}
               </div>
-              {parseFloat(amountReceived) > 0 && (
+              {(parseFloat(amountReceived) > 0 || exchangeCredit > 0) && (
                 <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3">
+                  {exchangeCredit > 0 && (
+                    <div className="mb-1 flex justify-between text-sm text-emerald-900">
+                      <span>Bill total</span>
+                      <span className="font-semibold">
+                        {formatMoney(totals.grandTotal, currency)}
+                      </span>
+                    </div>
+                  )}
+                  {exchangeCredit > 0 && (
+                    <div className="mb-1 flex justify-between text-sm text-emerald-900">
+                      <span>Exchange credit</span>
+                      <span className="font-semibold">
+                        −{formatMoney(exchangeApplied, currency)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm text-emerald-900">
-                    <span>Bill total</span>
+                    <span>{exchangeCredit > 0 ? 'Cash due' : 'Bill total'}</span>
                     <span className="font-semibold">{formatMoney(cashDue, currency)}</span>
                   </div>
-                  <div className="mt-1 flex justify-between text-sm text-emerald-900">
-                    <span>Received</span>
-                    <span className="font-semibold">{formatMoney(amountReceived, currency)}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between border-t border-emerald-200 pt-2 text-lg font-black text-emerald-800">
-                    <span>Change back</span>
-                    <span>{formatMoney(changeDue, currency)}</span>
-                  </div>
+                  {parseFloat(amountReceived) > 0 && (
+                    <>
+                      <div className="mt-1 flex justify-between text-sm text-emerald-900">
+                        <span>Received</span>
+                        <span className="font-semibold">
+                          {formatMoney(amountReceived, currency)}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex justify-between border-t border-emerald-200 pt-2 text-lg font-black text-emerald-800">
+                        <span>Change back</span>
+                        <span>{formatMoney(changeDue, currency)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1258,7 +1537,7 @@ export function SalePage() {
                     setAmountReceived(raw === '' ? '' : String(cash));
                   }}
                   placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
-                  autoFocus
+                  autoFocus={prefersDesktopInput()}
                 />
                 <p className="mt-2 text-xs text-text-muted">
                   Enter cash paid now once. Remaining is saved as udhaar automatically.

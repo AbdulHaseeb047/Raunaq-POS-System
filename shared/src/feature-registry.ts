@@ -18,8 +18,8 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   {
     key: FEATURES.BILLING_VOID_SALE,
     module: 'billing',
-    label: 'Void / Returns',
-    description: 'Void sales and process partial returns',
+    label: 'Delete sale / Returns',
+    description: 'Delete sale records and process partial returns',
   },
   {
     key: FEATURES.BILLING_DISCOUNT,

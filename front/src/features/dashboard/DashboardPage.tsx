@@ -102,10 +102,16 @@ export function DashboardPage() {
         ) : (
           <>
             <StatCard
-              label="Today's sales"
+              label="Today's net sales"
               value={formatMoney(data?.todaySalesTotal ?? '0', currency)}
               icon={<IconSale className="h-5 w-5" />}
               accent="brand"
+              trend={
+                data?.todayGrossSalesTotal &&
+                data.todayGrossSalesTotal !== data.todaySalesTotal
+                  ? `Gross ${formatMoney(data.todayGrossSalesTotal, currency)} − returns`
+                  : 'Sales minus returns'
+              }
             />
             <StatCard
               label="Transactions"
@@ -163,8 +169,8 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-3">
             <MountainChart
-              title="Sales revenue"
-              subtitle={`${formatMoney(trend?.totalSales ?? '0', currency)} total`}
+              title="Net sales"
+              subtitle={`${formatMoney(trend?.totalSales ?? '0', currency)} after returns`}
               data={salesSeries}
               color="#059669"
               formatValue={(n) => formatMoney(n, currency)}

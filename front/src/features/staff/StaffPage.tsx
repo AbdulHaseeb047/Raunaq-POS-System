@@ -84,7 +84,8 @@ export function StaffPage() {
       />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)]">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
               <th className="px-4 py-3">Name</th>
@@ -123,6 +124,7 @@ export function StaffPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {error && <p className="mb-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-danger">{error}</p>}

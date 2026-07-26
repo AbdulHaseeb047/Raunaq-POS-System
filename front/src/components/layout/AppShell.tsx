@@ -1,13 +1,17 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { FeatureKey } from '@pos/shared';
+import { getTierFeaturePreset, type TenantTier } from '@pos/shared';
 
 import {
   IconBox,
   IconBrand,
   IconChart,
+  IconClose,
   IconDashboard,
   IconGrid,
   IconHistory,
+  IconMenu,
   IconSale,
   IconStaff,
   IconSupplier,
@@ -18,13 +22,12 @@ import { AccountMenu } from '@/components/layout/AccountMenu';
 import { SidebarHeader } from '@/components/layout/SidebarHeader';
 import { Select } from '@/components/ui/Select';
 import { SyncBanner } from '@/components/layout/SyncBanner';
-import { getTierFeaturePreset, type TenantTier } from '@pos/shared';
-
 import { TrialBanner } from '@/components/billing/TrialBanner';
 import { SettingsDialogProvider } from '@/features/settings/settings-dialog-context';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { useSidebarCollapsed } from '@/lib/use-sidebar-collapsed';
+import { RaunaqMark } from '@/components/brand/RaunaqMark';
 
 type NavItem = {
   to: string;
@@ -92,10 +95,12 @@ function NavItemLink({
   item,
   collapsed,
   locked,
+  onNavigate,
 }: {
   item: NavItem;
   collapsed: boolean;
   locked?: boolean;
+  onNavigate?: () => void;
 }) {
   const to = locked ? '/upgrade' : item.to;
 
@@ -105,8 +110,9 @@ function NavItemLink({
       end={locked ? false : item.end}
       title={locked ? `${item.label} — Upgrade to unlock` : item.label}
       state={locked ? { fromFeature: item.label } : undefined}
+      onClick={onNavigate}
       className={({ isActive }) =>
-        `sidebar-nav-link flex min-h-[38px] cursor-pointer items-center rounded-xl py-2 text-[13px] font-semibold tracking-wide transition-all ${
+        `sidebar-nav-link flex min-h-[44px] cursor-pointer items-center rounded-xl py-2 text-[13px] font-semibold tracking-wide transition-all ${
           collapsed ? 'justify-center px-2' : 'gap-2 px-3'
         } ${
           !locked && isActive
@@ -132,12 +138,66 @@ function NavItemLink({
   );
 }
 
+type NavItemWithLock = NavItem & { locked?: boolean };
+
+function SidebarNav({
+  collapsed,
+  visibleSections,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  visibleSections: Array<{ title: string; items: NavItemWithLock[] }>;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      <nav
+        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain py-2.5 ${
+          collapsed ? 'space-y-1 px-1' : 'space-y-3.5 px-1.5'
+        }`}
+      >
+        <NavItemLink item={dashboardItem} collapsed={collapsed} onNavigate={onNavigate} />
+
+        {visibleSections.map((section) => (
+          <div key={section.title}>
+            {!collapsed && (
+              <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-200/65">
+                {section.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavItemLink
+                  key={item.to}
+                  item={item}
+                  collapsed={collapsed}
+                  locked={Boolean(item.locked)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div
+        className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}
+      >
+        <AccountMenu placement="sidebar" collapsed={collapsed} />
+      </div>
+    </>
+  );
+}
+
 export function AppShell() {
   const { user, branches, branchId, setBranchId } = useAuth();
   const { collapsed, toggle } = useSidebarCollapsed();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const assignedPlan = (user?.planEntitlement?.assignedPlan ?? user?.planEntitlement?.trialPlan) as
-    TenantTier | undefined;
+    | TenantTier
+    | undefined;
   const assignedKeys = new Set(assignedPlan ? getTierFeaturePreset(assignedPlan) : []);
 
   const visibleSections = navSections
@@ -155,54 +215,105 @@ export function AppShell() {
     }))
     .filter((section) => section.items.length > 0);
 
+  // Close drawer on route change (mobile).
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll while drawer is open.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileNavOpen]);
+
   return (
     <SettingsDialogProvider>
       <div className="flex min-h-screen bg-surface-muted">
+        {/* Desktop sidebar */}
         <aside
-          className={`sidebar-shell sticky top-0 flex h-screen shrink-0 flex-col bg-sidebar font-sans antialiased text-text-inverse transition-[width] duration-200 ease-in-out ${
+          className={`sidebar-shell sticky top-0 z-30 hidden h-screen shrink-0 flex-col bg-sidebar font-sans antialiased text-text-inverse transition-[width] duration-200 ease-in-out md:flex ${
             collapsed ? 'w-[4.75rem]' : 'w-[15.5rem]'
           }`}
         >
           <SidebarHeader collapsed={collapsed} onToggle={toggle} />
-
-          <nav
-            className={`min-h-0 flex-1 overflow-y-auto overscroll-contain py-2.5 ${
-              collapsed ? 'space-y-1 px-1' : 'space-y-3.5 px-1.5'
-            }`}
-          >
-            <NavItemLink item={dashboardItem} collapsed={collapsed} />
-
-            {visibleSections.map((section) => (
-              <div key={section.title}>
-                {!collapsed && (
-                  <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-200/65">
-                    {section.title}
-                  </p>
-                )}
-                <div className="space-y-0.5">
-                  {section.items.map((item) => (
-                    <NavItemLink
-                      key={item.to}
-                      item={item}
-                      collapsed={collapsed}
-                      locked={'locked' in item ? Boolean(item.locked) : false}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </nav>
-
-          <div
-            className={`relative z-10 shrink-0 border-t border-sidebar-border ${collapsed ? 'p-1' : 'p-2'}`}
-          >
-            <AccountMenu placement="sidebar" collapsed={collapsed} />
-          </div>
+          <SidebarNav collapsed={collapsed} visibleSections={visibleSections} />
         </aside>
 
+        {/* Mobile drawer */}
+        {mobileNavOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button
+              type="button"
+              className="absolute inset-0 bg-text/45 backdrop-blur-[2px]"
+              aria-label="Close menu"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <aside className="sidebar-shell absolute inset-y-0 left-0 flex w-[min(18rem,88vw)] flex-col bg-sidebar font-sans antialiased text-text-inverse shadow-2xl">
+              <div className="flex items-center justify-between border-b border-sidebar-border px-3 py-3">
+                <div className="flex items-center gap-2">
+                  <RaunaqMark size={28} tone="dark" />
+                  <span className="text-sm font-semibold text-white">Menu</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-brand-100 hover:bg-sidebar-hover hover:text-white"
+                  aria-label="Close menu"
+                >
+                  <IconClose className="h-5 w-5" />
+                </button>
+              </div>
+              <SidebarNav
+                collapsed={false}
+                visibleSections={visibleSections}
+                onNavigate={() => setMobileNavOpen(false)}
+              />
+            </aside>
+          </div>
+        )}
+
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile top bar */}
+          <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-surface px-3 py-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-text"
+              aria-label="Open menu"
+            >
+              <IconMenu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-text">Raunaq POS</p>
+            </div>
+            {branches.length > 1 && (
+              <Select
+                className="w-[7.5rem] py-1.5 text-xs min-h-[40px]"
+                value={branchId ?? ''}
+                onChange={(e) => setBranchId(e.target.value)}
+                options={branches.map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                }))}
+              />
+            )}
+          </header>
+
           {branches.length > 1 && (
-            <div className="flex items-center justify-end gap-2 border-b border-border bg-surface px-4 py-2 lg:px-6">
+            <div className="hidden items-center justify-end gap-2 border-b border-border bg-surface px-4 py-2 md:flex lg:px-6">
               <span className="text-xs font-medium text-text-muted">Branch</span>
               <Select
                 className="w-44 py-1.5 text-xs min-h-[36px]"
@@ -219,7 +330,7 @@ export function AppShell() {
           <TrialBanner />
           <SyncBanner />
 
-          <main className="flex-1 overflow-auto p-4 lg:p-6">
+          <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
             <Outlet />
           </main>
         </div>

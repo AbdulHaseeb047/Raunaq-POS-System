@@ -108,10 +108,21 @@ async function refreshTokens(): Promise<TokenPair | null> {
   return refreshPromise;
 }
 
-type RequestOptions = RequestInit & { branch?: boolean; skipAuth?: boolean };
+type RequestOptions = RequestInit & {
+  branch?: boolean;
+  skipAuth?: boolean;
+  /** Override default 20s timeout (ms). */
+  timeoutMs?: number;
+};
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { branch = false, skipAuth = false, headers: initHeaders, ...init } = options;
+  const {
+    branch = false,
+    skipAuth = false,
+    timeoutMs = 20_000,
+    headers: initHeaders,
+    ...init
+  } = options;
 
   const headers = new Headers(initHeaders);
   if (!headers.has('Content-Type') && init.body) {
@@ -133,7 +144,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers,
-      signal: init.signal ?? AbortSignal.timeout(20_000),
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'TimeoutError') {
@@ -165,11 +176,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!res.ok) {
     const contentType = res.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
-      throw new ApiError(
-        `API returned ${res.status} (not JSON). On Vercel, set VITE_API_URL to your Railway backend URL — not /api.`,
-        res.status,
-        'BAD_API_RESPONSE',
-      );
+      const hint = import.meta.env.DEV
+        ? ' Local API is not responding — run `npm run dev:api` (or `npm run dev:all`) and check backend/.env.'
+        : ' On Vercel, set VITE_API_URL to your Railway backend URL — not /api.';
+      throw new ApiError(`API returned ${res.status} (not JSON).${hint}`, res.status, 'BAD_API_RESPONSE');
     }
     const err = (await res.json().catch(() => ({ message: res.statusText }))) as ApiErrorBody;
     // Soft-lock uses UPGRADE_REQUIRED — do not log the user out.
@@ -313,7 +323,12 @@ export const api = {
         skipped: number;
         errors: Array<{ row: number; message: string }>;
         total: number;
-      }>('/products/import', { method: 'POST', body: JSON.stringify(body) }),
+      }>('/products/import', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        // Large imports need more than the default 20s.
+        timeoutMs: 180_000,
+      }),
     purgeAll: () => apiRequest<{ deleted: number }>('/products?confirm=true', { method: 'DELETE' }),
   },
 
@@ -503,7 +518,7 @@ export const api = {
   admin: {
     dashboard: () => apiRequest<AdminDashboard>('/admin/dashboard'),
     salesReps: () => apiRequest<SalesRep[]>('/admin/sales-reps'),
-    createSalesRep: (body: { email: string; password: string; fullName: string }) =>
+    createSalesRep: (body: { fullName: string }) =>
       apiRequest<SalesRep>('/admin/sales-reps', { method: 'POST', body: JSON.stringify(body) }),
   },
 

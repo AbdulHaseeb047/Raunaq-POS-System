@@ -39,6 +39,8 @@ export const createSaleSchema = z.object({
   notes: z.string().optional(),
   printReceipt: z.boolean().optional(),
   amountReceived: z.number().nonnegative().optional(),
+  /** Credit from a prior return/exchange — reduces cash due on this sale. */
+  exchangeCreditAmount: z.number().nonnegative().optional(),
 });
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
@@ -118,6 +120,19 @@ export async function createSale(
 
   const { subtotal, discountTotal, taxTotal, grandTotal } = totals;
 
+  const exchangeCreditRaw = toDecimal(input.exchangeCreditAmount ?? 0);
+  if (exchangeCreditRaw.gt(0) && input.paymentMethod !== 'CASH') {
+    throw new ValidationError('Exchange credit can only be applied on cash sales');
+  }
+  const exchangeCreditApplied = exchangeCreditRaw.gt(grandTotal) ? grandTotal : exchangeCreditRaw;
+  const unusedExchangeRefund = exchangeCreditRaw.minus(exchangeCreditApplied);
+  const cashDueAfterExchange = grandTotal.minus(exchangeCreditApplied);
+  /** Actual cash that enters the drawer for this sale (0 when fully covered by exchange). */
+  const cashCollected =
+    exchangeCreditApplied.gt(0) && input.paymentMethod === 'CASH'
+      ? cashDueAfterExchange
+      : grandTotal;
+
   let amountReceived: ReturnType<typeof toDecimal> | null = null;
   let changeGiven: ReturnType<typeof toDecimal> | null = null;
 
@@ -126,10 +141,15 @@ export async function createSale(
       throw new ValidationError('Amount received is required for cash sales');
     }
     amountReceived = toDecimal(input.amountReceived);
-    if (amountReceived.lt(grandTotal)) {
-      throw new ValidationError('Amount received must be at least the bill total');
+    if (amountReceived.lt(cashDueAfterExchange)) {
+      throw new ValidationError(
+        exchangeCreditApplied.gt(0)
+          ? 'Amount received must cover the amount due after exchange credit'
+          : 'Amount received must be at least the bill total',
+      );
     }
-    changeGiven = amountReceived.minus(grandTotal);
+    // Includes unused exchange credit that must be returned to the customer in cash.
+    changeGiven = amountReceived.minus(cashDueAfterExchange).plus(unusedExchangeRefund);
   } else if (input.paymentMethod === 'SPLIT' && (input.cashAmount ?? 0) > 0) {
     if (input.amountReceived == null) {
       throw new ValidationError('Amount received is required for the cash portion');
@@ -224,7 +244,21 @@ export async function createSale(
                 ]
               : []),
           ]
-        : [{ tenantId, paymentMethod: input.paymentMethod, amount: grandTotal }];
+        : exchangeCreditApplied.gt(0)
+          ? cashCollected.gt(0)
+            ? [{ tenantId, paymentMethod: 'CASH' as const, amount: cashCollected }]
+            : []
+          : [{ tenantId, paymentMethod: input.paymentMethod, amount: grandTotal }];
+
+    const exchangeParts: string[] = [];
+    if (exchangeCreditApplied.gt(0)) {
+      exchangeParts.push(`Exchange credit applied: ${exchangeCreditApplied.toFixed(2)}`);
+    }
+    if (unusedExchangeRefund.gt(0)) {
+      exchangeParts.push(`Cash refund to customer: ${unusedExchangeRefund.toFixed(2)}`);
+    }
+    const exchangeNote = exchangeParts.length > 0 ? exchangeParts.join(' · ') : null;
+    const saleNotes = [input.notes?.trim(), exchangeNote].filter(Boolean).join(' · ') || null;
 
     let created = await tx.sale.create({
       data: {
@@ -238,7 +272,7 @@ export async function createSale(
         taxTotal,
         grandTotal,
         paymentStatus,
-        notes: input.notes,
+        notes: saleNotes,
         cashierId,
         branchId: options?.branchId,
         fbrInvoiceNumber: invoiceNo,

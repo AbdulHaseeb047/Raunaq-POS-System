@@ -50,10 +50,6 @@ export function ChangePasswordForm({ onDone }: { onDone?: () => void }) {
         </p>
       </div>
 
-      <div className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2.5 text-xs text-brand-900">
-        Passwords are stored hashed in the database. After you save, the old password stops working.
-      </div>
-
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3.5">
         <Input
           label="Current password"

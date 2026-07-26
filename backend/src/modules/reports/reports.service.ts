@@ -62,12 +62,17 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
       lowStockThreshold: p.lowStockThreshold!.toFixed(3),
     }));
 
+  const grossSales = todaySales._sum.grandTotal ?? new Decimal(0);
+  const returnsAmount = todayReturns._sum.totalAmount ?? new Decimal(0);
+  const netSales = Decimal.max(0, grossSales.minus(returnsAmount));
+
   return {
-    todaySalesTotal: todaySales._sum.grandTotal?.toFixed(2) ?? '0.00',
+    todaySalesTotal: netSales.toFixed(2),
+    todayGrossSalesTotal: grossSales.toFixed(2),
     todayTransactionCount: todayCount,
     lowStockAlerts,
     outstandingUdhaar: udhaarTotal._sum.balance?.toFixed(2) ?? '0.00',
-    todayReturnsAmount: todayReturns._sum.totalAmount?.toFixed(2) ?? '0.00',
+    todayReturnsAmount: returnsAmount.toFixed(2),
     todayReturnsCount: todayReturns._count,
     todayReturnedUnits: returnItemsAgg._sum.quantity?.toFixed(3) ?? '0.000',
   };
@@ -79,29 +84,45 @@ export async function getDailySalesReport(tenantId: string, date?: string, branc
   const nextDay = new Date(day);
   nextDay.setDate(nextDay.getDate() + 1);
 
-  const sales = await prisma.sale.findMany({
-    where: {
-      tenantId,
-      status: 'COMPLETED',
-      createdAt: { gte: day, lt: nextDay },
-      ...(branchId ? { branchId } : {}),
-    },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      saleNumber: true,
-      grandTotal: true,
-      paymentStatus: true,
-      createdAt: true,
-      customer: { select: { name: true } },
-    },
-  });
+  const [sales, returnsAgg] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        tenantId,
+        status: 'COMPLETED',
+        createdAt: { gte: day, lt: nextDay },
+        ...(branchId ? { branchId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        saleNumber: true,
+        grandTotal: true,
+        paymentStatus: true,
+        createdAt: true,
+        customer: { select: { name: true } },
+      },
+    }),
+    prisma.saleReturn.aggregate({
+      where: {
+        tenantId,
+        createdAt: { gte: day, lt: nextDay },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    }),
+  ]);
 
-  const total = sales.reduce((sum, s) => sum.plus(s.grandTotal), new Decimal(0));
+  const grossTotal = sales.reduce((sum, s) => sum.plus(s.grandTotal), new Decimal(0));
+  const returnsAmount = returnsAgg._sum.totalAmount ?? new Decimal(0);
+  const netTotal = Decimal.max(0, grossTotal.minus(returnsAmount));
 
   return {
     date: day.toISOString().slice(0, 10),
-    total: total.toFixed(2),
+    total: netTotal.toFixed(2),
+    grossTotal: grossTotal.toFixed(2),
+    returnsTotal: returnsAmount.toFixed(2),
+    returnsCount: returnsAgg._count,
     transactionCount: sales.length,
     sales: sales.map((s) => ({
       id: s.id,
@@ -129,25 +150,51 @@ export async function getSalesSummary(
   const end = to ? new Date(to) : new Date();
   end.setHours(23, 59, 59, 999);
 
-  const sales = await prisma.sale.findMany({
-    where: {
-      tenantId,
-      status: 'COMPLETED',
-      createdAt: { gte: start, lte: end },
-      ...(branchId ? { branchId } : {}),
-    },
-    include: { items: { include: { product: { select: { costPrice: true } } } } },
-  });
+  const saleWhere = {
+    tenantId,
+    status: 'COMPLETED' as const,
+    createdAt: { gte: start, lte: end },
+    ...(branchId ? { branchId } : {}),
+  };
 
-  let revenue = new Decimal(0);
+  const [sales, returns] = await Promise.all([
+    prisma.sale.findMany({
+      where: saleWhere,
+      include: { items: { include: { product: { select: { costPrice: true } } } } },
+    }),
+    prisma.saleReturn.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: start, lte: end },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      include: { items: true },
+    }),
+  ]);
+
+  const returnProductIds = [
+    ...new Set(returns.flatMap((r) => r.items.map((i) => i.productId))),
+  ];
+  const returnProducts =
+    returnProductIds.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: returnProductIds }, tenantId },
+          select: { id: true, costPrice: true },
+        })
+      : [];
+  const returnCostMap = new Map(returnProducts.map((p) => [p.id, p.costPrice]));
+
+  let grossRevenue = new Decimal(0);
   let cost = new Decimal(0);
   let tax = new Decimal(0);
   let discounts = new Decimal(0);
+  let returnsAmount = new Decimal(0);
+  let returnedCost = new Decimal(0);
 
   const productMap = new Map<string, { name: string; qty: number; revenue: number }>();
 
   for (const sale of sales) {
-    revenue = revenue.plus(sale.grandTotal);
+    grossRevenue = grossRevenue.plus(sale.grandTotal);
     tax = tax.plus(sale.taxTotal);
     discounts = discounts.plus(sale.discountTotal);
 
@@ -168,6 +215,25 @@ export async function getSalesSummary(
     }
   }
 
+  for (const ret of returns) {
+    returnsAmount = returnsAmount.plus(ret.totalAmount);
+    for (const ri of ret.items) {
+      const costPrice = returnCostMap.get(ri.productId);
+      const itemCost = costPrice ? costPrice.times(ri.quantity) : new Decimal(0);
+      returnedCost = returnedCost.plus(itemCost);
+
+      const existing = productMap.get(ri.productId);
+      if (existing) {
+        existing.qty = Math.max(0, existing.qty - Number(ri.quantity));
+        existing.revenue = Math.max(0, existing.revenue - Number(ri.refundAmount));
+      }
+    }
+  }
+
+  const revenue = Decimal.max(0, grossRevenue.minus(returnsAmount));
+  const netCost = Decimal.max(0, cost.minus(returnedCost));
+  const grossProfit = revenue.minus(netCost).minus(tax);
+
   const topProducts = [...productMap.entries()]
     .map(([productId, data]) => ({
       productId,
@@ -175,6 +241,7 @@ export async function getSalesSummary(
       quantitySold: data.qty,
       revenue: data.revenue.toFixed(2),
     }))
+    .filter((p) => p.quantitySold > 0 || Number(p.revenue) > 0)
     .sort((a, b) => Number(b.revenue) - Number(a.revenue))
     .slice(0, 10);
 
@@ -182,9 +249,12 @@ export async function getSalesSummary(
     from: start.toISOString().slice(0, 10),
     to: end.toISOString().slice(0, 10),
     transactionCount: sales.length,
+    returnsCount: returns.length,
+    grossRevenue: grossRevenue.toFixed(2),
+    returnsAmount: returnsAmount.toFixed(2),
     revenue: revenue.toFixed(2),
-    cost: cost.toFixed(2),
-    grossProfit: revenue.minus(cost).minus(tax).toFixed(2),
+    cost: netCost.toFixed(2),
+    grossProfit: grossProfit.toFixed(2),
     taxTotal: tax.toFixed(2),
     discountTotal: discounts.toFixed(2),
     averageTicket: sales.length > 0 ? revenue.div(sales.length).toFixed(2) : '0.00',
@@ -248,14 +318,19 @@ export async function getSalesTrend(tenantId: string, days = 14, branchId?: stri
     row.returns += Number(r.totalAmount);
   }
 
-  const series = [...byDay.entries()].map(([date, row]) => ({
-    date,
-    sales: row.sales.toFixed(2),
-    transactions: row.transactions,
-    returns: row.returns.toFixed(2),
-  }));
+  const series = [...byDay.entries()].map(([date, row]) => {
+    const net = Math.max(0, row.sales - row.returns);
+    return {
+      date,
+      sales: net.toFixed(2),
+      grossSales: row.sales.toFixed(2),
+      transactions: row.transactions,
+      returns: row.returns.toFixed(2),
+    };
+  });
 
   const totalSales = series.reduce((sum, d) => sum + parseFloat(d.sales), 0);
+  const totalGrossSales = series.reduce((sum, d) => sum + parseFloat(d.grossSales), 0);
   const totalTx = series.reduce((sum, d) => sum + d.transactions, 0);
   const totalReturns = series.reduce((sum, d) => sum + parseFloat(d.returns), 0);
   const mid = Math.floor(series.length / 2);
@@ -269,6 +344,7 @@ export async function getSalesTrend(tenantId: string, days = 14, branchId?: stri
     to: localDateKey(end),
     days: dayCount,
     totalSales: totalSales.toFixed(2),
+    totalGrossSales: totalGrossSales.toFixed(2),
     totalTransactions: totalTx,
     totalReturns: totalReturns.toFixed(2),
     growthPct: Math.round(growthPct * 10) / 10,

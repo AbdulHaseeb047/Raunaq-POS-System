@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -9,13 +9,21 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PageLoader } from '@/components/ui/Spinner';
-import { api } from '@/lib/api-client';
+import { Select } from '@/components/ui/Select';
+import { api, ApiError } from '@/lib/api-client';
 import {
+  CSV_IMPORT_MAX_BYTES,
+  CSV_IMPORT_MAX_ROWS,
+  INVENTORY_CSV_FIELD_META,
   INVENTORY_CSV_HEADERS,
   csvRowsToImportProducts,
   downloadCsv,
-  parseCsv,
+  parseCsvFileText,
   productToCsvRow,
+  yieldToUi,
+  type InventoryCsvColumnMapping,
+  type InventoryCsvField,
+  type InventoryCsvRow,
 } from '@/lib/csv-utils';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
@@ -53,13 +61,19 @@ export function InventoryPage() {
   const [importPreview, setImportPreview] = useState<{ count: number; errors: string[] } | null>(
     null,
   );
-  const [importRows, setImportRows] = useState<
-    ReturnType<typeof csvRowsToImportProducts>['products']
-  >([]);
+  const [importRows, setImportRows] = useState<InventoryCsvRow[]>([]);
+  const [importRawRows, setImportRawRows] = useState<string[][] | null>(null);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importMapping, setImportMapping] = useState<InventoryCsvColumnMapping>({});
+  const [importUnmatched, setImportUnmatched] = useState<string[]>([]);
+  const [importParsing, setImportParsing] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importParseGen = useRef(0);
+  const skipMapEffect = useRef(false);
+  const debouncedImportMapping = useDebouncedValue(importMapping, 280);
 
   const canEdit = hasFeature(user, FEATURES.INVENTORY_EDIT);
   const canAdjust = hasFeature(user, FEATURES.INVENTORY_STOCK_ADJUST);
@@ -161,8 +175,21 @@ export function InventoryPage() {
       );
       setImportRows([]);
       setImportPreview(null);
+      setImportRawRows(null);
+      setImportHeaders([]);
+      setImportMapping({});
+      setImportUnmatched([]);
       void queryClient.invalidateQueries({ queryKey: ['products'] });
       void queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+    },
+    onError: (err) => {
+      setImportResult(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Import failed. Try a smaller file or check your connection.',
+      );
     },
   });
 
@@ -187,14 +214,134 @@ export function InventoryPage() {
     }
   };
 
-  const handleCsvFile = async (file: File) => {
-    const text = await file.text();
-    const parsed = parseCsv(text);
-    const { products, errors } = csvRowsToImportProducts(parsed);
+  const resetImportState = () => {
+    importParseGen.current += 1;
+    setImportOpen(false);
+    setImportPreview(null);
+    setImportRows([]);
+    setImportRawRows(null);
+    setImportHeaders([]);
+    setImportMapping({});
+    setImportUnmatched([]);
+    setImportParsing(false);
+  };
+
+  const applyImportMapping = (rows: string[][], mapping: InventoryCsvColumnMapping) => {
+    const { products, errors, unmatchedHeaders, missingRequired, truncated } =
+      csvRowsToImportProducts(rows, mapping);
     setImportRows(products);
-    setImportPreview({ count: products.length, errors });
+    setImportUnmatched(unmatchedHeaders);
+    const msgs = [...errors];
+    if (missingRequired.length > 0) {
+      msgs.unshift(`Map required fields first: ${missingRequired.join(', ')}.`);
+    }
+    if (truncated && !msgs.some((m) => m.includes('first'))) {
+      msgs.unshift(`Only first ${CSV_IMPORT_MAX_ROWS} rows will be imported.`);
+    }
+    setImportPreview({ count: products.length, errors: msgs });
+  };
+
+  // Remap after user changes dropdowns — debounced so rapid clicks don't freeze UI.
+  useEffect(() => {
+    if (!importRawRows || !importOpen) return;
+    if (skipMapEffect.current) {
+      skipMapEffect.current = false;
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      await yieldToUi();
+      if (cancelled) return;
+      applyImportMapping(importRawRows, debouncedImportMapping);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on debounced mapping
+  }, [debouncedImportMapping, importRawRows, importOpen]);
+
+  const handleCsvFile = async (file: File) => {
+    const gen = ++importParseGen.current;
     setImportResult(null);
     setImportOpen(true);
+    setImportParsing(true);
+    setImportPreview(null);
+    setImportRows([]);
+    setImportRawRows(null);
+    setImportHeaders([]);
+    setImportMapping({});
+    setImportUnmatched([]);
+
+    try {
+      if (file.size > CSV_IMPORT_MAX_BYTES) {
+        if (importParseGen.current !== gen) return;
+        setImportPreview({
+          count: 0,
+          errors: [
+            `File is too large (${Math.ceil(file.size / (1024 * 1024))} MB). Max allowed is ${Math.floor(CSV_IMPORT_MAX_BYTES / (1024 * 1024))} MB. Split the CSV and import in parts.`,
+          ],
+        });
+        return;
+      }
+
+      const text = await file.text();
+      if (importParseGen.current !== gen) return;
+      await yieldToUi();
+      if (importParseGen.current !== gen) return;
+
+      const parsed = await parseCsvFileText(text);
+      if (importParseGen.current !== gen) return;
+
+      if (parsed.length === 0) {
+        setImportPreview({ count: 0, errors: ['CSV file is empty'] });
+        return;
+      }
+
+      const headers = parsed[0]!.map((h) => h.trim());
+      const result = csvRowsToImportProducts(parsed);
+      if (importParseGen.current !== gen) return;
+
+      skipMapEffect.current = true;
+      setImportRawRows(parsed);
+      setImportHeaders(headers);
+      setImportMapping(result.mapping);
+      setImportUnmatched(result.unmatchedHeaders);
+      setImportRows(result.products);
+      setImportPreview({
+        count: result.products.length,
+        errors:
+          result.missingRequired.length > 0
+            ? [
+                `Could not auto-match: ${result.missingRequired.join(', ')}. Choose the correct CSV column for each field below.`,
+                ...result.errors.filter((e) => !e.startsWith('Required columns')),
+              ]
+            : result.errors,
+      });
+    } catch {
+      if (importParseGen.current !== gen) return;
+      setImportPreview({
+        count: 0,
+        errors: ['Could not read this CSV. Save it as UTF-8 CSV and try again.'],
+      });
+    } finally {
+      if (importParseGen.current === gen) setImportParsing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const setFieldMapping = (field: InventoryCsvField, columnIndex: number) => {
+    setImportMapping((prev) => {
+      const next: InventoryCsvColumnMapping = { ...prev };
+      if (columnIndex >= 0) {
+        for (const key of Object.keys(next) as InventoryCsvField[]) {
+          if (next[key] === columnIndex) delete next[key];
+        }
+        next[field] = columnIndex;
+      } else {
+        delete next[field];
+      }
+      return next;
+    });
   };
 
   const downloadTemplate = () => {
@@ -217,6 +364,18 @@ export function InventoryPage() {
       ],
     ]);
   };
+
+  const columnSelectOptions = useMemo(() => {
+    const opts = [{ value: '-1', label: '— Skip / not in file —' }];
+    importHeaders.forEach((h, i) => {
+      opts.push({ value: String(i), label: h || `(Column ${i + 1})` });
+    });
+    return opts;
+  }, [importHeaders]);
+
+  const requiredMapped = INVENTORY_CSV_FIELD_META.filter((f) => f.required).every(
+    (f) => importMapping[f.field] != null && importMapping[f.field]! >= 0,
+  );
 
   const openCreate = () => {
     setForm({
@@ -328,16 +487,18 @@ export function InventoryPage() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Input
-          className="flex-1 min-w-[200px]"
+          className="w-full min-w-0 flex-1 sm:min-w-[200px]"
           placeholder="Search name, SKU, or barcode..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoComplete="off"
+          inputMode="search"
+          enterKeyHint="search"
         />
         <select
-          className="rounded-xl border border-border px-3 py-2 text-sm"
+          className="min-h-[44px] w-full rounded-xl border border-border px-3 py-2 text-sm sm:w-auto"
           value={stockStatus}
           onChange={(e) => setStockStatus(e.target.value)}
         >
@@ -347,7 +508,7 @@ export function InventoryPage() {
           <option value="out">Out of stock</option>
         </select>
         <select
-          className="rounded-xl border border-border px-3 py-2 text-sm"
+          className="min-h-[44px] w-full rounded-xl border border-border px-3 py-2 text-sm sm:w-auto"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
         >
@@ -370,83 +531,162 @@ export function InventoryPage() {
           }
         />
       ) : (
-        <div
-          className={`overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)] ${isFetching ? 'opacity-70' : ''}`}
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3">Stock</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {displayedProducts.map((p) => (
-                <tr key={p.id} className="border-b border-border/60 hover:bg-brand-50/30">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-text">{p.name}</p>
-                    <p className="text-xs text-text-muted">{p.barcode || p.sku || '—'}</p>
-                  </td>
-                  <td className="px-4 py-3 font-semibold">{formatMoney(p.sellPrice, currency)}</td>
-                  <td className="px-4 py-3">
-                    {p.trackStock ? (
-                      <span
-                        className={
-                          p.lowStockThreshold &&
-                          parseFloat(p.stockQuantity) <= parseFloat(p.lowStockThreshold)
-                            ? 'text-warning font-semibold'
-                            : ''
-                        }
-                      >
-                        {p.stockQuantity}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={p.isActive ? 'success' : 'default'}>
-                      {p.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {canEdit && (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-danger"
-                          onClick={() => setDeleteTarget(p)}
-                        >
-                          Delete
-                        </Button>
-                      </>
-                    )}
-                    {canAdjust && p.trackStock && (
+        <>
+          {/* Mobile cards */}
+          <div
+            className={`space-y-3 md:hidden ${isFetching ? 'opacity-70' : ''}`}
+          >
+            {displayedProducts.map((p) => (
+              <div
+                key={p.id}
+                className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-card)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-text">{p.name}</p>
+                    <p className="mt-0.5 text-xs text-text-muted">{p.barcode || p.sku || '—'}</p>
+                  </div>
+                  <Badge variant={p.isActive ? 'success' : 'default'}>
+                    {p.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  <p>
+                    <span className="text-text-muted">Price </span>
+                    <span className="font-semibold">{formatMoney(p.sellPrice, currency)}</span>
+                  </p>
+                  <p>
+                    <span className="text-text-muted">Stock </span>
+                    <span
+                      className={
+                        p.trackStock &&
+                        p.lowStockThreshold &&
+                        parseFloat(p.stockQuantity) <= parseFloat(p.lowStockThreshold)
+                          ? 'font-semibold text-warning'
+                          : 'font-semibold'
+                      }
+                    >
+                      {p.trackStock ? p.stockQuantity : '—'}
+                    </span>
+                  </p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {canEdit && (
+                    <>
+                      <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>
+                        Edit
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setSelected(p);
-                          setStockDelta('');
-                          setModal('stock');
-                        }}
+                        className="text-danger"
+                        onClick={() => setDeleteTarget(p)}
                       >
-                        Stock
+                        Delete
                       </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </>
+                  )}
+                  {canAdjust && p.trackStock && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelected(p);
+                        setStockDelta('');
+                        setModal('stock');
+                      }}
+                    >
+                      Stock
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div
+            className={`hidden overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)] md:block ${isFetching ? 'opacity-70' : ''}`}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    <th className="px-4 py-3">Product</th>
+                    <th className="px-4 py-3">Price</th>
+                    <th className="px-4 py-3">Stock</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedProducts.map((p) => (
+                    <tr key={p.id} className="border-b border-border/60 hover:bg-brand-50/30">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-text">{p.name}</p>
+                        <p className="text-xs text-text-muted">{p.barcode || p.sku || '—'}</p>
+                      </td>
+                      <td className="px-4 py-3 font-semibold">
+                        {formatMoney(p.sellPrice, currency)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {p.trackStock ? (
+                          <span
+                            className={
+                              p.lowStockThreshold &&
+                              parseFloat(p.stockQuantity) <= parseFloat(p.lowStockThreshold)
+                                ? 'text-warning font-semibold'
+                                : ''
+                            }
+                          >
+                            {p.stockQuantity}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={p.isActive ? 'success' : 'default'}>
+                          {p.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {canEdit && (
+                          <>
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-danger"
+                              onClick={() => setDeleteTarget(p)}
+                            >
+                              Delete
+                            </Button>
+                          </>
+                        )}
+                        {canAdjust && p.trackStock && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelected(p);
+                              setStockDelta('');
+                              setModal('stock');
+                            }}
+                          >
+                            Stock
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       <Modal
@@ -583,11 +823,7 @@ export function InventoryPage() {
 
       <Modal
         open={importOpen}
-        onClose={() => {
-          setImportOpen(false);
-          setImportPreview(null);
-          setImportRows([]);
-        }}
+        onClose={resetImportState}
         title="Import inventory from CSV"
         size="lg"
         footer={
@@ -595,19 +831,14 @@ export function InventoryPage() {
             <Button variant="ghost" onClick={downloadTemplate}>
               Download template
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setImportOpen(false);
-                setImportPreview(null);
-                setImportRows([]);
-              }}
-            >
+            <Button variant="ghost" onClick={resetImportState}>
               Cancel
             </Button>
             <Button
               loading={importProducts.isPending}
-              disabled={!importPreview || importPreview.count === 0}
+              disabled={
+                importParsing || !importPreview || importPreview.count === 0 || !requiredMapped
+              }
               onClick={() => importProducts.mutate()}
             >
               Import {importPreview?.count ?? 0} product(s)
@@ -615,14 +846,47 @@ export function InventoryPage() {
           </>
         }
       >
-        {importPreview ? (
-          <div className="space-y-3 text-sm">
+        {importParsing ? (
+          <div className="space-y-3 py-6 text-center text-sm text-text-muted">
+            <PageLoader />
+            <p>Reading and matching CSV columns…</p>
+          </div>
+        ) : importPreview ? (
+          <div className="space-y-4 text-sm">
             <p>
-              Ready to import <strong>{importPreview.count}</strong> product row(s). Existing
-              products match by SKU or barcode and will be updated.
+              Ready to import <strong>{importPreview.count}</strong> product row(s)
+              {importPreview.count >= CSV_IMPORT_MAX_ROWS ? ` (max ${CSV_IMPORT_MAX_ROWS})` : ''}.
+              Existing products match by SKU or barcode and will be updated.
             </p>
+
+            {importHeaders.length > 0 && (
+              <div className="rounded-xl border border-border bg-surface-muted/40 p-3">
+                <p className="font-semibold text-text">Match your CSV columns</p>
+                <p className="mt-1 text-xs text-text-muted">
+                  Headings were auto-matched where possible. Fix any wrong matches below so prices
+                  and names do not import into the wrong fields.
+                </p>
+                <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {INVENTORY_CSV_FIELD_META.map((meta) => (
+                    <Select
+                      key={meta.field}
+                      label={`${meta.label}${meta.required ? ' *' : ''}`}
+                      options={columnSelectOptions}
+                      value={String(importMapping[meta.field] ?? -1)}
+                      onChange={(e) => setFieldMapping(meta.field, Number(e.target.value))}
+                    />
+                  ))}
+                </div>
+                {importUnmatched.length > 0 && (
+                  <p className="mt-3 text-xs text-text-muted">
+                    Unused CSV columns (ignored): {importUnmatched.join(', ')}
+                  </p>
+                )}
+              </div>
+            )}
+
             {importPreview.errors.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-800">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950">
                 <p className="font-medium">Parse warnings ({importPreview.errors.length})</p>
                 <ul className="mt-2 max-h-32 list-disc space-y-1 overflow-y-auto pl-4 text-xs">
                   {importPreview.errors.map((err) => (
@@ -631,10 +895,12 @@ export function InventoryPage() {
                 </ul>
               </div>
             )}
-            <p className="text-xs text-text-muted">
-              Columns: name, sku, barcode, sell_price, cost_price, unit, category, brand, supplier,
-              stock_quantity, low_stock_threshold, track_stock, expiry_date
-            </p>
+
+            {!requiredMapped && (
+              <p className="text-xs font-medium text-danger">
+                Map Product name and Sell price before importing.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-text-muted">Select a CSV file to preview import.</p>

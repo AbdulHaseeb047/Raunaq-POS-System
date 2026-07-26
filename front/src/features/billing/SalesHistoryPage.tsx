@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { ReceiptView } from '@/components/billing/ReceiptView';
 import { Badge } from '@/components/ui/Badge';
@@ -11,6 +12,13 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageLoader } from '@/components/ui/Spinner';
+import {
+  DELETE_SALE_REASON_PRESETS,
+  emptyReasonPicker,
+  ReasonPicker,
+  RETURN_REASON_PRESETS,
+  type ReasonPickerValue,
+} from '@/features/billing/ReasonPicker';
 import { api } from '@/lib/api-client';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
@@ -19,7 +27,12 @@ import { printSaleReceipt } from '@/lib/print-receipt';
 import { downloadSaleInvoicePdf, downloadSalesReportPdf } from '@/lib/sales-pdf';
 import type { SaleDetail, SaleListItem } from '@/types/api';
 
+import type { ExchangeSaleLocationState } from './exchange-handoff';
+
 const PAGE_SIZE = 15;
+const EXCHANGE_DEFAULT_REASON = 'Exchange for different item';
+
+type InvoicePanel = 'receipt' | 'return' | 'exchange' | 'void';
 
 function paymentLabel(sale: SaleListItem) {
   if (sale.payments && sale.payments.length > 0) {
@@ -38,6 +51,7 @@ function paymentBadgeVariant(status: string): 'success' | 'warning' | 'danger' |
 
 export function SalesHistoryPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const returnPanelRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
@@ -45,10 +59,12 @@ export function SalesHistoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selected, setSelected] = useState<SaleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [panel, setPanel] = useState<'receipt' | 'return' | 'void'>('receipt');
-  const [voidReason, setVoidReason] = useState('');
+  const [panel, setPanel] = useState<InvoicePanel>('receipt');
+  const [voidReasonPicker, setVoidReasonPicker] = useState<ReasonPickerValue>(emptyReasonPicker());
   const [returnQty, setReturnQty] = useState<Record<string, number>>({});
-  const [returnReason, setReturnReason] = useState('');
+  const [returnReasonPicker, setReturnReasonPicker] = useState<ReasonPickerValue>(
+    emptyReasonPicker(),
+  );
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [confirmReturn, setConfirmReturn] = useState(false);
 
@@ -74,16 +90,41 @@ export function SalesHistoryPage() {
     placeholderData: (prev) => prev,
   });
 
-  const openInvoice = async (saleId: string, startPanel: 'receipt' | 'return' = 'receipt') => {
+  const resetReasonState = (startPanel: InvoicePanel = 'receipt') => {
+    setVoidReasonPicker(emptyReasonPicker());
+    setReturnQty({});
+    setReturnReasonPicker(
+      startPanel === 'exchange'
+        ? emptyReasonPicker(EXCHANGE_DEFAULT_REASON)
+        : emptyReasonPicker(),
+    );
+  };
+
+  const openInvoice = async (
+    saleId: string,
+    startPanel: 'receipt' | 'return' | 'exchange' = 'receipt',
+  ) => {
     setLoadingDetail(true);
     setPanel(startPanel);
     try {
       setSelected(await api.sales.get(saleId));
-      setVoidReason('');
-      setReturnQty({});
-      setReturnReason('');
+      resetReasonState(startPanel);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const openPanel = (next: InvoicePanel) => {
+    setPanel(next);
+    if (next === 'return') {
+      setReturnReasonPicker(emptyReasonPicker());
+    } else if (next === 'exchange') {
+      setReturnReasonPicker(emptyReasonPicker(EXCHANGE_DEFAULT_REASON));
+    } else if (next === 'void') {
+      setVoidReasonPicker(emptyReasonPicker());
+    }
+    if (next === 'return' || next === 'exchange') {
+      window.setTimeout(() => returnPanelRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }
   };
 
@@ -94,11 +135,14 @@ export function SalesHistoryPage() {
     setConfirmReturn(false);
   };
 
+  const voidReason = voidReasonPicker.reason;
+  const returnReason = returnReasonPicker.reason;
+
   const voidSale = useMutation({
     mutationFn: () => api.sales.void(selected!.id, voidReason),
     onSuccess: () => {
       closeInvoice();
-      setVoidReason('');
+      setVoidReasonPicker(emptyReasonPicker());
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
   });
@@ -111,13 +155,36 @@ export function SalesHistoryPage() {
           .filter(([, q]) => q > 0)
           .map(([saleItemId, quantity]) => ({ saleItemId, quantity })),
       }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const wasExchange = panel === 'exchange';
+      const saleSnapshot = selected;
+      const refundAmount = estimatedRefund;
+
+      if (wasExchange && saleSnapshot) {
+        const apiCredit =
+          typeof result?.totalAmount === 'string' || typeof result?.totalAmount === 'number'
+            ? String(result.totalAmount)
+            : String(refundAmount);
+        const state: ExchangeSaleLocationState = {
+          exchangeFromSaleNumber: saleSnapshot.saleNumber,
+          customerId: saleSnapshot.customer?.id ?? null,
+          customerName: saleSnapshot.customer?.name ?? null,
+          creditHint: apiCredit,
+        };
+        closeInvoice();
+        setReturnQty({});
+        setReturnReasonPicker(emptyReasonPicker());
+        void queryClient.invalidateQueries({ queryKey: ['sales'] });
+        navigate('/sale', { state });
+        return;
+      }
+
       if (selected) {
         const refreshed = await api.sales.get(selected.id);
         setSelected(refreshed);
       }
       setReturnQty({});
-      setReturnReason('');
+      setReturnReasonPicker(emptyReasonPicker());
       setConfirmReturn(false);
       setPanel('receipt');
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
@@ -144,13 +211,18 @@ export function SalesHistoryPage() {
     }, 0);
   }, [selected, returnQty]);
 
+  const hasReturnQty = Object.values(returnQty).some((q) => q > 0);
+  const returnReasonReady = returnReason.trim().length > 0;
+  const voidReasonReady = voidReason.trim().length > 0;
+  const isReturnLike = panel === 'return' || panel === 'exchange';
+
   if (isLoading && !data) return <PageLoader />;
 
   return (
     <div>
       <PageHeader
         title="Sales History"
-        subtitle="Click a row to open the invoice — use Return items to process returns"
+        subtitle="Click a row to open the invoice — return, exchange, or delete sale records"
         action={
           <Button
             variant="secondary"
@@ -279,9 +351,11 @@ export function SalesHistoryPage() {
           selected
             ? panel === 'return'
               ? `Return — ${selected.saleNumber}`
-              : panel === 'void'
-                ? `Void — ${selected.saleNumber}`
-                : `Invoice ${selected.saleNumber}`
+              : panel === 'exchange'
+                ? `Exchange — ${selected.saleNumber}`
+                : panel === 'void'
+                  ? `Delete — ${selected.saleNumber}`
+                  : `Invoice ${selected.saleNumber}`
             : 'Invoice'
         }
         size="xl"
@@ -319,37 +393,30 @@ export function SalesHistoryPage() {
                       </Button>
                     )}
                     {canReturnSelected && (
-                      <Button
-                        onClick={() => {
-                          setPanel('return');
-                          window.setTimeout(
-                            () => returnPanelRef.current?.scrollIntoView({ behavior: 'smooth' }),
-                            50,
-                          );
-                        }}
-                      >
-                        Return items
-                      </Button>
+                      <>
+                        <Button onClick={() => openPanel('return')}>Return items</Button>
+                        <Button variant="secondary" onClick={() => openPanel('exchange')}>
+                          Exchange items
+                        </Button>
+                      </>
                     )}
                     {canVoid && selected.status === 'COMPLETED' && (
-                      <Button variant="danger" onClick={() => setPanel('void')}>
-                        Void sale
+                      <Button variant="danger" onClick={() => openPanel('void')}>
+                        Delete sale record
                       </Button>
                     )}
                   </>
                 )}
-                {panel === 'return' && (
+                {isReturnLike && (
                   <>
                     <Button variant="ghost" onClick={() => setPanel('receipt')}>
                       Cancel
                     </Button>
                     <Button
-                      disabled={
-                        !returnReason.trim() || !Object.values(returnQty).some((q) => q > 0)
-                      }
+                      disabled={!returnReasonReady || !hasReturnQty}
                       onClick={() => setConfirmReturn(true)}
                     >
-                      Process return
+                      {panel === 'exchange' ? 'Process exchange' : 'Process return'}
                       {estimatedRefund > 0 ? ` · ${formatMoney(estimatedRefund, currency)}` : ''}
                     </Button>
                   </>
@@ -361,10 +428,10 @@ export function SalesHistoryPage() {
                     </Button>
                     <Button
                       variant="danger"
-                      disabled={!voidReason.trim()}
+                      disabled={!voidReasonReady}
                       onClick={() => setConfirmVoid(true)}
                     >
-                      Confirm void
+                      Confirm delete
                     </Button>
                   </>
                 )}
@@ -375,13 +442,28 @@ export function SalesHistoryPage() {
       >
         {loadingDetail || !selected ? (
           <PageLoader />
-        ) : panel === 'return' ? (
+        ) : isReturnLike ? (
           <div ref={returnPanelRef} className="space-y-4">
-            <div className="rounded-xl border border-brand-200 bg-brand-50/70 p-4">
-              <p className="font-semibold text-brand-900">Return items from this invoice</p>
-              <p className="mt-1 text-sm text-brand-800/80">
-                Enter qty to return for each line, add a reason, then process. Stock is restored for
-                tracked products. The original receipt becomes adjusted.
+            <div
+              className={`rounded-xl border p-4 ${
+                panel === 'exchange'
+                  ? 'border-amber-200 bg-amber-50/80'
+                  : 'border-brand-200 bg-brand-50/70'
+              }`}
+            >
+              <p
+                className={`font-semibold ${panel === 'exchange' ? 'text-amber-950' : 'text-brand-900'}`}
+              >
+                {panel === 'exchange'
+                  ? 'Exchange items from this invoice'
+                  : 'Return items from this invoice'}
+              </p>
+              <p
+                className={`mt-1 text-sm ${panel === 'exchange' ? 'text-amber-900/80' : 'text-brand-800/80'}`}
+              >
+                {panel === 'exchange'
+                  ? 'Select quantities to take back, choose a reason, then continue to the Sale screen to sell the replacement. Stock is restored for tracked products.'
+                  : 'Enter qty to return for each line, choose a reason, then process. Stock is restored for tracked products. The original receipt becomes adjusted.'}
               </p>
             </div>
 
@@ -430,7 +512,9 @@ export function SalesHistoryPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-text-muted">Return qty</span>
+                        <span className="text-xs text-text-muted">
+                          {panel === 'exchange' ? 'Exchange qty' : 'Return qty'}
+                        </span>
                         <Input
                           type="number"
                           min={0}
@@ -453,7 +537,7 @@ export function SalesHistoryPage() {
                     </div>
                     {qty > 0 && (
                       <p className="mt-2 text-right text-sm font-semibold text-brand-800">
-                        Line refund ≈ {formatMoney(unitRefund * qty, currency)}
+                        Line credit ≈ {formatMoney(unitRefund * qty, currency)}
                       </p>
                     )}
                   </div>
@@ -461,16 +545,23 @@ export function SalesHistoryPage() {
               })}
             </div>
 
-            <Input
-              label="Return reason (required)"
-              placeholder="e.g. Customer returned damaged item"
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
+            <ReasonPicker
+              label={panel === 'exchange' ? 'Exchange reason (required)' : 'Return reason (required)'}
+              presets={RETURN_REASON_PRESETS}
+              value={returnReasonPicker}
+              onChange={setReturnReasonPicker}
+              customPlaceholder={
+                panel === 'exchange'
+                  ? 'e.g. Customer wants a different brand'
+                  : 'e.g. Customer returned damaged item'
+              }
             />
 
             {estimatedRefund > 0 && (
               <div className="rounded-xl bg-emerald-50 px-4 py-3 text-right">
-                <p className="text-xs text-emerald-800">Estimated refund</p>
+                <p className="text-xs text-emerald-800">
+                  {panel === 'exchange' ? 'Estimated credit toward replacement' : 'Estimated refund'}
+                </p>
                 <p className="text-2xl font-black text-emerald-900">
                   {formatMoney(estimatedRefund, currency)}
                 </p>
@@ -480,18 +571,19 @@ export function SalesHistoryPage() {
         ) : panel === 'void' ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-              <p className="font-semibold text-rose-900">Void entire sale</p>
+              <p className="font-semibold text-rose-900">Delete sale record</p>
               <p className="mt-1 text-sm text-rose-800">
                 Cancels the whole bill ({formatMoney(selected.grandTotal, currency)}), restores
                 stock, and reverses udhaar if any. Prefer Return items if only some products came
                 back.
               </p>
             </div>
-            <Input
-              label="Void reason (required)"
-              placeholder="Why is this sale being voided?"
-              value={voidReason}
-              onChange={(e) => setVoidReason(e.target.value)}
+            <ReasonPicker
+              label="Delete reason (required)"
+              presets={DELETE_SALE_REASON_PRESETS}
+              value={voidReasonPicker}
+              onChange={setVoidReasonPicker}
+              customPlaceholder="Why is this sale record being deleted?"
             />
           </div>
         ) : (
@@ -514,17 +606,17 @@ export function SalesHistoryPage() {
         open={confirmVoid}
         onClose={() => setConfirmVoid(false)}
         onConfirm={() => voidSale.mutate()}
-        title="Void entire sale?"
+        title="Delete sale record?"
         message={
           selected ? (
             <>
-              Void sale <strong className="text-text">{selected.saleNumber}</strong> for{' '}
+              Delete sale record <strong className="text-text">{selected.saleNumber}</strong> for{' '}
               {formatMoney(selected.grandTotal, currency)}? Stock will be restored and udhaar
               entries reversed. Reason: {voidReason}
             </>
           ) : null
         }
-        confirmLabel="Void sale"
+        confirmLabel="Delete sale record"
         loading={voidSale.isPending}
       />
 
@@ -532,15 +624,24 @@ export function SalesHistoryPage() {
         open={confirmReturn}
         onClose={() => setConfirmReturn(false)}
         onConfirm={() => partialReturn.mutate()}
-        title="Process return?"
+        title={panel === 'exchange' ? 'Process exchange?' : 'Process return?'}
         message={
-          <>
-            Refund about{' '}
-            <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
-            Selected quantities will return to stock (if tracked). This cannot be undone.
-          </>
+          panel === 'exchange' ? (
+            <>
+              Take back items worth about{' '}
+              <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
+              Stock will be restored, then you will open the Sale screen to sell the replacement.
+              Reason: {returnReason}
+            </>
+          ) : (
+            <>
+              Refund about{' '}
+              <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
+              Selected quantities will return to stock (if tracked). Reason: {returnReason}
+            </>
+          )
         }
-        confirmLabel="Process return"
+        confirmLabel={panel === 'exchange' ? 'Continue to Sale' : 'Process return'}
         loading={partialReturn.isPending}
       />
     </div>

@@ -1,7 +1,8 @@
+import { randomBytes, randomUUID } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { prisma } from '../core/prisma.js';
-import { ConflictError } from '../core/errors.js';
 import { hashPassword } from '../auth/auth.service.js';
 
 export async function getAdminDashboard() {
@@ -112,28 +113,23 @@ export async function listSalesReps() {
 }
 
 export const createSalesRepSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
   fullName: z.string().min(1).max(255),
 });
 
 export async function createSalesRep(input: z.infer<typeof createSalesRepSchema>) {
-  const existing = await prisma.user.findFirst({
-    where: { email: input.email.toLowerCase(), tenantId: null, deletedAt: null },
-  });
-  if (existing) {
-    throw new ConflictError('Email already in use');
-  }
+  // Sales reps are attribution labels only — credentials are generated and unused for login.
+  const email = `rep-${randomUUID()}@internal.local`;
+  const password = randomBytes(32).toString('base64url');
 
   const user = await prisma.user.create({
     data: {
-      email: input.email.toLowerCase(),
-      passwordHash: await hashPassword(input.password),
-      fullName: input.fullName,
+      email,
+      passwordHash: await hashPassword(password),
+      fullName: input.fullName.trim(),
       role: 'SUPER_ADMIN',
       tenantId: null,
       isSalesRep: true,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
   });
 

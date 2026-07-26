@@ -27,7 +27,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Sales register (cart, barcode, search)',
       'Cash Sale / Full Udhaar / Split Udhaar',
       'Sales history (view only)',
-      'Void sale & partial returns',
+      'Delete sale record & partial returns',
       'Stock tracking + low-stock alerts',
       'Basic receipt print',
     ],

@@ -170,7 +170,7 @@ export function CustomersPage() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
-      <div className="lg:col-span-2">
+      <div className={`lg:col-span-2 ${selected ? 'hidden lg:block' : ''}`}>
         <PageHeader
           title="Udhaar accounts"
           subtitle="All customers with credit balances — select to view trades"
@@ -236,13 +236,21 @@ export function CustomersPage() {
         </div>
       </div>
 
-      <div className="lg:col-span-3">
+      <div className={`lg:col-span-3 ${!selected ? 'hidden lg:block' : ''}`}>
         {!selected ? (
           <Card className="flex h-64 items-center justify-center text-text-muted">
             Select a customer to view ledger statement
           </Card>
         ) : (
           <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mb-3 lg:hidden"
+              onClick={() => setSelected(null)}
+            >
+              ← Back to customers
+            </Button>
             <Card className="mb-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -349,7 +357,8 @@ export function CustomersPage() {
                   <PageLoader />
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border">
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-sm">
                       <thead>
                         <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
                           <th className="px-4 py-3">Description</th>
@@ -429,6 +438,7 @@ export function CustomersPage() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 )}
               </Card>

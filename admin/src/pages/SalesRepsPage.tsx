@@ -7,7 +7,7 @@ import { ApiError, api } from '@/lib/api';
 export function SalesRepsPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', fullName: '' });
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
 
   const { data, isLoading } = useQuery({
@@ -16,10 +16,10 @@ export function SalesRepsPage() {
   });
 
   const createRep = useMutation({
-    mutationFn: () => api.admin.createSalesRep(form),
+    mutationFn: () => api.admin.createSalesRep({ fullName }),
     onSuccess: () => {
       setOpen(false);
-      setForm({ email: '', password: '', fullName: '' });
+      setFullName('');
       setError('');
       void queryClient.invalidateQueries({ queryKey: ['sales-reps'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
@@ -53,7 +53,6 @@ export function SalesRepsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-semibold">{r.fullName}</p>
-                <p className="text-sm text-slate-500">{r.email}</p>
               </div>
               <Badge tone={r.isActive ? 'success' : 'danger'}>
                 {r.isActive ? 'Active' : 'Inactive'}
@@ -69,31 +68,13 @@ export function SalesRepsPage() {
         <div className="space-y-3">
           <Input
             placeholder="Full name"
-            value={form.fullName}
-            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-          />
-          <Input
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <Input
-            type="password"
-            placeholder="Temporary password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
           />
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button
-            disabled={createRep.isPending}
-            onClick={() => {
-              if (form.password.length < 8) {
-                setError('Password must be at least 8 characters');
-                return;
-              }
-              createRep.mutate();
-            }}
+            disabled={createRep.isPending || !fullName.trim()}
+            onClick={() => createRep.mutate()}
           >
             Create
           </Button>

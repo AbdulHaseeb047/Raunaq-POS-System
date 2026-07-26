@@ -122,7 +122,8 @@ export function ReportsPage() {
 
   const currency = settings?.currency ?? 'PKR';
   const salesVisuals = [
-    { label: 'Revenue', value: toNumber(summary?.revenue), color: 'bg-brand-600' },
+    { label: 'Net revenue', value: toNumber(summary?.revenue), color: 'bg-brand-600' },
+    { label: 'Returns', value: toNumber(summary?.returnsAmount), color: 'bg-orange-500' },
     { label: 'Gross Profit', value: toNumber(summary?.grossProfit), color: 'bg-emerald-500' },
     { label: 'Tax', value: toNumber(summary?.taxTotal), color: 'bg-sky-500' },
     { label: 'Discount', value: toNumber(summary?.discountTotal), color: 'bg-rose-500' },
@@ -142,8 +143,11 @@ export function ReportsPage() {
       ['Metric', 'Value'],
       ['From', dates.from],
       ['To', dates.to],
-      ['Revenue', summary?.revenue ?? '0'],
+      ['Gross revenue', summary?.grossRevenue ?? '0'],
+      ['Returns', summary?.returnsAmount ?? '0'],
+      ['Net revenue', summary?.revenue ?? '0'],
       ['Transactions', String(summary?.transactionCount ?? 0)],
+      ['Return slips', String(summary?.returnsCount ?? 0)],
       ['Average ticket', summary?.averageTicket ?? '0'],
       ['Discount given', summary?.discountTotal ?? '0'],
       ['Tax collected', summary?.taxTotal ?? '0'],
@@ -212,10 +216,23 @@ export function ReportsPage() {
 
       <Card className="mb-6">
         <CardHeader title="Sales summary" subtitle={`${dates.from} to ${dates.to}`} />
-        <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-xl bg-brand-50 px-4 py-3">
-            <p className="text-xs text-text-muted">Revenue</p>
+            <p className="text-xs text-text-muted">Net revenue</p>
             <p className="text-xl font-bold">{formatMoney(summary?.revenue ?? '0', currency)}</p>
+            <p className="mt-1 text-[10px] text-text-muted">
+              Gross {formatMoney(summary?.grossRevenue ?? summary?.revenue ?? '0', currency)} −
+              returns
+            </p>
+          </div>
+          <div className="rounded-xl bg-orange-50 px-4 py-3">
+            <p className="text-xs text-text-muted">Returns</p>
+            <p className="text-xl font-bold text-orange-800">
+              {formatMoney(summary?.returnsAmount ?? '0', currency)}
+            </p>
+            <p className="mt-1 text-[10px] text-text-muted">
+              {summary?.returnsCount ?? 0} slip{(summary?.returnsCount ?? 0) === 1 ? '' : 's'}
+            </p>
           </div>
           <div className="rounded-xl bg-surface-muted px-4 py-3">
             <p className="text-xs text-text-muted">Transactions</p>
@@ -278,7 +295,8 @@ export function ReportsPage() {
         </div>
         {(summary?.topProducts?.length ?? 0) > 0 && (
           <div className="overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
                   <th className="px-4 py-3">Top products</th>
@@ -296,6 +314,7 @@ export function ReportsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Card>
@@ -318,7 +337,8 @@ export function ReportsPage() {
               />
             ))}
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
                 <th className="px-4 py-3">Rule</th>
@@ -338,13 +358,15 @@ export function ReportsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 
       {canStaffPerf && (staffPerf?.length ?? 0) > 0 && (
         <Card className="mb-6">
           <CardHeader title="Staff performance" subtitle="Sales by cashier" />
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
                 <th className="px-4 py-3">Cashier</th>
@@ -362,6 +384,7 @@ export function ReportsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 
@@ -379,7 +402,8 @@ export function ReportsPage() {
             </ul>
           </div>
         )}
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
               <th className="px-4 py-3">Product</th>
@@ -399,6 +423,7 @@ export function ReportsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
 
       <Card className="mb-6">
@@ -418,7 +443,8 @@ export function ReportsPage() {
             <p className="text-xl font-bold">{daily?.transactionCount ?? 0}</p>
           </div>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
               <th className="px-4 py-3">Sale #</th>
@@ -438,6 +464,7 @@ export function ReportsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
 
       <Card>
@@ -455,7 +482,8 @@ export function ReportsPage() {
             </div>
           ))}
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
               <th className="px-4 py-3">Customer</th>
@@ -479,6 +507,7 @@ export function ReportsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

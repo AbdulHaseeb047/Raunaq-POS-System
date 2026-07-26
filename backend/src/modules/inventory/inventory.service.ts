@@ -424,14 +424,12 @@ function serializeProduct(p: {
   };
 }
 
-async function resolveRelationByName<T extends { id: string; name: string }>(
-  items: T[],
-  name: string | null | undefined,
-): Promise<string | null> {
-  if (!name?.trim()) return null;
-  const normalized = name.trim().toLowerCase();
-  const match = items.find((item) => item.name.toLowerCase() === normalized);
-  return match?.id ?? null;
+function buildNameIdMap(items: Array<{ id: string; name: string }>): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const item of items) {
+    map.set(item.name.trim().toLowerCase(), item.id);
+  }
+  return map;
 }
 
 export async function importProducts(
@@ -451,33 +449,52 @@ export async function importProducts(
       where: { tenantId, deletedAt: null },
       select: { id: true, name: true },
     }),
-    prisma.product.findMany({ where: { tenantId, deletedAt: null } }),
+    prisma.product.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, sku: true, barcode: true },
+    }),
   ]);
+
+  const categoryByName = buildNameIdMap(categories);
+  const brandByName = buildNameIdMap(brands);
+  const supplierByName = buildNameIdMap(suppliers);
+  const byBarcode = new Map<string, string>();
+  const bySku = new Map<string, string>();
+  for (const p of existingProducts) {
+    if (p.barcode) byBarcode.set(p.barcode.trim().toLowerCase(), p.id);
+    if (p.sku) bySku.set(p.sku.trim().toLowerCase(), p.id);
+  }
+
+  const resolveName = (map: Map<string, string>, name: string | null | undefined) => {
+    if (!name?.trim()) return null;
+    return map.get(name.trim().toLowerCase()) ?? null;
+  };
 
   let created = 0;
   let updated = 0;
   let skipped = 0;
   const errors: Array<{ row: number; message: string }> = [];
+  const maxErrors = 50;
 
   for (let i = 0; i < input.rows.length; i++) {
     const row = input.rows[i]!;
     try {
-      const categoryId = await resolveRelationByName(categories, row.categoryName);
-      const brandId = await resolveRelationByName(brands, row.brandName);
-      const supplierId = await resolveRelationByName(suppliers, row.supplierName);
+      const categoryId = resolveName(categoryByName, row.categoryName);
+      const brandId = resolveName(brandByName, row.brandName);
+      const supplierId = resolveName(supplierByName, row.supplierName);
 
-      const existing = existingProducts.find((p) => {
-        if (row.barcode?.trim() && p.barcode === row.barcode.trim()) return true;
-        if (row.sku?.trim() && p.sku === row.sku.trim()) return true;
-        return false;
-      });
+      const barcodeKey = row.barcode?.trim().toLowerCase();
+      const skuKey = row.sku?.trim().toLowerCase();
+      const existingId =
+        (barcodeKey ? byBarcode.get(barcodeKey) : undefined) ??
+        (skuKey ? bySku.get(skuKey) : undefined);
 
-      if (existing) {
+      if (existingId) {
         if (!input.updateExisting) {
           skipped++;
           continue;
         }
-        await updateProduct(tenantId, existing.id, {
+        await updateProduct(tenantId, existingId, {
           name: row.name,
           sellPrice: row.sellPrice,
           costPrice: row.costPrice ?? null,
@@ -493,10 +510,13 @@ export async function importProducts(
         });
         if (row.stockQuantity != null) {
           await prisma.product.update({
-            where: { id: existing.id },
+            where: { id: existingId },
             data: { stockQuantity: toDecimal(row.stockQuantity) },
           });
         }
+        // Keep lookup maps current if sku/barcode changed.
+        if (barcodeKey) byBarcode.set(barcodeKey, existingId);
+        if (skuKey) bySku.set(skuKey, existingId);
         updated++;
         continue;
       }
@@ -522,12 +542,16 @@ export async function importProducts(
           data: { stockQuantity: toDecimal(row.stockQuantity) },
         });
       }
+      if (barcodeKey) byBarcode.set(barcodeKey, createdProduct.id);
+      if (skuKey) bySku.set(skuKey, createdProduct.id);
       created++;
     } catch (err) {
-      errors.push({
-        row: i + 1,
-        message: err instanceof Error ? err.message : 'Import failed',
-      });
+      if (errors.length < maxErrors) {
+        errors.push({
+          row: i + 1,
+          message: err instanceof Error ? err.message : 'Import failed',
+        });
+      }
     }
   }
 

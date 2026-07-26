@@ -120,8 +120,8 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
           },
           {
             id: 'staff' as const,
-            label: 'Staff',
-            hint: 'Limits',
+            label: 'Staff limits',
+            hint: 'Discount cap',
             show: canView,
           },
           {
@@ -222,7 +222,7 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
   const active = tabs.find((t) => t.id === tab);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-6">
       <button
         type="button"
         className="absolute inset-0 bg-text/45 backdrop-blur-[2px]"
@@ -234,10 +234,10 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
-        className="relative flex h-[min(720px,92vh)] w-full max-w-4xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+        className="relative flex h-[min(720px,100dvh)] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:h-[min(720px,92vh)] sm:rounded-2xl md:flex-row"
       >
-        {/* Left rail — branded like app sidebar */}
-        <aside className="flex w-[11.5rem] shrink-0 flex-col bg-sidebar text-text-inverse sm:w-56">
+        {/* Left rail — desktop */}
+        <aside className="hidden w-56 shrink-0 flex-col bg-sidebar text-text-inverse md:flex">
           <div className="border-b border-sidebar-border px-3 py-3.5">
             <RaunaqLogo variant="compact" tone="dark" className="scale-90 origin-left" />
             <p className="mt-2.5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-200/75">
@@ -294,8 +294,8 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
         </aside>
 
         {/* Content */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5 sm:py-3.5">
             <div className="min-w-0">
               <h2 className="truncate text-base font-bold text-text">
                 {active?.label ?? 'Settings'}
@@ -312,6 +312,27 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
                 ✕
               </Button>
             </div>
+          </div>
+
+          {/* Mobile tab strip */}
+          <div className="flex gap-1 overflow-x-auto border-b border-border bg-surface-muted/50 px-2 py-2 md:hidden">
+            {tabs.map((item) => {
+              const selected = item.id === tab;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onTabChange(item.id)}
+                  className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    selected
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-white text-text border border-border'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -672,7 +693,9 @@ function StaffPanel({
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-xs text-text-muted">Limits applied to staff logins at the counter.</p>
+      <p className="text-xs text-text-muted">
+        Cap how much discount staff can give at the counter (separate from managing staff accounts).
+      </p>
       <Input
         label="Max discount % for staff"
         type="number"

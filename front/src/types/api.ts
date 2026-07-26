@@ -64,6 +64,8 @@ export interface TokenPair {
 
 export interface DashboardSummary {
   todaySalesTotal: string;
+  /** Gross COMPLETED sales before subtracting returns. */
+  todayGrossSalesTotal?: string;
   todayTransactionCount: number;
   lowStockAlerts: Array<{
     id: string;
@@ -79,7 +81,9 @@ export interface DashboardSummary {
 
 export interface SalesTrendPoint {
   date: string;
+  /** Net sales (gross − returns) for the day. */
   sales: string;
+  grossSales?: string;
   transactions: number;
   returns: string;
 }
@@ -88,7 +92,9 @@ export interface SalesTrendReport {
   from: string;
   to: string;
   days: number;
+  /** Net sales across the period. */
   totalSales: string;
+  totalGrossSales?: string;
   totalTransactions: number;
   totalReturns: string;
   growthPct: number;
@@ -246,6 +252,10 @@ export interface SalesSummaryReport {
   from: string;
   to: string;
   transactionCount: number;
+  returnsCount?: number;
+  grossRevenue?: string;
+  returnsAmount?: string;
+  /** Net revenue after returns. */
   revenue: string;
   cost: string;
   grossProfit: string;

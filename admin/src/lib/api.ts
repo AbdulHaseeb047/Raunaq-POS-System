@@ -215,7 +215,7 @@ export const api = {
   admin: {
     dashboard: () => apiRequest<AdminDashboard>('/admin/dashboard'),
     salesReps: () => apiRequest<SalesRep[]>('/admin/sales-reps'),
-    createSalesRep: (body: { email: string; password: string; fullName: string }) =>
+    createSalesRep: (body: { fullName: string }) =>
       apiRequest<SalesRep>('/admin/sales-reps', { method: 'POST', body: JSON.stringify(body) }),
   },
   tenants: {
