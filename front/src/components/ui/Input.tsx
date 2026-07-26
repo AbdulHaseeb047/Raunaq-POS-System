@@ -34,7 +34,7 @@ export function Input({
         <input
           id={inputId}
           type={inputType}
-          className={`w-full rounded-xl border bg-white px-3 py-2 text-sm text-text placeholder:text-text-muted/60 transition-colors min-h-[38px] focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${
+          className={`w-full rounded-lg border bg-white px-2.5 py-1.5 text-[13px] text-text placeholder:text-text-muted/60 transition-colors min-h-[34px] focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${
             isPassword ? 'pr-11' : ''
           } ${error ? 'border-danger' : 'border-border'} ${className}`}
           {...props}

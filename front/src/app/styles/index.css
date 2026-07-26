@@ -44,8 +44,24 @@
   --radius-card: 1rem;
 }
 
+html {
+  font-size: 14px;
+}
+
 body {
-  @apply bg-surface-muted text-[14px] text-text font-sans antialiased;
+  @apply bg-surface-muted text-[13px] leading-normal text-text font-sans antialiased;
+}
+
+h1 {
+  @apply text-lg font-bold tracking-tight;
+}
+
+h2 {
+  @apply text-base font-semibold tracking-tight;
+}
+
+h3 {
+  @apply text-sm font-semibold;
 }
 
 /* Clickable controls — pointer cursor site-wide */

@@ -494,45 +494,34 @@ export function SalePage() {
     return body;
   };
 
+  const resetRegisterAfterSale = () => {
+    setCart([]);
+    setCustomer(null);
+    setCustomerSearch('');
+    setBillDiscount(0);
+    setDiscountInput('');
+    setSelectedRuleId('');
+    setAppliedDiscounts([]);
+    setNotes('');
+    setPaymentMode('CASH');
+    setAmountReceived('');
+    setCashAmount('');
+    setCreditAmount('');
+    setExchangeBanner(null);
+  };
+
   const completeSale = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.sales.create(body),
     onMutate: () => {
-      // Instant UX: clear register + close modal while the API runs.
-      const snapshot = {
-        cart,
-        customer,
-        customerSearch,
-        billDiscount,
-        discountInput,
-        selectedRuleId,
-        appliedDiscounts,
-        notes,
-        paymentMode,
-        amountReceived,
-        cashAmount,
-        creditAmount,
-      };
       setError('');
       setWarning('');
-      setShowCheckout(false);
-      setCart([]);
-      setCustomer(null);
-      setCustomerSearch('');
-      setBillDiscount(0);
-      setDiscountInput('');
-      setSelectedRuleId('');
-      setAppliedDiscounts([]);
-      setNotes('');
-      setPaymentMode('CASH');
-      setAmountReceived('');
-      setCashAmount('');
-      setCreditAmount('');
-      setExchangeBanner(null);
-      return { ...snapshot, exchangeBanner };
     },
     onSuccess: (result) => {
+      // Only close checkout after the sale is confirmed saved.
+      setShowCheckout(false);
+      resetRegisterAfterSale();
+
       if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
-      setExchangeBanner(null);
 
       const detail = result.detail;
       if (detail) {
@@ -558,23 +547,7 @@ export function SalePage() {
         void queryClient.invalidateQueries({ queryKey: ['products'] });
       }, 0);
     },
-    onError: (err, _vars, snapshot) => {
-      if (snapshot) {
-        setCart(snapshot.cart);
-        setCustomer(snapshot.customer);
-        setCustomerSearch(snapshot.customerSearch);
-        setBillDiscount(snapshot.billDiscount);
-        setDiscountInput(snapshot.discountInput);
-        setSelectedRuleId(snapshot.selectedRuleId);
-        setAppliedDiscounts(snapshot.appliedDiscounts);
-        setNotes(snapshot.notes);
-        setPaymentMode(snapshot.paymentMode);
-        setAmountReceived(snapshot.amountReceived);
-        setCashAmount(snapshot.cashAmount);
-        setCreditAmount(snapshot.creditAmount);
-        setExchangeBanner(snapshot.exchangeBanner);
-      }
-      setShowCheckout(true);
+    onError: (err) => {
       setError(
         err instanceof ApiError
           ? err.message
@@ -760,7 +733,7 @@ export function SalePage() {
 
   return (
     <div
-      className={`relative flex min-h-[calc(100dvh-8.5rem)] flex-col md:h-[calc(100vh-7rem)] md:overflow-hidden ${
+      className={`relative flex min-h-[calc(100dvh-8.5rem)] flex-1 flex-col md:h-full md:min-h-0 md:overflow-hidden ${
         cart.length > 0 ? 'pb-20 lg:pb-0' : ''
       }`}
     >
@@ -844,8 +817,8 @@ export function SalePage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_360px] lg:overflow-hidden xl:grid-cols-[1fr_400px]">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:min-h-0">
           <Card className="border-border/80 bg-white" padding="md">
             <div className="relative" ref={dropdownRef}>
               <IconSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-text-muted" />
@@ -995,12 +968,12 @@ export function SalePage() {
           </Card>
         </div>
 
-        <div className="flex min-h-0 flex-col rounded-2xl border border-border bg-white shadow-sm">
-          <div className="shrink-0 border-b border-border px-4 py-3">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="flex min-h-[320px] flex-col rounded-2xl border border-border bg-white shadow-sm lg:h-full lg:min-h-0">
+          <div className="shrink-0 border-b border-border px-3 py-2.5">
+            <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <IconWallet className="h-4 w-4 text-brand-600" />
-                <h3 className="text-sm font-bold text-text">Shopping Cart</h3>
+                <h3 className="text-sm font-semibold text-text">Shopping Cart</h3>
                 <Badge variant="brand">{cart.length}</Badge>
               </div>
               {cart.length > 0 && (
@@ -1187,10 +1160,10 @@ export function SalePage() {
             </div>
 
             <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
-              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Grand Total
               </span>
-              <span className="text-2xl font-black text-brand-800">
+              <span className="text-xl font-bold text-brand-800">
                 {formatMoney(totals.grandTotal, currency)}
               </span>
             </div>
@@ -1269,18 +1242,33 @@ export function SalePage() {
 
       <Modal
         open={showCheckout}
-        onClose={() => setShowCheckout(false)}
-        title="Payment Checkout"
-        size="lg"
+        onClose={() => {
+          if (completeSale.isPending) return;
+          setShowCheckout(false);
+        }}
+        title={
+          paymentMode === 'CASH'
+            ? 'Cash Sale'
+            : paymentMode === 'CREDIT'
+              ? 'Credit Sale'
+              : paymentMode === 'SPLIT'
+                ? 'Split Payment'
+                : 'Payment Checkout'
+        }
+        size="md"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowCheckout(false)}>
+            <Button
+              variant="ghost"
+              disabled={completeSale.isPending}
+              onClick={() => setShowCheckout(false)}
+            >
               Cancel
             </Button>
             <Button
               variant="primary"
               loading={completeSale.isPending}
-              disabled={!canAuthorize}
+              disabled={!canAuthorize || completeSale.isPending}
               onClick={() => {
                 setError('');
                 if (!cashTenderOk) {
@@ -1305,32 +1293,32 @@ export function SalePage() {
           </>
         }
       >
-        <div className="space-y-5">
-          <div className="rounded-2xl bg-slate-700 px-5 py-5 text-white">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-              Invoice Total
-            </p>
-            <div className="mt-2 flex items-end justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-slate-200">
-                  Customer: {selectedCustomerLabel}
+        <div className="space-y-3">
+          <div className="rounded-xl bg-slate-700 px-3.5 py-3 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                  Invoice total
                 </p>
+                <p className="truncate text-xs text-slate-200">{selectedCustomerLabel}</p>
               </div>
-              <p className="text-4xl font-bold">{formatMoney(totals.grandTotal, currency)}</p>
+              <p className="shrink-0 text-xl font-bold">
+                {formatMoney(totals.grandTotal, currency)}
+              </p>
             </div>
             {exchangeCredit > 0 && (
-              <div className="mt-3 space-y-1 border-t border-slate-500 pt-3 text-sm text-slate-200">
+              <div className="mt-2 space-y-0.5 border-t border-slate-500 pt-2 text-xs text-slate-200">
                 <div className="flex justify-between">
                   <span>Exchange credit</span>
                   <span>−{formatMoney(exchangeApplied, currency)}</span>
                 </div>
                 {exchangeRemaining > 0 && (
                   <div className="flex justify-between text-emerald-300">
-                    <span>Return cash to customer</span>
+                    <span>Return cash</span>
                     <span>{formatMoney(exchangeRemaining, currency)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base font-bold text-white">
+                <div className="flex justify-between font-semibold text-white">
                   <span>{payableAfterExchange > 0 ? 'Cash to collect' : 'Cash to return'}</span>
                   <span>
                     {payableAfterExchange > 0
@@ -1342,24 +1330,13 @@ export function SalePage() {
             )}
           </div>
 
-          {exchangeCredit > 0 ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Exchange checkout uses cash settlement only. Credit covers the returned value; collect
-              only any amount above that.
-            </p>
-          ) : (
+          {/* Payment mode — only when more than cash is available */}
+          {exchangeCredit === 0 && availablePaymentModes.length > 1 && (
             <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-                Select Payment Mode
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Payment mode
               </p>
-              {!customer && (
-                <p className="mb-3 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-muted">
-                  Walk-in sale — cash only. Select an udhaar customer to enable credit options.
-                </p>
-              )}
-              <div
-                className={`grid gap-3 ${availablePaymentModes.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}
-              >
+              <div className="grid grid-cols-3 gap-2">
                 {availablePaymentModes.map((mode) => (
                   <button
                     key={mode}
@@ -1375,22 +1352,13 @@ export function SalePage() {
                         setCreditAmount('');
                       }
                     }}
-                    className={`rounded-2xl border px-4 py-5 text-center transition ${
+                    className={`rounded-xl border px-2 py-2 text-center text-xs font-semibold transition ${
                       paymentMode === mode
-                        ? 'border-brand-700 bg-brand-50 shadow-sm'
-                        : 'border-border bg-surface-muted'
+                        ? 'border-brand-700 bg-brand-50 text-brand-800'
+                        : 'border-border bg-surface-muted text-text'
                     }`}
                   >
-                    <div className="mb-2 flex justify-center">
-                      <IconWallet
-                        className={`h-5 w-5 ${paymentMode === mode ? 'text-brand-700' : 'text-text-muted'}`}
-                      />
-                    </div>
-                    <p
-                      className={`text-sm font-semibold ${paymentMode === mode ? 'text-brand-800' : 'text-text'}`}
-                    >
-                      {paymentModeLabels[mode]}
-                    </p>
+                    {paymentModeLabels[mode]}
                   </button>
                 ))}
               </div>
@@ -1399,7 +1367,7 @@ export function SalePage() {
 
           {paymentMode === 'CASH' && cashDue === 0 && exchangeCredit > 0 && (
             <div
-              className={`rounded-2xl border px-4 py-4 text-sm ${
+              className={`rounded-xl border px-3 py-3 text-sm ${
                 exchangeRemaining > 0
                   ? 'border-emerald-400 bg-emerald-50 text-emerald-950'
                   : 'border-emerald-300 bg-emerald-50 text-emerald-900'
@@ -1407,28 +1375,20 @@ export function SalePage() {
             >
               {exchangeRemaining > 0 ? (
                 <>
-                  <p className="text-base font-bold">Return cash to customer</p>
-                  <p className="mt-2 text-3xl font-black text-emerald-800">
+                  <p className="text-sm font-semibold">Return cash to customer</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-800">
                     {formatMoney(exchangeRemaining, currency)}
-                  </p>
-                  <p className="mt-2">
-                    Exchange credit {formatMoney(exchangeCredit, currency)} − replacement bill{' '}
-                    {formatMoney(totals.grandTotal, currency)}. Hand this amount back from the cash
-                    counter.
                   </p>
                 </>
               ) : (
-                <>
-                  <p className="font-semibold">No cash to collect or return</p>
-                  <p className="mt-1">Replacement matches the exchange credit exactly.</p>
-                </>
+                <p className="text-sm font-medium">No cash to collect or return</p>
               )}
             </div>
           )}
 
           {paymentMode === 'CASH' && cashDue > 0 && (
-            <div className="rounded-2xl border border-slate-400 px-4 py-4">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 {exchangeCredit > 0
                   ? `Extra cash to collect (${currency})`
                   : `Amount received from customer (${currency})`}
@@ -1441,8 +1401,9 @@ export function SalePage() {
                 onChange={(e) => setAmountReceived(e.target.value)}
                 placeholder={`Due: ${formatMoney(cashDue, currency)}`}
                 autoFocus={prefersDesktopInput()}
+                className="text-base font-semibold"
               />
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <Button
                   size="sm"
                   variant="secondary"
@@ -1463,99 +1424,87 @@ export function SalePage() {
                   </Button>
                 ))}
               </div>
-              {(parseFloat(amountReceived) > 0 || exchangeCredit > 0) && (
-                <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3">
-                  {exchangeCredit > 0 && (
-                    <div className="mb-1 flex justify-between text-sm text-emerald-900">
+              <div className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+                {exchangeCredit > 0 && (
+                  <>
+                    <div className="mb-1 flex justify-between">
                       <span>Bill total</span>
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         {formatMoney(totals.grandTotal, currency)}
                       </span>
                     </div>
-                  )}
-                  {exchangeCredit > 0 && (
-                    <div className="mb-1 flex justify-between text-sm text-emerald-900">
+                    <div className="mb-1 flex justify-between">
                       <span>Exchange credit</span>
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         −{formatMoney(exchangeApplied, currency)}
                       </span>
                     </div>
-                  )}
-                  <div className="flex justify-between text-sm text-emerald-900">
-                    <span>{exchangeCredit > 0 ? 'Cash due' : 'Bill total'}</span>
-                    <span className="font-semibold">{formatMoney(cashDue, currency)}</span>
-                  </div>
-                  {parseFloat(amountReceived) > 0 && (
-                    <>
-                      <div className="mt-1 flex justify-between text-sm text-emerald-900">
-                        <span>Received</span>
-                        <span className="font-semibold">
-                          {formatMoney(amountReceived, currency)}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex justify-between border-t border-emerald-200 pt-2 text-lg font-black text-emerald-800">
-                        <span>Change back</span>
-                        <span>{formatMoney(changeDue, currency)}</span>
-                      </div>
-                    </>
-                  )}
+                  </>
+                )}
+                <div className="flex justify-between">
+                  <span>{exchangeCredit > 0 ? 'Cash due' : 'Bill total'}</span>
+                  <span className="font-medium">{formatMoney(cashDue, currency)}</span>
                 </div>
-              )}
+                <div className="mt-1 flex justify-between">
+                  <span>Received</span>
+                  <span className="font-medium">
+                    {formatMoney(parseFloat(amountReceived) || 0, currency)}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex justify-between border-t border-emerald-200 pt-1.5 text-base font-bold text-emerald-800">
+                  <span>Change back</span>
+                  <span>{formatMoney(changeDue, currency)}</span>
+                </div>
+              </div>
             </div>
           )}
 
           {paymentMode === 'CREDIT' && (
-            <div className="rounded-2xl border border-brand-200 bg-brand-50/70 px-4 py-4 text-sm text-brand-900">
+            <div className="rounded-xl border border-brand-200 bg-brand-50/70 px-3 py-2.5 text-sm text-brand-900">
               Full invoice will be posted to customer udhaar.
             </div>
           )}
 
           {paymentMode === 'SPLIT' && (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-400 px-4 py-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Cash customer is giving now ({currency})
-                </p>
-                <Input
-                  type="number"
-                  min={0}
-                  max={totals.grandTotal}
-                  step="1"
-                  value={cashAmount}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setCashAmount(raw);
-                    const cash = Math.min(
-                      Math.max(0, parseFloat(raw) || 0),
-                      totals.grandTotal,
-                    );
-                    const credit = Math.max(
-                      0,
-                      Math.round((totals.grandTotal - cash) * 100) / 100,
-                    );
-                    setCreditAmount(String(credit));
-                    setAmountReceived(raw === '' ? '' : String(cash));
-                  }}
-                  placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
-                  autoFocus={prefersDesktopInput()}
-                />
-                <p className="mt-2 text-xs text-text-muted">
-                  Enter cash paid now once. Remaining is saved as udhaar automatically.
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Cash customer is giving now ({currency})
+              </p>
+              <Input
+                type="number"
+                min={0}
+                max={totals.grandTotal}
+                step="1"
+                value={cashAmount}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setCashAmount(raw);
+                  const cash = Math.min(
+                    Math.max(0, parseFloat(raw) || 0),
+                    totals.grandTotal,
+                  );
+                  const credit = Math.max(
+                    0,
+                    Math.round((totals.grandTotal - cash) * 100) / 100,
+                  );
+                  setCreditAmount(String(credit));
+                  setAmountReceived(raw === '' ? '' : String(cash));
+                }}
+                placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
+                autoFocus={prefersDesktopInput()}
+              />
+              <div className="rounded-xl bg-brand-50 px-3 py-2.5 text-sm text-brand-900">
                 <div className="flex justify-between">
                   <span>Bill total</span>
-                  <span className="font-semibold">{formatMoney(totals.grandTotal, currency)}</span>
+                  <span className="font-medium">{formatMoney(totals.grandTotal, currency)}</span>
                 </div>
                 <div className="mt-1 flex justify-between">
                   <span>Cash now</span>
-                  <span className="font-semibold">
+                  <span className="font-medium">
                     {formatMoney(parseFloat(cashAmount) || 0, currency)}
                   </span>
                 </div>
-                <div className="mt-2 flex justify-between border-t border-brand-200 pt-2 text-base font-bold">
+                <div className="mt-1.5 flex justify-between border-t border-brand-200 pt-1.5 font-bold">
                   <span>Remaining on udhaar</span>
                   <span>
                     {formatMoney(
@@ -1572,15 +1521,6 @@ export function SalePage() {
               </div>
             </div>
           )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              className="sm:col-span-2"
-              label="Notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
 
           {creditLimitWarning && (
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800">

@@ -241,10 +241,10 @@ export function AppShell() {
 
   return (
     <SettingsDialogProvider>
-      <div className="flex min-h-screen bg-surface-muted">
+      <div className="flex h-dvh min-h-0 bg-surface-muted md:h-screen">
         {/* Desktop sidebar */}
         <aside
-          className={`sidebar-shell sticky top-0 z-30 hidden h-screen shrink-0 flex-col bg-sidebar font-sans antialiased text-text-inverse transition-[width] duration-200 ease-in-out md:flex ${
+          className={`sidebar-shell sticky top-0 z-30 hidden h-full shrink-0 flex-col bg-sidebar font-sans antialiased text-text-inverse transition-[width] duration-200 ease-in-out md:flex ${
             collapsed ? 'w-[4.75rem]' : 'w-[15.5rem]'
           }`}
         >
@@ -285,7 +285,7 @@ export function AppShell() {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Mobile top bar */}
           <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-surface px-3 py-2 md:hidden">
             <button
@@ -330,7 +330,7 @@ export function AppShell() {
           <TrialBanner />
           <SyncBanner />
 
-          <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
+          <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 lg:p-5">
             <Outlet />
           </main>
         </div>
