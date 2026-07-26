@@ -36,6 +36,9 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=shared
 
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace=backend
+
       - name: Check formatting
         run: npm run format:check
 
@@ -57,6 +60,5 @@ jobs:
           JWT_SECRET: test-jwt-secret
           JWT_REFRESH_SECRET: test-jwt-refresh-secret
         run: |
-          npm run db:generate --workspace=backend
           npx prisma migrate deploy --schema=backend/prisma/schema.prisma
           npm run test --workspace=backend
