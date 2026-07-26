@@ -8,6 +8,8 @@ export const createSupportQuerySchema = z.object({
   topic: z.enum(['billing', 'technical', 'feature', 'account', 'other']),
   subject: z.string().trim().min(3).max(200),
   message: z.string().trim().min(10).max(4000),
+  /** Email where support should reply — may differ from login email. */
+  contactEmail: z.string().trim().email().max(255),
 });
 
 export type CreateSupportQueryInput = z.infer<typeof createSupportQuerySchema>;
@@ -72,6 +74,7 @@ export async function createSupportQuery(
   const shopName = settings?.businessName?.trim() || tenant?.name || 'Unknown shop';
   const topicLabel = TOPIC_LABELS[input.topic];
   const createdAt = row.createdAt.toISOString();
+  const contactEmail = input.contactEmail.trim().toLowerCase();
 
   const text = [
     'New Raunaq POS help request',
@@ -84,7 +87,9 @@ export async function createSupportQuery(
     `Shop: ${shopName}`,
     tenant?.slug ? `Tenant slug: ${tenant.slug}` : null,
     `Tenant ID: ${tenantId}`,
-    `From: ${user.fullName} <${user.email}>`,
+    `From: ${user.fullName}`,
+    `Contact email (reply here): ${contactEmail}`,
+    `Account email: ${user.email}`,
     `User ID: ${user.id}`,
     '',
     'Message:',
@@ -106,7 +111,9 @@ export async function createSupportQuery(
       <p style="margin: 0 0 8px;"><strong>Shop:</strong> ${escapeHtml(shopName)}</p>
       ${tenant?.slug ? `<p style="margin: 0 0 8px;"><strong>Tenant slug:</strong> ${escapeHtml(tenant.slug)}</p>` : ''}
       <p style="margin: 0 0 8px;"><strong>Tenant ID:</strong> ${escapeHtml(tenantId)}</p>
-      <p style="margin: 0 0 8px;"><strong>From:</strong> ${escapeHtml(user.fullName)} &lt;${escapeHtml(user.email)}&gt;</p>
+      <p style="margin: 0 0 8px;"><strong>From:</strong> ${escapeHtml(user.fullName)}</p>
+      <p style="margin: 0 0 8px;"><strong>Contact email (reply here):</strong> ${escapeHtml(contactEmail)}</p>
+      <p style="margin: 0 0 8px;"><strong>Account email:</strong> ${escapeHtml(user.email)}</p>
       <p style="margin: 0 0 16px;"><strong>User ID:</strong> ${escapeHtml(user.id)}</p>
       <hr style="border: none; border-top: 1px solid #d1e7e2; margin: 16px 0;" />
       <p style="margin: 0 0 8px;"><strong>Message</strong></p>
@@ -117,7 +124,7 @@ export async function createSupportQuery(
 
   await sendSupportQueryEmail({
     to: getSupportInboxEmail(),
-    replyTo: user.email,
+    replyTo: contactEmail,
     subject: `[Raunaq Help] ${input.topic} — ${input.subject}`,
     text,
     html,

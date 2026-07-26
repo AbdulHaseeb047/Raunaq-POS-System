@@ -523,7 +523,12 @@ export const api = {
   },
 
   support: {
-    createQuery: (body: { topic: string; subject: string; message: string }) =>
+    createQuery: (body: {
+      topic: string;
+      subject: string;
+      message: string;
+      contactEmail: string;
+    }) =>
       apiRequest<{
         id: string;
         topic: string;

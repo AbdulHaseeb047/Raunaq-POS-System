@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -26,10 +26,17 @@ type Topic = (typeof TOPICS)[number]['value'];
 export function SupportPage() {
   const { user } = useAuth();
   const [topic, setTopic] = useState<Topic>('technical');
+  const [contactEmail, setContactEmail] = useState(user?.email ?? '');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user?.email && !contactEmail.trim()) {
+      setContactEmail(user.email);
+    }
+  }, [user?.email, contactEmail]);
 
   const submit = useMutation({
     mutationFn: () =>
@@ -37,6 +44,7 @@ export function SupportPage() {
         topic,
         subject: subject.trim(),
         message: message.trim(),
+        contactEmail: contactEmail.trim(),
       }),
     onSuccess: (row) => {
       setError('');
@@ -52,6 +60,11 @@ export function SupportPage() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    const email = contactEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter a valid email so we can reply to you.');
+      return;
+    }
     if (subject.trim().length < 3 || message.trim().length < 10) {
       setError('Add a short subject and a bit more detail (at least a sentence).');
       return;
@@ -63,7 +76,11 @@ export function SupportPage() {
     [
       'Hi, I need help with Raunaq POS.',
       user?.fullName ? `Name: ${user.fullName}` : null,
-      user?.email ? `Email: ${user.email}` : null,
+      contactEmail.trim()
+        ? `Email: ${contactEmail.trim()}`
+        : user?.email
+          ? `Email: ${user.email}`
+          : null,
       `Topic: ${TOPICS.find((t) => t.value === topic)?.label ?? topic}`,
       subject.trim() ? `Subject: ${subject.trim()}` : null,
     ]
@@ -72,166 +89,188 @@ export function SupportPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="relative overflow-hidden rounded-3xl border border-brand-200/80 bg-gradient-to-br from-brand-50 via-surface to-surface px-5 py-7 sm:px-8 sm:py-9">
-        <div
-          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand-300/25 blur-3xl"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-24 left-10 h-48 w-48 rounded-full bg-brand-400/20 blur-3xl"
-          aria-hidden
-        />
-        <div className="relative">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700/80">
-            Get help · NexMind Systems
-          </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-text sm:text-3xl">
-            We&apos;re here when you need us
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
-            Send a quick message or chat on WhatsApp. Same team, same day responses during business
-            hours.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <TrustChip>Usually replies within a few hours</TrustChip>
-            <TrustChip>WhatsApp for urgent help</TrustChip>
-            <TrustChip>Secure — tied to your shop account</TrustChip>
+    <div className="relative w-full min-w-0">
+      <div
+        className="pointer-events-none absolute inset-0 -mx-3 -my-3 rounded-none bg-gradient-to-br from-brand-100/50 via-transparent to-brand-50/40 sm:-mx-4 lg:-mx-5"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -left-8 top-0 h-40 w-40 rounded-full bg-brand-300/20 blur-3xl sm:h-52 sm:w-52"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -right-6 bottom-10 h-36 w-36 rounded-full bg-brand-400/15 blur-3xl"
+        aria-hidden
+      />
+
+      <div className="relative w-full min-w-0 space-y-5">
+        <div className="relative overflow-hidden rounded-2xl border border-brand-200/80 bg-gradient-to-br from-brand-50 via-surface to-brand-50/30 px-4 py-5 sm:px-6 sm:py-6">
+          <div
+            className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-brand-300/30 blur-3xl"
+            aria-hidden
+          />
+          <div className="relative">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-700/80">
+              Get help · NexMind Systems
+            </p>
+            <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:text-2xl">
+              We&apos;re here when you need us
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-text-muted">
+              Send a quick message or chat on WhatsApp. Same team, same day responses during
+              business hours.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <TrustChip>Usually replies within a few hours</TrustChip>
+              <TrustChip>WhatsApp for urgent help</TrustChip>
+              <TrustChip>Secure — tied to your shop account</TrustChip>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
-        <section className="rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
-          <div className="mb-5">
-            <h2 className="text-base font-bold text-text">Send a message</h2>
-            <p className="mt-1 text-xs text-text-muted">
-              Takes under a minute. We&apos;ll follow up by email or WhatsApp.
-            </p>
-          </div>
-
-          {submittedId ? (
-            <div className="rounded-2xl border border-brand-200 bg-brand-50/70 px-4 py-6 text-center">
-              <p className="text-sm font-bold text-brand-900">Message sent</p>
-              <p className="mt-1 text-xs text-brand-800/80">
-                Thanks{user?.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}. Our team has your
-                query and will get back soon.
+        <div className="grid w-full gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <section className="min-w-0 rounded-2xl border border-border bg-surface/95 p-4 shadow-[var(--shadow-card)] sm:p-5">
+            <div className="mb-4">
+              <h2 className="text-sm font-bold text-text">Send a message</h2>
+              <p className="mt-0.5 text-xs text-text-muted">
+                Takes under a minute. We&apos;ll follow up by email or WhatsApp.
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Button size="sm" variant="secondary" onClick={() => setSubmittedId(null)}>
-                  Send another
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => window.open(SUPPORT_WHATSAPP_URL, '_blank', 'noopener,noreferrer')}
-                >
-                  Also chat on WhatsApp
-                </Button>
-              </div>
             </div>
-          ) : (
-            <form className="space-y-3.5" onSubmit={onSubmit}>
-              <div className="grid gap-3 sm:grid-cols-2">
+
+            {submittedId ? (
+              <div className="rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-5 text-center">
+                <p className="text-sm font-bold text-brand-900">Message sent</p>
+                <p className="mt-1 text-xs text-brand-800/80">
+                  Thanks{user?.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}. Our team has
+                  your query and will get back soon.
+                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setSubmittedId(null)}>
+                    Send another
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      window.open(SUPPORT_WHATSAPP_URL, '_blank', 'noopener,noreferrer')
+                    }
+                  >
+                    Also chat on WhatsApp
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form className="space-y-3" onSubmit={onSubmit}>
                 <Input label="Your name" value={user?.fullName ?? ''} readOnly disabled />
-                <Input label="Email" value={user?.email ?? ''} readOnly disabled />
-              </div>
-
-              <Select
-                label="What do you need help with?"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value as Topic)}
-                options={TOPICS.map((t) => ({ value: t.value, label: t.label }))}
-              />
-
-              <Input
-                label="Subject"
-                placeholder="e.g. Receipt printer not connecting"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                maxLength={200}
-                required
-              />
-
-              <div className="space-y-1">
-                <label htmlFor="support-message" className="block text-xs font-medium text-text">
-                  Message
-                </label>
-                <textarea
-                  id="support-message"
-                  rows={5}
-                  maxLength={4000}
+                <Input
+                  label="Your email (for reply)"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
                   required
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Briefly describe what happened and what you need…"
-                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text placeholder:text-text-muted/60 transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                 />
-                <p className="text-[11px] text-text-muted">{message.trim().length}/4000</p>
+                <p className="-mt-1.5 text-[11px] text-text-muted">
+                  We&apos;ll reply here. Change it if your login email is not the one you check.
+                </p>
+
+                <Select
+                  label="What do you need help with?"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value as Topic)}
+                  options={TOPICS.map((t) => ({ value: t.value, label: t.label }))}
+                />
+
+                <Input
+                  label="Subject"
+                  placeholder="e.g. Receipt printer not connecting"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  maxLength={200}
+                  required
+                />
+
+                <div className="space-y-1">
+                  <label htmlFor="support-message" className="block text-xs font-medium text-text">
+                    Message
+                  </label>
+                  <textarea
+                    id="support-message"
+                    rows={5}
+                    maxLength={4000}
+                    required
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Briefly describe what happened and what you need…"
+                    className="w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[13px] text-text placeholder:text-text-muted/60 transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                  />
+                  <p className="text-[11px] text-text-muted">{message.trim().length}/4000</p>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                    {error}
+                  </p>
+                )}
+
+                <Button type="submit" className="w-full sm:w-auto" loading={submit.isPending}>
+                  Submit query
+                </Button>
+              </form>
+            )}
+          </section>
+
+          <aside className="min-w-0 space-y-3">
+            <div className="rounded-2xl border border-border bg-surface/95 p-4 shadow-[var(--shadow-card)] sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/15 text-[#128C7E]">
+                  <WhatsAppIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-text">Chat on WhatsApp</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    Prefer a quick chat? Message us directly — fastest for urgent shop issues.
+                  </p>
+                </div>
               </div>
 
-              {error && (
-                <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                  {error}
-                </p>
-              )}
+              <p className="mt-3 text-sm font-semibold tracking-wide text-text">
+                {SUPPORT_WHATSAPP_DISPLAY}
+              </p>
 
-              <Button type="submit" className="w-full sm:w-auto" loading={submit.isPending}>
-                Submit query
+              <Button
+                className="mt-3 w-full !bg-[#128C7E] hover:!bg-[#0e6f64] shadow-sm shadow-[#128C7E]/25"
+                onClick={() => window.open(whatsappWithContext, '_blank', 'noopener,noreferrer')}
+              >
+                Open WhatsApp chat
               </Button>
-            </form>
-          )}
-        </section>
-
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#25D366]/15 text-[#128C7E]">
-                <WhatsAppIcon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-base font-bold text-text">Chat on WhatsApp</h2>
-                <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                  Prefer a quick chat? Message us directly — fastest for urgent shop issues.
-                </p>
-              </div>
+              <p className="mt-2 text-center text-[11px] text-text-muted">
+                Opens with your topic pre-filled so you type less.
+              </p>
             </div>
 
-            <p className="mt-4 text-sm font-semibold tracking-wide text-text">
-              {SUPPORT_WHATSAPP_DISPLAY}
-            </p>
+            <div className="rounded-2xl border border-border bg-surface/95 p-4 shadow-[var(--shadow-card)] sm:p-5">
+              <h2 className="text-sm font-bold text-text">Email</h2>
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="mt-2 block text-sm font-semibold text-brand-700 underline-offset-2 hover:underline"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+              <p className="mt-2 text-xs text-text-muted">
+                For invoices, contracts, or longer write-ups.
+              </p>
+            </div>
 
-            <Button
-              className="mt-4 w-full !bg-[#128C7E] hover:!bg-[#0e6f64] shadow-sm shadow-[#128C7E]/25"
-              onClick={() => window.open(whatsappWithContext, '_blank', 'noopener,noreferrer')}
-            >
-              Open WhatsApp chat
-            </Button>
-            <p className="mt-2 text-center text-[11px] text-text-muted">
-              Opens with your topic pre-filled so you type less.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
-            <h2 className="text-sm font-bold text-text">Email</h2>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className="mt-2 block text-sm font-semibold text-brand-700 underline-offset-2 hover:underline"
-            >
-              {SUPPORT_EMAIL}
-            </a>
-            <p className="mt-2 text-xs text-text-muted">
-              For invoices, contracts, or longer write-ups.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-dashed border-brand-300/70 bg-brand-50/40 px-5 py-4">
-            <p className="text-xs font-semibold text-brand-900">Tip for faster help</p>
-            <p className="mt-1 text-xs leading-relaxed text-brand-800/85">
-              Include your shop name and what screen you were on. Screenshots on WhatsApp help us
-              fix things quicker.
-            </p>
-          </div>
-        </aside>
+            <div className="rounded-2xl border border-dashed border-brand-300/70 bg-brand-50/50 px-4 py-3">
+              <p className="text-xs font-semibold text-brand-900">Tip for faster help</p>
+              <p className="mt-1 text-xs leading-relaxed text-brand-800/85">
+                Include your shop name and what screen you were on. Screenshots on WhatsApp help
+                us fix things quicker.
+              </p>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -239,7 +278,7 @@ export function SupportPage() {
 
 function TrustChip({ children }: { children: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-brand-200/90 bg-white/80 px-3 py-1 text-[11px] font-semibold text-brand-800 shadow-sm">
+    <span className="inline-flex items-center rounded-full border border-brand-200/90 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-brand-800 shadow-sm">
       {children}
     </span>
   );

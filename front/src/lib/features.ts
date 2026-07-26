@@ -4,6 +4,38 @@ import type { AuthUser } from '@/types/api';
 
 export { FEATURES };
 
+/** Human-readable labels for plan / upgrade screens. */
+export const FEATURE_LABELS: Partial<Record<FeatureKey, string>> = {
+  [FEATURES.BILLING_CREATE_SALE]: 'Sales register',
+  [FEATURES.BILLING_VOID_SALE]: 'Delete sale records',
+  [FEATURES.BILLING_PRINT_RECEIPT]: 'Receipt printing',
+  [FEATURES.BILLING_DISCOUNT]: 'Discounts',
+  [FEATURES.BILLING_HELD_CARTS]: 'Held bills',
+  [FEATURES.BILLING_DISCOUNT_UNLIMITED]: 'Unlimited discounts',
+  [FEATURES.INVENTORY_VIEW]: 'Inventory',
+  [FEATURES.INVENTORY_EDIT]: 'Edit products',
+  [FEATURES.INVENTORY_STOCK_ADJUST]: 'Stock adjustments',
+  [FEATURES.INVENTORY_CATEGORIES]: 'Categories',
+  [FEATURES.INVENTORY_BRANDS]: 'Brands',
+  [FEATURES.INVENTORY_SUPPLIERS]: 'Suppliers',
+  [FEATURES.CUSTOMERS_VIEW]: 'Udhaar / customers',
+  [FEATURES.CUSTOMERS_EDIT]: 'Edit customers',
+  [FEATURES.CUSTOMERS_LEDGER_VIEW]: 'Udhaar ledger',
+  [FEATURES.CUSTOMERS_LEDGER_RECORD]: 'Record payments',
+  [FEATURES.CUSTOMERS_LEDGER_EDIT]: 'Edit ledger entries',
+  [FEATURES.USERS_MANAGE]: 'Staff accounts',
+  [FEATURES.REPORTS_VIEW]: 'Reports',
+  [FEATURES.REPORTS_ADVANCED]: 'Advanced reports',
+  [FEATURES.SETTINGS_VIEW]: 'Settings',
+  [FEATURES.SETTINGS_EDIT]: 'Edit settings',
+  [FEATURES.SETTINGS_RECEIPT_BRANDING]: 'Receipt branding',
+  [FEATURES.SETTINGS_FBR]: 'FBR invoicing',
+};
+
+export function featureLabel(feature: FeatureKey | string): string {
+  return FEATURE_LABELS[feature as FeatureKey] ?? String(feature).replace(/[._]/g, ' ');
+}
+
 export function hasFeature(user: AuthUser | null | undefined, feature: FeatureKey): boolean {
   if (!user) return false;
   return user.features.includes(feature);

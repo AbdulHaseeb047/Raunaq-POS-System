@@ -17,7 +17,7 @@ import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage';
 import { AccountPasswordPage } from '@/features/auth/AccountPasswordPage';
 import { AdminAccountPasswordPage } from '@/features/auth/AdminAccountPasswordPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
-import { hasFeature } from '@/lib/features';
+import { hasFeature, featureLabel } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 
 const DashboardPage = lazy(() =>
@@ -75,7 +75,7 @@ const SalesRepsPage = lazy(() =>
 function FeatureRoute({ feature, children }: { feature: FeatureKey | null; children: ReactNode }) {
   const { user } = useAuth();
   if (feature && !hasFeature(user, feature)) {
-    return <Navigate to="/upgrade" replace state={{ fromFeature: feature }} />;
+    return <Navigate to="/upgrade" replace state={{ fromFeature: featureLabel(feature) }} />;
   }
   return <>{children}</>;
 }

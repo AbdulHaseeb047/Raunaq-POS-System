@@ -61,51 +61,57 @@ export function UpgradePlansPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-brand-900 sm:text-3xl">
-          Pricing Plans
-        </h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-text-muted">
-          Pick the feature depth your shop needs — upgrade anytime as you grow.
-        </p>
-
-        <div className="mt-5 inline-flex items-center rounded-full border border-border bg-surface p-1 shadow-sm">
-          <CycleButton active={cycle === 'monthly'} onClick={() => setCycle('monthly')}>
-            Monthly
-            {currentCycle === 'monthly' && (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">
-                Yours
-              </span>
-            )}
-          </CycleButton>
-          <CycleButton active={cycle === 'yearly'} onClick={() => setCycle('yearly')}>
-            Yearly
-            {currentCycle === 'yearly' ? (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">
-                Yours
-              </span>
-            ) : (
-              <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-800">
-                Save
-              </span>
-            )}
-          </CycleButton>
-        </div>
-
-        <p className="mt-3 text-xs text-text-muted">
-          You&apos;re on{' '}
-          <span className="font-semibold text-text">
-            {planLabel(currentPlan)} · {billingCycleLabel(currentCycle)}
-          </span>
-          {softLocked ? ' (Starter features while subscription/trial is ended)' : ''}.
-        </p>
-        {fromFeature && (
-          <p className="mt-2 text-xs font-medium text-brand-800">
-            Unlock <span className="font-bold">{fromFeature}</span> by choosing a plan below — then
-            continue on WhatsApp.
+    <div className="mx-auto w-full max-w-6xl px-0">
+      <div className="relative overflow-hidden rounded-2xl border border-brand-200/70 bg-gradient-to-br from-brand-50 via-surface to-brand-50/40 px-4 py-5 text-center sm:px-6 sm:py-6">
+        <div
+          className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-brand-300/25 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative">
+          <h1 className="text-xl font-bold tracking-tight text-brand-900 sm:text-2xl">
+            Pricing Plans
+          </h1>
+          <p className="mx-auto mt-1.5 max-w-xl text-sm text-text-muted">
+            Pick the feature depth your shop needs — upgrade anytime as you grow.
           </p>
-        )}
+
+          <div className="mt-4 inline-flex items-center rounded-full border border-border bg-surface p-1 shadow-sm">
+            <CycleButton active={cycle === 'monthly'} onClick={() => setCycle('monthly')}>
+              Monthly
+              {currentCycle === 'monthly' && (
+                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">
+                  Yours
+                </span>
+              )}
+            </CycleButton>
+            <CycleButton active={cycle === 'yearly'} onClick={() => setCycle('yearly')}>
+              Yearly
+              {currentCycle === 'yearly' ? (
+                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">
+                  Yours
+                </span>
+              ) : (
+                <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-800">
+                  Save
+                </span>
+              )}
+            </CycleButton>
+          </div>
+
+          <p className="mt-3 text-xs text-text-muted">
+            You&apos;re on{' '}
+            <span className="font-semibold text-text">
+              {planLabel(currentPlan)} · {billingCycleLabel(currentCycle)}
+            </span>
+            {softLocked ? ' (Starter features while subscription/trial is ended)' : ''}.
+          </p>
+          {fromFeature && (
+            <p className="mt-2 text-xs font-medium text-brand-800">
+              Unlock <span className="font-bold">{fromFeature}</span> by choosing a plan below —
+              then continue on WhatsApp.
+            </p>
+          )}
+        </div>
       </div>
 
       {softLocked && (
