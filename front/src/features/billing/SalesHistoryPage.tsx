@@ -62,9 +62,8 @@ export function SalesHistoryPage() {
   const [panel, setPanel] = useState<InvoicePanel>('receipt');
   const [voidReasonPicker, setVoidReasonPicker] = useState<ReasonPickerValue>(emptyReasonPicker());
   const [returnQty, setReturnQty] = useState<Record<string, number>>({});
-  const [returnReasonPicker, setReturnReasonPicker] = useState<ReasonPickerValue>(
-    emptyReasonPicker(),
-  );
+  const [returnReasonPicker, setReturnReasonPicker] =
+    useState<ReasonPickerValue>(emptyReasonPicker());
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [confirmReturn, setConfirmReturn] = useState(false);
 
@@ -94,9 +93,7 @@ export function SalesHistoryPage() {
     setVoidReasonPicker(emptyReasonPicker());
     setReturnQty({});
     setReturnReasonPicker(
-      startPanel === 'exchange'
-        ? emptyReasonPicker(EXCHANGE_DEFAULT_REASON)
-        : emptyReasonPicker(),
+      startPanel === 'exchange' ? emptyReasonPicker(EXCHANGE_DEFAULT_REASON) : emptyReasonPicker(),
     );
   };
 
@@ -546,7 +543,9 @@ export function SalesHistoryPage() {
             </div>
 
             <ReasonPicker
-              label={panel === 'exchange' ? 'Exchange reason (required)' : 'Return reason (required)'}
+              label={
+                panel === 'exchange' ? 'Exchange reason (required)' : 'Return reason (required)'
+              }
               presets={RETURN_REASON_PRESETS}
               value={returnReasonPicker}
               onChange={setReturnReasonPicker}
@@ -560,7 +559,9 @@ export function SalesHistoryPage() {
             {estimatedRefund > 0 && (
               <div className="rounded-xl bg-emerald-50 px-4 py-3 text-right">
                 <p className="text-xs text-emerald-800">
-                  {panel === 'exchange' ? 'Estimated credit toward replacement' : 'Estimated refund'}
+                  {panel === 'exchange'
+                    ? 'Estimated credit toward replacement'
+                    : 'Estimated refund'}
                 </p>
                 <p className="text-2xl font-black text-emerald-900">
                   {formatMoney(estimatedRefund, currency)}
@@ -629,9 +630,9 @@ export function SalesHistoryPage() {
           panel === 'exchange' ? (
             <>
               Take back items worth about{' '}
-              <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>.
-              Stock will be restored, then you will open the Sale screen to sell the replacement.
-              Reason: {returnReason}
+              <strong className="text-text">{formatMoney(estimatedRefund, currency)}</strong>. Stock
+              will be restored, then you will open the Sale screen to sell the replacement. Reason:{' '}
+              {returnReason}
             </>
           ) : (
             <>

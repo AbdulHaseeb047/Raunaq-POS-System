@@ -9,10 +9,7 @@ export function prefersDesktopInput(): boolean {
 }
 
 /** Avoid focusing inputs on touch phones — opens the on-screen keyboard and covers the UI. */
-export function safeFocus(
-  el: HTMLElement | null | undefined,
-  opts?: { force?: boolean },
-): void {
+export function safeFocus(el: HTMLElement | null | undefined, opts?: { force?: boolean }): void {
   if (!el) return;
   if (!opts?.force && !prefersDesktopInput()) return;
   el.focus({ preventScroll: true });

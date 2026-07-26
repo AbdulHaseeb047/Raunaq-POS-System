@@ -177,7 +177,8 @@ export function SuppliersPage() {
               onClick={() => setSelected(null)}
             >
               ← Back to suppliers
-            </Button>            <Card className="mb-4">
+            </Button>{' '}
+            <Card className="mb-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold">{selected.name}</h2>
@@ -227,7 +228,6 @@ export function SuppliersPage() {
               </div>
               <SupplierProductList supplierId={selected.id} currency={currency} />
             </Card>
-
             <Card>
               <CardHeader
                 title="Purchase & payment log"
@@ -238,69 +238,69 @@ export function SuppliersPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border">
                   <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-sm">
-                    <thead>
-                      <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3">Description</th>
-                        <th className="px-4 py-3 text-right">Amount</th>
-                        <th className="px-4 py-3 text-right">Balance</th>
-                        <th className="px-4 py-3" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(ledger ?? []).map((e) => (
-                        <tr
-                          key={e.id}
-                          className={`border-t border-border/60 ${e.stockIn ? 'cursor-pointer hover:bg-brand-50/50' : ''}`}
-                          onClick={() => e.stockIn && setSlipEntry(e)}
-                        >
-                          <td className="px-4 py-3 text-text-muted">{formatDate(e.createdAt)}</td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium">{e.description}</p>
-                            {e.stockIn && (
-                              <p className="text-[10px] text-text-muted">
-                                {parseFloat(e.stockIn.quantity)} {e.stockIn.unit}
-                                {e.stockIn.sku ? ` · ${e.stockIn.sku}` : ''}
-                              </p>
-                            )}
-                            {e.recordedBy && (
-                              <p className="text-[10px] text-text-muted">
-                                By {e.recordedBy.fullName}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold">
-                            {formatMoney(e.amount, currency)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {formatMoney(e.balanceAfter, currency)}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right"
-                            onClick={(ev) => ev.stopPropagation()}
+                    <table className="w-full min-w-[560px] text-sm">
+                      <thead>
+                        <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Description</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3 text-right">Balance</th>
+                          <th className="px-4 py-3" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(ledger ?? []).map((e) => (
+                          <tr
+                            key={e.id}
+                            className={`border-t border-border/60 ${e.stockIn ? 'cursor-pointer hover:bg-brand-50/50' : ''}`}
+                            onClick={() => e.stockIn && setSlipEntry(e)}
                           >
-                            {e.stockIn && (
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-brand-700 hover:underline"
-                                onClick={() => setSlipEntry(e)}
-                              >
-                                Slip
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {(ledger ?? []).length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-text-muted">
-                            No ledger entries yet — record a stock-in with cost to create payable
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                            <td className="px-4 py-3 text-text-muted">{formatDate(e.createdAt)}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium">{e.description}</p>
+                              {e.stockIn && (
+                                <p className="text-[10px] text-text-muted">
+                                  {parseFloat(e.stockIn.quantity)} {e.stockIn.unit}
+                                  {e.stockIn.sku ? ` · ${e.stockIn.sku}` : ''}
+                                </p>
+                              )}
+                              {e.recordedBy && (
+                                <p className="text-[10px] text-text-muted">
+                                  By {e.recordedBy.fullName}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold">
+                              {formatMoney(e.amount, currency)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {formatMoney(e.balanceAfter, currency)}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-right"
+                              onClick={(ev) => ev.stopPropagation()}
+                            >
+                              {e.stockIn && (
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-brand-700 hover:underline"
+                                  onClick={() => setSlipEntry(e)}
+                                >
+                                  Slip
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {(ledger ?? []).length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-text-muted">
+                              No ledger entries yet — record a stock-in with cost to create payable
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

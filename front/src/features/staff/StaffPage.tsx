@@ -85,45 +85,45 @@ export function StaffPage() {
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-card)]">
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Features</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {(users?.data ?? []).map((u) => (
-              <tr key={u.id} className="border-b border-border/60 hover:bg-brand-50/20">
-                <td className="px-4 py-3 font-medium">{u.fullName}</td>
-                <td className="px-4 py-3 text-text-muted">{u.email}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={u.isActive ? 'success' : 'default'}>
-                    {u.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-text-muted">{u.features.length} enabled</td>
-                <td className="px-4 py-3 text-right">
-                  {u.role === 'STAFF' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setFeaturesOpen(u);
-                        setSelectedFeatures(u.features);
-                      }}
-                    >
-                      Permissions
-                    </Button>
-                  )}
-                </td>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Features</th>
+                <th className="px-4 py-3" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(users?.data ?? []).map((u) => (
+                <tr key={u.id} className="border-b border-border/60 hover:bg-brand-50/20">
+                  <td className="px-4 py-3 font-medium">{u.fullName}</td>
+                  <td className="px-4 py-3 text-text-muted">{u.email}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={u.isActive ? 'success' : 'default'}>
+                      {u.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">{u.features.length} enabled</td>
+                  <td className="px-4 py-3 text-right">
+                    {u.role === 'STAFF' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setFeaturesOpen(u);
+                          setSelectedFeatures(u.features);
+                        }}
+                      >
+                        Permissions
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

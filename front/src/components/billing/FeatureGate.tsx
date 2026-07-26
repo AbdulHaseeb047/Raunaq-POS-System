@@ -13,11 +13,7 @@ type FeatureGateProps = {
 };
 
 /** Locked features redirect to the pricing / upgrade page. */
-export function FeatureGate({
-  feature,
-  children,
-  featureLabel: labelOverride,
-}: FeatureGateProps) {
+export function FeatureGate({ feature, children, featureLabel: labelOverride }: FeatureGateProps) {
   const { user } = useAuth();
   if (hasFeature(user, feature)) {
     return <>{children}</>;

@@ -172,9 +172,7 @@ export async function getSalesSummary(
     }),
   ]);
 
-  const returnProductIds = [
-    ...new Set(returns.flatMap((r) => r.items.map((i) => i.productId))),
-  ];
+  const returnProductIds = [...new Set(returns.flatMap((r) => r.items.map((i) => i.productId)))];
   const returnProducts =
     returnProductIds.length > 0
       ? await prisma.product.findMany({

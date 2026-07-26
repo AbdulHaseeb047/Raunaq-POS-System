@@ -23,9 +23,7 @@ function requireSmtpConfig(): {
   const portRaw = process.env.SMTP_PORT?.trim() || '587';
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.trim();
-  const from =
-    process.env.SMTP_FROM?.trim() ||
-    (user ? `Raunaq POS <${user}>` : '');
+  const from = process.env.SMTP_FROM?.trim() || (user ? `Raunaq POS <${user}>` : '');
 
   if (!host || !user || !pass || !from) {
     throw new AppError(

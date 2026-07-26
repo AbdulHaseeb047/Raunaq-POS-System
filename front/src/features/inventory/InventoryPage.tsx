@@ -533,9 +533,7 @@ export function InventoryPage() {
       ) : (
         <>
           {/* Mobile cards */}
-          <div
-            className={`space-y-3 md:hidden ${isFetching ? 'opacity-70' : ''}`}
-          >
+          <div className={`space-y-3 md:hidden ${isFetching ? 'opacity-70' : ''}`}>
             {displayedProducts.map((p) => (
               <div
                 key={p.id}

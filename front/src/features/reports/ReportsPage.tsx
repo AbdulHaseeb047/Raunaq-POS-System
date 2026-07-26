@@ -296,24 +296,26 @@ export function ReportsPage() {
         {(summary?.topProducts?.length ?? 0) > 0 && (
           <div className="overflow-hidden rounded-xl border border-border">
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
-              <thead>
-                <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-                  <th className="px-4 py-3">Top products</th>
-                  <th className="px-4 py-3">Qty sold</th>
-                  <th className="px-4 py-3">Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary?.topProducts.map((p) => (
-                  <tr key={p.productId} className="border-t border-border/60">
-                    <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3">{p.quantitySold}</td>
-                    <td className="px-4 py-3 font-semibold">{formatMoney(p.revenue, currency)}</td>
+              <table className="w-full min-w-[480px] text-sm">
+                <thead>
+                  <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                    <th className="px-4 py-3">Top products</th>
+                    <th className="px-4 py-3">Qty sold</th>
+                    <th className="px-4 py-3">Revenue</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {summary?.topProducts.map((p) => (
+                    <tr key={p.productId} className="border-t border-border/60">
+                      <td className="px-4 py-3 font-medium">{p.name}</td>
+                      <td className="px-4 py-3">{p.quantitySold}</td>
+                      <td className="px-4 py-3 font-semibold">
+                        {formatMoney(p.revenue, currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -338,26 +340,26 @@ export function ReportsPage() {
             ))}
           </div>
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead>
-              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-                <th className="px-4 py-3">Rule</th>
-                <th className="px-4 py-3">Times applied</th>
-                <th className="px-4 py-3">Total discount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {discountUsage?.map((row) => (
-                <tr key={row.discountRuleId} className="border-t border-border/60">
-                  <td className="px-4 py-3 font-medium">{row.ruleName}</td>
-                  <td className="px-4 py-3">{row.usageCount}</td>
-                  <td className="px-4 py-3 font-semibold text-danger">
-                    {formatMoney(row.totalDiscount, currency)}
-                  </td>
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                  <th className="px-4 py-3">Rule</th>
+                  <th className="px-4 py-3">Times applied</th>
+                  <th className="px-4 py-3">Total discount</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {discountUsage?.map((row) => (
+                  <tr key={row.discountRuleId} className="border-t border-border/60">
+                    <td className="px-4 py-3 font-medium">{row.ruleName}</td>
+                    <td className="px-4 py-3">{row.usageCount}</td>
+                    <td className="px-4 py-3 font-semibold text-danger">
+                      {formatMoney(row.totalDiscount, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
@@ -366,24 +368,26 @@ export function ReportsPage() {
         <Card className="mb-6">
           <CardHeader title="Staff performance" subtitle="Sales by cashier" />
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead>
-              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-                <th className="px-4 py-3">Cashier</th>
-                <th className="px-4 py-3">Transactions</th>
-                <th className="px-4 py-3">Total sales</th>
-              </tr>
-            </thead>
-            <tbody>
-              {staffPerf?.map((s) => (
-                <tr key={s.cashierId} className="border-t border-border/60">
-                  <td className="px-4 py-3 font-medium">{s.cashierName}</td>
-                  <td className="px-4 py-3">{s.transactionCount}</td>
-                  <td className="px-4 py-3 font-semibold">{formatMoney(s.totalSales, currency)}</td>
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                  <th className="px-4 py-3">Cashier</th>
+                  <th className="px-4 py-3">Transactions</th>
+                  <th className="px-4 py-3">Total sales</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {staffPerf?.map((s) => (
+                  <tr key={s.cashierId} className="border-t border-border/60">
+                    <td className="px-4 py-3 font-medium">{s.cashierName}</td>
+                    <td className="px-4 py-3">{s.transactionCount}</td>
+                    <td className="px-4 py-3 font-semibold">
+                      {formatMoney(s.totalSales, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
@@ -403,26 +407,26 @@ export function ReportsPage() {
           </div>
         )}
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead>
-            <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Qty</th>
-              <th className="px-4 py-3">When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(stockMovement?.movements ?? []).slice(0, 20).map((m) => (
-              <tr key={m.id} className="border-t border-border/60">
-                <td className="px-4 py-3">{m.productName}</td>
-                <td className="px-4 py-3">{m.movementType}</td>
-                <td className="px-4 py-3">{m.quantityDelta}</td>
-                <td className="px-4 py-3 text-text-muted">{formatDateShort(m.createdAt)}</td>
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                <th className="px-4 py-3">Product</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Qty</th>
+                <th className="px-4 py-3">When</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(stockMovement?.movements ?? []).slice(0, 20).map((m) => (
+                <tr key={m.id} className="border-t border-border/60">
+                  <td className="px-4 py-3">{m.productName}</td>
+                  <td className="px-4 py-3">{m.movementType}</td>
+                  <td className="px-4 py-3">{m.quantityDelta}</td>
+                  <td className="px-4 py-3 text-text-muted">{formatDateShort(m.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
@@ -444,26 +448,26 @@ export function ReportsPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead>
-            <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-              <th className="px-4 py-3">Sale #</th>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(daily?.sales ?? []).map((s) => (
-              <tr key={s.id} className="border-t border-border/60">
-                <td className="px-4 py-3 font-medium">{s.saleNumber}</td>
-                <td className="px-4 py-3 text-text-muted">{s.customerName ?? 'Walk-in'}</td>
-                <td className="px-4 py-3 font-semibold">{formatMoney(s.grandTotal, currency)}</td>
-                <td className="px-4 py-3 text-text-muted">{formatDateShort(s.createdAt)}</td>
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                <th className="px-4 py-3">Sale #</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Time</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(daily?.sales ?? []).map((s) => (
+                <tr key={s.id} className="border-t border-border/60">
+                  <td className="px-4 py-3 font-medium">{s.saleNumber}</td>
+                  <td className="px-4 py-3 text-text-muted">{s.customerName ?? 'Walk-in'}</td>
+                  <td className="px-4 py-3 font-semibold">{formatMoney(s.grandTotal, currency)}</td>
+                  <td className="px-4 py-3 text-text-muted">{formatDateShort(s.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
@@ -483,30 +487,30 @@ export function ReportsPage() {
           ))}
         </div>
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">0–7 days</th>
-              <th className="px-4 py-3">8–30 days</th>
-              <th className="px-4 py-3">30+ days</th>
-              <th className="px-4 py-3">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(aging ?? []).map((row) => (
-              <tr key={row.customerId} className="border-t border-border/60">
-                <td className="px-4 py-3 font-medium">{row.name}</td>
-                <td className="px-4 py-3">{formatMoney(row.bucket0_7, currency)}</td>
-                <td className="px-4 py-3">{formatMoney(row.bucket8_30, currency)}</td>
-                <td className="px-4 py-3 font-medium text-warning">
-                  {formatMoney(row.bucket30_plus, currency)}
-                </td>
-                <td className="px-4 py-3 font-bold">{formatMoney(row.total, currency)}</td>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">0–7 days</th>
+                <th className="px-4 py-3">8–30 days</th>
+                <th className="px-4 py-3">30+ days</th>
+                <th className="px-4 py-3">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(aging ?? []).map((row) => (
+                <tr key={row.customerId} className="border-t border-border/60">
+                  <td className="px-4 py-3 font-medium">{row.name}</td>
+                  <td className="px-4 py-3">{formatMoney(row.bucket0_7, currency)}</td>
+                  <td className="px-4 py-3">{formatMoney(row.bucket8_30, currency)}</td>
+                  <td className="px-4 py-3 font-medium text-warning">
+                    {formatMoney(row.bucket30_plus, currency)}
+                  </td>
+                  <td className="px-4 py-3 font-bold">{formatMoney(row.total, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>

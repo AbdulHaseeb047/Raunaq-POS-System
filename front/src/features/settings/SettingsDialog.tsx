@@ -324,9 +324,7 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
                   type="button"
                   onClick={() => onTabChange(item.id)}
                   className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                    selected
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-white text-text border border-border'
+                    selected ? 'bg-brand-600 text-white' : 'bg-white text-text border border-border'
                   }`}
                 >
                   {item.label}

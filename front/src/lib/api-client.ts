@@ -179,7 +179,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       const hint = import.meta.env.DEV
         ? ' Local API is not responding — run `npm run dev:api` (or `npm run dev:all`) and check backend/.env.'
         : ' On Vercel, set VITE_API_URL to your Railway backend URL — not /api.';
-      throw new ApiError(`API returned ${res.status} (not JSON).${hint}`, res.status, 'BAD_API_RESPONSE');
+      throw new ApiError(
+        `API returned ${res.status} (not JSON).${hint}`,
+        res.status,
+        'BAD_API_RESPONSE',
+      );
     }
     const err = (await res.json().catch(() => ({ message: res.statusText }))) as ApiErrorBody;
     // Soft-lock uses UPGRADE_REQUIRED — do not log the user out.

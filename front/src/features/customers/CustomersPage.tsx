@@ -358,86 +358,86 @@ export function CustomersPage() {
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border">
                     <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px] text-sm">
-                      <thead>
-                        <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
-                          <th className="px-4 py-3">Description</th>
-                          <th className="px-4 py-3">Due / Age</th>
-                          <th className="px-4 py-3 text-right">Amount</th>
-                          <th className="px-4 py-3 text-right">Balance</th>
-                          <th className="px-4 py-3 text-right">Actions</th>
-                          <th className="px-4 py-3">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(ledger ?? []).map((e) => (
-                          <tr
-                            key={e.id}
-                            className={`border-t border-border/60 ${e.saleId ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${e.voidedAt ? 'opacity-50' : ''}`}
-                            onClick={() => e.saleId && void openLedgerReceipt(e)}
-                          >
-                            <td className="px-4 py-3">
-                              <p className="font-medium">{e.description}</p>
-                              {e.saleNumber && (
-                                <p className="text-[10px] text-text-muted">Bill {e.saleNumber}</p>
-                              )}
-                              {e.recordedBy && (
-                                <p className="text-[10px] text-text-muted">
-                                  By {e.recordedBy.fullName}
-                                </p>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-xs text-text-muted">
-                              {e.dueDate && <p>Since {formatDate(e.dueDate)}</p>}
-                              {e.daysOutstanding != null && e.daysOutstanding > 0 && (
-                                <Badge variant={e.daysOutstanding > 30 ? 'danger' : 'warning'}>
-                                  {e.daysOutstanding}d outstanding
-                                </Badge>
-                              )}
-                              {e.remainingAmount && parseFloat(e.remainingAmount) > 0 && (
-                                <p className="mt-1">
-                                  Due {formatMoney(e.remainingAmount, currency)}
-                                </p>
-                              )}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-right font-semibold ${parseFloat(e.amount) < 0 ? 'text-brand-700' : ''}`}
-                            >
-                              {formatMoney(e.amount, currency)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {formatMoney(e.balanceAfter, currency)}
-                            </td>
-                            <td
-                              className="px-4 py-3 text-right"
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              {e.saleId && (
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-brand-700 hover:underline"
-                                  onClick={() => void openLedgerReceipt(e)}
-                                >
-                                  Receipt
-                                </button>
-                              )}
-                              {canVoid && e.entryType === 'PAYMENT' && !e.voidedAt && (
-                                <button
-                                  type="button"
-                                  className="ml-2 text-xs text-danger hover:underline"
-                                  onClick={() => setVoidEntryId(e.id)}
-                                >
-                                  Void
-                                </button>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-text-muted">
-                              {formatDate(e.createdAt)}
-                            </td>
+                      <table className="w-full min-w-[640px] text-sm">
+                        <thead>
+                          <tr className="bg-surface-muted text-left text-[10px] font-semibold uppercase text-text-muted">
+                            <th className="px-4 py-3">Description</th>
+                            <th className="px-4 py-3">Due / Age</th>
+                            <th className="px-4 py-3 text-right">Amount</th>
+                            <th className="px-4 py-3 text-right">Balance</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-4 py-3">Date</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {(ledger ?? []).map((e) => (
+                            <tr
+                              key={e.id}
+                              className={`border-t border-border/60 ${e.saleId ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${e.voidedAt ? 'opacity-50' : ''}`}
+                              onClick={() => e.saleId && void openLedgerReceipt(e)}
+                            >
+                              <td className="px-4 py-3">
+                                <p className="font-medium">{e.description}</p>
+                                {e.saleNumber && (
+                                  <p className="text-[10px] text-text-muted">Bill {e.saleNumber}</p>
+                                )}
+                                {e.recordedBy && (
+                                  <p className="text-[10px] text-text-muted">
+                                    By {e.recordedBy.fullName}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-text-muted">
+                                {e.dueDate && <p>Since {formatDate(e.dueDate)}</p>}
+                                {e.daysOutstanding != null && e.daysOutstanding > 0 && (
+                                  <Badge variant={e.daysOutstanding > 30 ? 'danger' : 'warning'}>
+                                    {e.daysOutstanding}d outstanding
+                                  </Badge>
+                                )}
+                                {e.remainingAmount && parseFloat(e.remainingAmount) > 0 && (
+                                  <p className="mt-1">
+                                    Due {formatMoney(e.remainingAmount, currency)}
+                                  </p>
+                                )}
+                              </td>
+                              <td
+                                className={`px-4 py-3 text-right font-semibold ${parseFloat(e.amount) < 0 ? 'text-brand-700' : ''}`}
+                              >
+                                {formatMoney(e.amount, currency)}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {formatMoney(e.balanceAfter, currency)}
+                              </td>
+                              <td
+                                className="px-4 py-3 text-right"
+                                onClick={(ev) => ev.stopPropagation()}
+                              >
+                                {e.saleId && (
+                                  <button
+                                    type="button"
+                                    className="text-xs font-medium text-brand-700 hover:underline"
+                                    onClick={() => void openLedgerReceipt(e)}
+                                  >
+                                    Receipt
+                                  </button>
+                                )}
+                                {canVoid && e.entryType === 'PAYMENT' && !e.voidedAt && (
+                                  <button
+                                    type="button"
+                                    className="ml-2 text-xs text-danger hover:underline"
+                                    onClick={() => setVoidEntryId(e.id)}
+                                  >
+                                    Void
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-text-muted">
+                                {formatDate(e.createdAt)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}

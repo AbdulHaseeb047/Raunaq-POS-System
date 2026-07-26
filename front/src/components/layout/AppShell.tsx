@@ -196,8 +196,7 @@ export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const assignedPlan = (user?.planEntitlement?.assignedPlan ?? user?.planEntitlement?.trialPlan) as
-    | TenantTier
-    | undefined;
+    TenantTier | undefined;
   const assignedKeys = new Set(assignedPlan ? getTierFeaturePreset(assignedPlan) : []);
 
   const visibleSections = navSections

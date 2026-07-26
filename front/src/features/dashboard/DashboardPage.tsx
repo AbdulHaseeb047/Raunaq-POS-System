@@ -107,8 +107,7 @@ export function DashboardPage() {
               icon={<IconSale className="h-5 w-5" />}
               accent="brand"
               trend={
-                data?.todayGrossSalesTotal &&
-                data.todayGrossSalesTotal !== data.todaySalesTotal
+                data?.todayGrossSalesTotal && data.todayGrossSalesTotal !== data.todaySalesTotal
                   ? `Gross ${formatMoney(data.todayGrossSalesTotal, currency)} − returns`
                   : 'Sales minus returns'
               }

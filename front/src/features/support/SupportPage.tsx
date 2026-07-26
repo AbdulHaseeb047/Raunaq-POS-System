@@ -265,8 +265,8 @@ export function SupportPage() {
             <div className="rounded-2xl border border-dashed border-brand-300/70 bg-brand-50/50 px-4 py-3">
               <p className="text-xs font-semibold text-brand-900">Tip for faster help</p>
               <p className="mt-1 text-xs leading-relaxed text-brand-800/85">
-                Include your shop name and what screen you were on. Screenshots on WhatsApp help
-                us fix things quicker.
+                Include your shop name and what screen you were on. Screenshots on WhatsApp help us
+                fix things quicker.
               </p>
             </div>
           </aside>

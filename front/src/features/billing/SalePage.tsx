@@ -774,12 +774,10 @@ export function SalePage() {
             </p>
             <div className="mt-2 grid gap-1 text-amber-900/90 sm:grid-cols-3">
               <p>
-                Exchange credit:{' '}
-                <strong>{formatMoney(exchangeCredit, currency)}</strong>
+                Exchange credit: <strong>{formatMoney(exchangeCredit, currency)}</strong>
               </p>
               <p>
-                Applied to cart:{' '}
-                <strong>{formatMoney(exchangeApplied, currency)}</strong>
+                Applied to cart: <strong>{formatMoney(exchangeApplied, currency)}</strong>
               </p>
               {payableAfterExchange > 0 ? (
                 <p>
@@ -1177,7 +1175,9 @@ export function SalePage() {
                 {exchangeRemaining > 0 && (
                   <div className="flex justify-between text-emerald-800">
                     <span>Return cash to customer</span>
-                    <span className="font-semibold">{formatMoney(exchangeRemaining, currency)}</span>
+                    <span className="font-semibold">
+                      {formatMoney(exchangeRemaining, currency)}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-amber-200 pt-1 text-sm font-bold">
@@ -1222,10 +1222,7 @@ export function SalePage() {
               {cart.length} item{cart.length === 1 ? '' : 's'}
             </span>
             <span className="font-bold text-brand-800">
-              {formatMoney(
-                exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal,
-                currency,
-              )}
+              {formatMoney(exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal, currency)}
             </span>
           </div>
           <Button className="w-full" size="lg" variant="accent" onClick={openCheckout}>
@@ -1435,9 +1432,7 @@ export function SalePage() {
                     </div>
                     <div className="mb-1 flex justify-between">
                       <span>Exchange credit</span>
-                      <span className="font-medium">
-                        −{formatMoney(exchangeApplied, currency)}
-                      </span>
+                      <span className="font-medium">−{formatMoney(exchangeApplied, currency)}</span>
                     </div>
                   </>
                 )}
@@ -1479,14 +1474,8 @@ export function SalePage() {
                 onChange={(e) => {
                   const raw = e.target.value;
                   setCashAmount(raw);
-                  const cash = Math.min(
-                    Math.max(0, parseFloat(raw) || 0),
-                    totals.grandTotal,
-                  );
-                  const credit = Math.max(
-                    0,
-                    Math.round((totals.grandTotal - cash) * 100) / 100,
-                  );
+                  const cash = Math.min(Math.max(0, parseFloat(raw) || 0), totals.grandTotal);
+                  const credit = Math.max(0, Math.round((totals.grandTotal - cash) * 100) / 100);
                   setCreditAmount(String(credit));
                   setAmountReceived(raw === '' ? '' : String(cash));
                 }}
@@ -1510,9 +1499,7 @@ export function SalePage() {
                     {formatMoney(
                       Math.max(
                         0,
-                        Math.round(
-                          (totals.grandTotal - (parseFloat(cashAmount) || 0)) * 100,
-                        ) / 100,
+                        Math.round((totals.grandTotal - (parseFloat(cashAmount) || 0)) * 100) / 100,
                       ),
                       currency,
                     )}
