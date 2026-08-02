@@ -49,11 +49,18 @@ export function registerErrorHandler(app: FastifyInstance): void {
       message =
         'Sale timed out talking to the database. Redeploy with the latest backend (longer TX timeout) and prefer a DB region close to Railway.';
     } else if (
-      prismaCode === 'P2010' ||
-      /name_compact|column .* does not exist/i.test(error.message)
+      /sale_quick_pick_ids|dashboard_layout|saleQuickPickIds|dashboardLayout/i.test(error.message)
+    ) {
+      message =
+        'Database is missing layout columns. Run prisma migrate deploy (ui_customize_layout), redeploy API, then retry Customize.';
+    } else if (
+      /name_compact|phone_compact|sku_compact|barcode_compact|email_compact/i.test(error.message)
     ) {
       message =
         'Database is missing search indexes. Redeploy API after migrate deploy completes, then retry.';
+    } else if (prismaCode === 'P2010' || /column .* does not exist/i.test(error.message)) {
+      message =
+        'Database schema is out of date. Run prisma migrate deploy, redeploy API, then retry.';
     } else if (
       prismaCode.startsWith('P') ||
       /row-level security|RLS|set_config/i.test(error.message)
