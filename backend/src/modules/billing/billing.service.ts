@@ -640,7 +640,7 @@ export async function getSaleDetail(tenantId: string, saleId: string) {
   });
   if (!sale) throw new NotFoundError('Sale not found');
 
-  const settings = await prisma.businessSettings.findUnique({ where: { tenantId } });
+  const settings = await getSettings(tenantId);
 
   const returnedByItem = new Map<string, number>();
   for (const ret of sale.returns) {

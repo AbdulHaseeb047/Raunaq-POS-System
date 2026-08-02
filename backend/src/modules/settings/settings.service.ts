@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
-import { ForbiddenError } from '../core/errors.js';
+import { ForbiddenError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
 import { SYNC_TABLES, syncUpdate } from '../sync/sync-payload.js';
@@ -59,12 +59,86 @@ export function settingsPatchTouchesLayout(input: z.infer<typeof settingsSchema>
   return input.saleQuickPickIds !== undefined || input.dashboardLayout !== undefined;
 }
 
+/** Core columns only — works before ui_customize_layout migration. */
+const CORE_SETTINGS_SELECT = {
+  tenantId: true,
+  businessName: true,
+  address: true,
+  phone: true,
+  logoUrl: true,
+  currency: true,
+  taxLabel: true,
+  defaultTaxRate: true,
+  printReceiptsDefault: true,
+  receiptFooter: true,
+  receiptHeaderMode: true,
+  maxDiscountPercentStaff: true,
+  fbrEnabled: true,
+  fbrPosId: true,
+  fbrStrn: true,
+  fbrRegisteredName: true,
+  printerMode: true,
+  printerHost: true,
+  printerPort: true,
+  printerPaperWidth: true,
+} as const;
+
+const FULL_SETTINGS_SELECT = {
+  ...CORE_SETTINGS_SELECT,
+  saleQuickPickIds: true,
+  dashboardLayout: true,
+} as const;
+
+/** Cached: true when business_settings.sale_quick_pick_ids exists. */
+let layoutColumnsAvailable: boolean | null = null;
+
+export function resetLayoutColumnsCache(): void {
+  layoutColumnsAvailable = null;
+}
+
+export async function hasLayoutColumns(): Promise<boolean> {
+  if (layoutColumnsAvailable != null) return layoutColumnsAvailable;
+  try {
+    const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'business_settings'
+          AND column_name = 'sale_quick_pick_ids'
+      ) AS ok
+    `;
+    layoutColumnsAvailable = Boolean(rows[0]?.ok);
+  } catch {
+    layoutColumnsAvailable = false;
+  }
+  return layoutColumnsAvailable;
+}
+
+function isMissingLayoutColumnError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /sale_quick_pick_ids|dashboard_layout|column .* does not exist/i.test(msg);
+}
+
+async function settingsSelect() {
+  return (await hasLayoutColumns()) ? FULL_SETTINGS_SELECT : CORE_SETTINGS_SELECT;
+}
+
 export async function ensureBusinessSettings(tenantId: string, businessName: string) {
-  await prisma.businessSettings.upsert({
-    where: { tenantId },
-    create: { tenantId, businessName },
-    update: {},
-  });
+  const hasLayout = await hasLayoutColumns();
+  if (hasLayout) {
+    await prisma.businessSettings.upsert({
+      where: { tenantId },
+      create: { tenantId, businessName },
+      update: {},
+    });
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO business_settings (tenant_id, business_name)
+      VALUES (${tenantId}::uuid, ${businessName})
+      ON CONFLICT (tenant_id) DO NOTHING
+    `;
+  }
   settingsCache.delete(tenantId);
 }
 
@@ -80,13 +154,54 @@ export async function getSettings(tenantId: string) {
     return hit.value;
   }
 
-  let settings = await prisma.businessSettings.findUnique({ where: { tenantId } });
+  const select = await settingsSelect();
+  let settings = await prisma.businessSettings.findUnique({
+    where: { tenantId },
+    select,
+  });
+
   if (!settings) {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    settings = await prisma.businessSettings.create({
-      data: { tenantId, businessName: tenant?.name ?? 'My Business' },
-    });
+    const name = tenant?.name ?? 'My Business';
+    try {
+      if (await hasLayoutColumns()) {
+        settings = await prisma.businessSettings.create({
+          data: { tenantId, businessName: name },
+          select,
+        });
+      } else {
+        await prisma.$executeRaw`
+          INSERT INTO business_settings (tenant_id, business_name)
+          VALUES (${tenantId}::uuid, ${name})
+          ON CONFLICT (tenant_id) DO NOTHING
+        `;
+        settings = await prisma.businessSettings.findUnique({
+          where: { tenantId },
+          select: CORE_SETTINGS_SELECT,
+        });
+      }
+    } catch (err) {
+      if (isMissingLayoutColumnError(err)) {
+        layoutColumnsAvailable = false;
+        await prisma.$executeRaw`
+          INSERT INTO business_settings (tenant_id, business_name)
+          VALUES (${tenantId}::uuid, ${name})
+          ON CONFLICT (tenant_id) DO NOTHING
+        `;
+        settings = await prisma.businessSettings.findUnique({
+          where: { tenantId },
+          select: CORE_SETTINGS_SELECT,
+        });
+      } else {
+        throw err;
+      }
+    }
   }
+
+  if (!settings) {
+    throw new ValidationError('Could not load business settings');
+  }
+
   const serialized = serializeSettings(settings);
   settingsCache.set(tenantId, { at: Date.now(), value: serialized });
   return serialized;
@@ -104,56 +219,80 @@ export async function updateSettings(
     );
   }
 
+  const hasLayout = await hasLayoutColumns();
+  if (settingsPatchTouchesLayout(input) && !hasLayout) {
+    throw new ValidationError(
+      'Database is missing layout columns. Run prisma migrate deploy (ui_customize_layout), redeploy API, then retry Customize.',
+    );
+  }
+
   await getSettings(tenantId);
   settingsCache.delete(tenantId);
-  const settings = await prisma.$transaction(async (tx) => {
-    const updated = await tx.businessSettings.update({
-      where: { tenantId },
-      data: {
-        businessName: input.businessName,
-        address: input.address,
-        phone: input.phone,
-        logoUrl: input.logoUrl,
-        currency: input.currency,
-        taxLabel: input.taxLabel,
-        defaultTaxRate: input.defaultTaxRate != null ? toDecimal(input.defaultTaxRate) : undefined,
-        printReceiptsDefault: input.printReceiptsDefault,
-        receiptFooter: input.receiptFooter,
-        ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
-        maxDiscountPercentStaff:
-          input.maxDiscountPercentStaff != null
-            ? toDecimal(input.maxDiscountPercentStaff)
-            : undefined,
-        fbrEnabled: input.fbrEnabled,
-        fbrPosId: input.fbrPosId,
-        fbrStrn: input.fbrStrn,
-        fbrRegisteredName: input.fbrRegisteredName,
-        printerMode: input.printerMode,
-        printerHost: input.printerHost,
-        printerPort: input.printerPort,
-        printerPaperWidth: input.printerPaperWidth,
-        ...(input.saleQuickPickIds !== undefined
-          ? { saleQuickPickIds: input.saleQuickPickIds }
-          : {}),
-        ...(input.dashboardLayout !== undefined
-          ? {
-              dashboardLayout:
-                input.dashboardLayout === null ? Prisma.DbNull : input.dashboardLayout,
-            }
-          : {}),
-      },
+
+  const data: Prisma.BusinessSettingsUpdateInput = {
+    businessName: input.businessName,
+    address: input.address,
+    phone: input.phone,
+    logoUrl: input.logoUrl,
+    currency: input.currency,
+    taxLabel: input.taxLabel,
+    defaultTaxRate: input.defaultTaxRate != null ? toDecimal(input.defaultTaxRate) : undefined,
+    printReceiptsDefault: input.printReceiptsDefault,
+    receiptFooter: input.receiptFooter,
+    ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
+    maxDiscountPercentStaff:
+      input.maxDiscountPercentStaff != null
+        ? toDecimal(input.maxDiscountPercentStaff)
+        : undefined,
+    fbrEnabled: input.fbrEnabled,
+    fbrPosId: input.fbrPosId,
+    fbrStrn: input.fbrStrn,
+    fbrRegisteredName: input.fbrRegisteredName,
+    printerMode: input.printerMode,
+    printerHost: input.printerHost,
+    printerPort: input.printerPort,
+    printerPaperWidth: input.printerPaperWidth,
+  };
+
+  if (hasLayout) {
+    if (input.saleQuickPickIds !== undefined) {
+      data.saleQuickPickIds = input.saleQuickPickIds;
+    }
+    if (input.dashboardLayout !== undefined) {
+      data.dashboardLayout =
+        input.dashboardLayout === null ? Prisma.DbNull : input.dashboardLayout;
+    }
+  }
+
+  const select = hasLayout ? FULL_SETTINGS_SELECT : CORE_SETTINGS_SELECT;
+
+  try {
+    const settings = await prisma.$transaction(async (tx) => {
+      const updated = await tx.businessSettings.update({
+        where: { tenantId },
+        data,
+        select,
+      });
+      await syncUpdate(
+        tx,
+        SYNC_TABLES.businessSettings,
+        { ...updated, id: updated.tenantId },
+        { recordId: updated.tenantId },
+      );
+      return updated;
     });
-    await syncUpdate(
-      tx,
-      SYNC_TABLES.businessSettings,
-      { ...updated, id: updated.tenantId },
-      { recordId: updated.tenantId },
-    );
-    return updated;
-  });
-  const serialized = serializeSettings(settings);
-  settingsCache.set(tenantId, { at: Date.now(), value: serialized });
-  return serialized;
+    const serialized = serializeSettings(settings);
+    settingsCache.set(tenantId, { at: Date.now(), value: serialized });
+    return serialized;
+  } catch (err) {
+    if (isMissingLayoutColumnError(err)) {
+      layoutColumnsAvailable = false;
+      throw new ValidationError(
+        'Database is missing layout columns. Run prisma migrate deploy (ui_customize_layout), redeploy API, then retry Customize.',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function exportTenantData(tenantId: string) {
