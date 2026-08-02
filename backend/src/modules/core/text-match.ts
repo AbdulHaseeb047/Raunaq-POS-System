@@ -15,12 +15,14 @@ const TABLE_SQL: Record<NamedEntityTable, Prisma.Sql> = {
   suppliers: Prisma.raw('suppliers'),
 };
 
-const EXTRA_COMPACT_COLUMN: Record<CompactExtraColumn, Prisma.Sql> = {
-  phone: Prisma.raw('phone_compact'),
-  email: Prisma.raw('email_compact'),
-  sku: Prisma.raw('sku_compact'),
-  barcode: Prisma.raw('barcode_compact'),
-};
+/** Space-stripped lowercased column expression (matches compactText / optional generated columns). */
+function compactExpr(column: 'name' | CompactExtraColumn): Prisma.Sql {
+  if (column === 'name') {
+    return Prisma.sql`regexp_replace(lower(name), '[[:space:]]+', '', 'g')`;
+  }
+  const col = Prisma.raw(column);
+  return Prisma.sql`regexp_replace(lower(COALESCE(${col}, '')), '[[:space:]]+', '', 'g')`;
+}
 
 /** Default cap for typeahead-style callers; list endpoints pass `null` (no LIMIT). */
 export const DEFAULT_SEARCH_ID_LIMIT = 300;
@@ -40,8 +42,8 @@ function likeContainsPattern(compactTerm: string): string {
  * Returns matching row ids for a space-insensitive contains search, or null when
  * there is no search term (caller should skip id filtering).
  *
- * Uses stored `*_compact` columns + pg_trgm GIN indexes (see migration).
- * Pass `limit: null` for full paginated lists; default 300 for typeahead safety.
+ * Uses inline regexp_replace so search works even if the compact-column migration
+ * has not been applied yet. Pass `limit: null` for full paginated lists.
  */
 export async function findIdsByCompactSearch(
   table: NamedEntityTable,
@@ -57,9 +59,7 @@ export async function findIdsByCompactSearch(
   // Non-empty input that sanitized to nothing (e.g. only %/_) → no matches, not "unfiltered".
   if (pattern === '%%') return [];
 
-  const extras = extraColumns.map(
-    (col) => Prisma.sql`OR ${EXTRA_COMPACT_COLUMN[col]} LIKE ${pattern}`,
-  );
+  const extras = extraColumns.map((col) => Prisma.sql`OR ${compactExpr(col)} LIKE ${pattern}`);
 
   const limitClause = limit != null && limit > 0 ? Prisma.sql`LIMIT ${limit}` : Prisma.empty;
 
@@ -68,7 +68,7 @@ export async function findIdsByCompactSearch(
     WHERE tenant_id = ${tenantId}::uuid
       AND deleted_at IS NULL
       AND (
-        name_compact LIKE ${pattern}
+        ${compactExpr('name')} LIKE ${pattern}
         ${extras.length > 0 ? Prisma.join(extras, ' ') : Prisma.empty}
       )
     ${limitClause}
@@ -93,7 +93,7 @@ export async function assertUniqueCompactName(
     SELECT id FROM ${TABLE_SQL[table]}
     WHERE tenant_id = ${tenantId}::uuid
       AND deleted_at IS NULL
-      AND name_compact = ${compact}
+      AND ${compactExpr('name')} = ${compact}
       ${exclude}
     LIMIT 1
   `;
