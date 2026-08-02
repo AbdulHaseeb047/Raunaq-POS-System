@@ -33,9 +33,9 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
-      const q = request.query as { branchId?: string };
+      const q = request.query as { branchId?: string; from?: string; to?: string };
       const branchId = await optionalBranchId(request, tenantId, q.branchId);
-      return getDashboardSummary(tenantId, branchId);
+      return getDashboardSummary(tenantId, branchId, q.from, q.to);
     },
   );
 

@@ -64,6 +64,10 @@ export interface DashboardSummary {
   revenueChangePct?: number;
   aovChangePct?: number;
   transactionChangePct?: number;
+  from?: string;
+  to?: string;
+  chartMode?: 'hourly' | 'daily';
+  compareLabel?: string;
   /** Total products below threshold (may exceed alerts list). */
   lowStockCount: number;
   /** Preview list (top 5). */

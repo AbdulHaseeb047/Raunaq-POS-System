@@ -311,23 +311,35 @@ select:disabled {
   transition-duration: 0.1s;
 }
 
-/* Shimmer skeleton for slow loads */
+/* Glossy diagonal shimmer for skeleton loaders */
 @keyframes skeleton-shine {
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
   100% {
-    transform: translateX(100%);
+    transform: translateX(120%) skewX(-12deg);
   }
 }
 
 .skeleton-shine {
   position: relative;
   overflow: hidden;
+  background-color: #e8eef0;
+  background-image: linear-gradient(90deg, #e2e8ea 0%, #eef3f4 50%, #e2e8ea 100%);
 }
 
 .skeleton-shine::after {
   content: '';
   position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
-  animation: skeleton-shine 1.25s ease-in-out infinite;
+  inset: -20% -40%;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgb(255 255 255 / 0.15) 45%,
+    rgb(255 255 255 / 0.65) 50%,
+    rgb(255 255 255 / 0.15) 55%,
+    transparent 65%
+  );
+  animation: skeleton-shine 1.6s ease-in-out infinite;
+  pointer-events: none;
 }

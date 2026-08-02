@@ -1,18 +1,22 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { IconSale } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import { ListSkeleton } from '@/components/ui/PageSkeleton';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryError } from '@/components/ui/QueryError';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { SkeletonShimmer } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, todayIso } from '@/lib/format';
 import { FEATURES, hasFeature } from '@/lib/features';
 
 import { SalesDashboard } from './SalesDashboard';
+
+type RangeKey = 'today' | 'week' | 'month' | 'custom';
 
 function formatQty(value: string) {
   const n = Number(value);
@@ -20,8 +24,31 @@ function formatQty(value: string) {
   return n.toLocaleString('en-PK', { maximumFractionDigits: 3 });
 }
 
+function startOfWeekIso(d = new Date()): string {
+  const x = new Date(d);
+  const day = x.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  x.setDate(x.getDate() - diff);
+  return x.toISOString().slice(0, 10);
+}
+
+function startOfMonthIso(d = new Date()): string {
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+}
+
 export function DashboardPage() {
   const { user, branchId } = useAuth();
+  const [range, setRange] = useState<RangeKey>('today');
+  const [customFrom, setCustomFrom] = useState(todayIso());
+  const [customTo, setCustomTo] = useState(todayIso());
+
+  const dates = useMemo(() => {
+    const today = todayIso();
+    if (range === 'today') return { from: today, to: today };
+    if (range === 'week') return { from: startOfWeekIso(), to: today };
+    if (range === 'month') return { from: startOfMonthIso(), to: today };
+    return { from: customFrom, to: customTo };
+  }, [range, customFrom, customTo]);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -30,8 +57,8 @@ export function DashboardPage() {
   });
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ['dashboard', branchId],
-    queryFn: () => api.reports.dashboard(branchId ?? undefined),
+    queryKey: ['dashboard', branchId, dates.from, dates.to],
+    queryFn: () => api.reports.dashboard(branchId ?? undefined, dates.from, dates.to),
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -39,7 +66,7 @@ export function DashboardPage() {
   if (isError) {
     return (
       <div>
-        <PageHeader title="Dashboard" subtitle="Your business overview for today" />
+        <PageHeader title="Dashboard" subtitle="Your business overview" />
         <QueryError error={error} onRetry={() => void refetch()} />
       </div>
     );
@@ -50,11 +77,18 @@ export function DashboardPage() {
   const lowStockPreview = (data?.lowStockAlerts ?? []).slice(0, 5);
   const showLoading = isLoading || (isFetching && !data);
 
+  const rangeButtons: Array<{ key: RangeKey; label: string }> = [
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'This week' },
+    { key: 'month', label: 'This month' },
+    { key: 'custom', label: 'Custom' },
+  ];
+
   return (
     <div>
       <PageHeader
         title={`Hello, ${user?.fullName?.split(' ')[0] ?? 'there'}`}
-        subtitle={settings?.businessName ?? 'Your business overview for today'}
+        subtitle={settings?.businessName ?? 'Your business overview'}
         action={
           hasFeature(user, FEATURES.BILLING_CREATE_SALE) ? (
             <Link to="/sale">
@@ -67,30 +101,73 @@ export function DashboardPage() {
         }
       />
 
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface p-1">
+          {rangeButtons.map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => setRange(b.key)}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                range === b.key
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-text-muted hover:bg-surface-muted hover:text-text'
+              }`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+        {range === 'custom' ? (
+          <div className="flex flex-wrap gap-2">
+            <Input
+              label="From"
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="max-w-[160px]"
+            />
+            <Input
+              label="To"
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="max-w-[160px]"
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted">
+            Showing {dates.from === dates.to ? dates.from : `${dates.from} → ${dates.to}`}
+          </p>
+        )}
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
         {showLoading || !data ? (
-          <div className="space-y-4">
+          <div className="space-y-4" aria-busy="true" aria-label="Loading dashboard">
             <div className="grid gap-4 sm:grid-cols-3">
-              <Skeleton className="h-28 rounded-xl" />
-              <Skeleton className="h-28 rounded-xl" />
-              <Skeleton className="h-28 rounded-xl" />
+              <SkeletonShimmer className="h-28 rounded-xl" />
+              <SkeletonShimmer className="h-28 rounded-xl" />
+              <SkeletonShimmer className="h-28 rounded-xl" />
             </div>
-            <Skeleton className="h-72 rounded-xl" />
+            <SkeletonShimmer className="h-72 rounded-xl" />
             <div className="grid gap-4 lg:grid-cols-2">
-              <Skeleton className="h-64 rounded-xl" />
-              <Skeleton className="h-64 rounded-xl" />
+              <SkeletonShimmer className="h-64 rounded-xl" />
+              <SkeletonShimmer className="h-64 rounded-xl" />
             </div>
           </div>
         ) : (
-          <SalesDashboard data={data} currency={currency} />
+          <div className={isFetching ? 'opacity-80 transition-opacity' : ''}>
+            <SalesDashboard data={data} currency={currency} />
+          </div>
         )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card>
           <div className="mb-3">
-            <h3 className="text-base font-bold text-text">Products returned today</h3>
-            <p className="text-sm text-text-muted">Refunds processed so far</p>
+            <h3 className="text-base font-bold text-text">Returns in period</h3>
+            <p className="text-sm text-text-muted">Refunds for the selected date range</p>
           </div>
           <div className="space-y-3">
             <div className="rounded-xl border border-border bg-surface-muted/60 px-4 py-3">

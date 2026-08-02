@@ -30,7 +30,15 @@ function formatMoney(value: number, currency: string) {
   })}`;
 }
 
-function KpiCard({ metric, currency }: { metric: KpiMetric; currency: string }) {
+function KpiCard({
+  metric,
+  currency,
+  compareLabel,
+}: {
+  metric: KpiMetric;
+  currency: string;
+  compareLabel: string;
+}) {
   const up = metric.changePct >= 0;
   const display =
     metric.format === 'currency'
@@ -50,7 +58,7 @@ function KpiCard({ metric, currency }: { metric: KpiMetric; currency: string }) 
           {up ? '↑' : '↓'} {Math.abs(metric.changePct).toFixed(1)}%
         </span>
       </div>
-      <p className="mt-1 text-xs text-slate-400">vs yesterday</p>
+      <p className="mt-1 text-xs text-slate-400">{compareLabel}</p>
     </div>
   );
 }
@@ -133,26 +141,32 @@ export function SalesDashboard({
   const topProducts = data.topProducts ?? [];
   const paymentTotal = paymentMethods.reduce((s, p) => s + p.value, 0);
   const hasHourly = hourlySales.some((h) => h.revenue > 0 || h.transactions > 0);
+  const compareLabel = data.compareLabel ?? 'vs prior period';
+  const isHourly = (data.chartMode ?? 'hourly') === 'hourly';
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {kpis.map((kpi) => (
-          <KpiCard key={kpi.id} metric={kpi} currency={currency} />
+          <KpiCard key={kpi.id} metric={kpi} currency={currency} compareLabel={compareLabel} />
         ))}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-4">
-          <h3 className="text-base font-semibold text-slate-900">Hourly sales trend</h3>
+          <h3 className="text-base font-semibold text-slate-900">
+            {isHourly ? 'Hourly sales trend' : 'Daily sales trend'}
+          </h3>
           <p className="text-sm text-slate-500">
-            Today’s revenue across store hours (8:00 AM – 10:00 PM)
+            {isHourly
+              ? 'Revenue across store hours (8:00 AM – 10:00 PM)'
+              : `Revenue by day (${data.from ?? ''} – ${data.to ?? ''})`}
           </p>
         </div>
         <div className="h-64 w-full sm:h-72">
           {!hasHourly ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
-              No sales recorded yet today
+              No sales recorded in this period
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -199,11 +213,11 @@ export function SalesDashboard({
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-slate-900">Payment methods</h3>
-            <p className="text-sm text-slate-500">Share of today’s sales by tender type</p>
+            <p className="text-sm text-slate-500">Share of sales by tender type in this period</p>
           </div>
           {paymentMethods.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-sm text-slate-500">
-              No payments recorded yet today
+              No payments recorded in this period
             </div>
           ) : (
             <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
@@ -265,12 +279,12 @@ export function SalesDashboard({
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-slate-900">Top selling products</h3>
-            <p className="text-sm text-slate-500">Top 5 items by revenue today</p>
+            <p className="text-sm text-slate-500">Top 5 items by revenue in this period</p>
           </div>
           <div className="h-64 w-full sm:h-72">
             {topProducts.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                No product sales yet today
+                No product sales in this period
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">

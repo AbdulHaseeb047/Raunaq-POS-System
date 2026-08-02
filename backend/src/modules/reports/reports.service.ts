@@ -33,44 +33,84 @@ function hourLabel(hour: number): string {
   return `${hour - 12} PM`;
 }
 
-export async function getDashboardSummary(tenantId: string, branchId?: string) {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const startOfYesterday = new Date(startOfDay);
-  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
 
-  const saleWhereToday = {
+function endOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function dayKeyInPk(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: PK_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+function shortDayLabel(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+}
+
+export async function getDashboardSummary(
+  tenantId: string,
+  branchId?: string,
+  from?: string,
+  to?: string,
+) {
+  const now = new Date();
+  const rangeStart = startOfLocalDay(from ? new Date(from) : now);
+  const rangeEnd = endOfLocalDay(to ? new Date(to) : now);
+  const start = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
+  const end = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
+
+  const durationMs = Math.max(end.getTime() - start.getTime(), 24 * 60 * 60 * 1000 - 1);
+  const prevEnd = new Date(start.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+
+  const fromIso = start.toISOString().slice(0, 10);
+  const toIso = end.toISOString().slice(0, 10);
+  const isSingleDay = fromIso === toIso;
+
+  const saleWherePeriod = {
     tenantId,
     status: 'COMPLETED' as const,
-    createdAt: { gte: startOfDay },
+    createdAt: { gte: start, lte: end },
     ...(branchId ? { branchId } : {}),
   };
-  const saleWhereYesterday = {
+  const saleWherePrev = {
     tenantId,
     status: 'COMPLETED' as const,
-    createdAt: { gte: startOfYesterday, lt: startOfDay },
+    createdAt: { gte: prevStart, lte: prevEnd },
     ...(branchId ? { branchId } : {}),
   };
 
   const [
-    todaySalesAgg,
-    todayCount,
-    yesterdaySalesAgg,
-    yesterdayCount,
+    periodSalesAgg,
+    periodCount,
+    prevSalesAgg,
+    prevCount,
     lowStockRows,
     lowStockCountRow,
     inventoryValueRow,
     productCount,
     udhaarTotal,
-    todayReturns,
+    periodReturns,
     returnItemsAgg,
-    yesterdayReturns,
-    todaySalesDetail,
+    prevReturns,
+    periodSalesDetail,
   ] = await Promise.all([
-    prisma.sale.aggregate({ where: saleWhereToday, _sum: { grandTotal: true } }),
-    prisma.sale.count({ where: saleWhereToday }),
-    prisma.sale.aggregate({ where: saleWhereYesterday, _sum: { grandTotal: true } }),
-    prisma.sale.count({ where: saleWhereYesterday }),
+    prisma.sale.aggregate({ where: saleWherePeriod, _sum: { grandTotal: true } }),
+    prisma.sale.count({ where: saleWherePeriod }),
+    prisma.sale.aggregate({ where: saleWherePrev, _sum: { grandTotal: true } }),
+    prisma.sale.count({ where: saleWherePrev }),
     prisma.$queryRaw<
       Array<{
         id: string;
@@ -119,7 +159,7 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     prisma.saleReturn.aggregate({
       where: {
         tenantId,
-        createdAt: { gte: startOfDay },
+        createdAt: { gte: start, lte: end },
         ...(branchId ? { sale: { branchId } } : {}),
       },
       _sum: { totalAmount: true },
@@ -129,7 +169,7 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
       where: {
         tenantId,
         saleReturn: {
-          createdAt: { gte: startOfDay },
+          createdAt: { gte: start, lte: end },
           ...(branchId ? { sale: { branchId } } : {}),
         },
       },
@@ -138,13 +178,13 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     prisma.saleReturn.aggregate({
       where: {
         tenantId,
-        createdAt: { gte: startOfYesterday, lt: startOfDay },
+        createdAt: { gte: prevStart, lte: prevEnd },
         ...(branchId ? { sale: { branchId } } : {}),
       },
       _sum: { totalAmount: true },
     }),
     prisma.sale.findMany({
-      where: saleWhereToday,
+      where: saleWherePeriod,
       select: {
         createdAt: true,
         grandTotal: true,
@@ -170,62 +210,97 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
   const lowStockCount = Number(lowStockCountRow[0]?.count ?? 0);
   const inventoryValue = Number(inventoryValueRow[0]?.value ?? 0).toFixed(2);
 
-  const grossSales = todaySalesAgg._sum.grandTotal ?? new Decimal(0);
-  const returnsAmount = todayReturns._sum.totalAmount ?? new Decimal(0);
+  const grossSales = periodSalesAgg._sum.grandTotal ?? new Decimal(0);
+  const returnsAmount = periodReturns._sum.totalAmount ?? new Decimal(0);
   const netSales = Decimal.max(0, grossSales.minus(returnsAmount));
 
-  const yGross = yesterdaySalesAgg._sum.grandTotal ?? new Decimal(0);
-  const yReturns = yesterdayReturns._sum.totalAmount ?? new Decimal(0);
+  const yGross = prevSalesAgg._sum.grandTotal ?? new Decimal(0);
+  const yReturns = prevReturns._sum.totalAmount ?? new Decimal(0);
   const yNet = Decimal.max(0, yGross.minus(yReturns));
 
-  const todayRevenue = Number(netSales);
-  const yesterdayRevenue = Number(yNet);
-  const todayAov = todayCount > 0 ? todayRevenue / todayCount : 0;
-  const yesterdayAov = yesterdayCount > 0 ? yesterdayRevenue / yesterdayCount : 0;
-
-  // Hourly buckets 8 AM – 10 PM in Asia/Karachi
-  const hourlyMap = new Map<number, { revenue: number; transactions: number }>();
-  for (let h = 8; h <= 22; h++) hourlyMap.set(h, { revenue: 0, transactions: 0 });
+  const periodRevenue = Number(netSales);
+  const prevRevenue = Number(yNet);
+  const periodAov = periodCount > 0 ? periodRevenue / periodCount : 0;
+  const prevAov = prevCount > 0 ? prevRevenue / prevCount : 0;
 
   const paymentMap = new Map<string, number>();
   const productMap = new Map<string, { name: string; revenue: number }>();
 
-  for (const sale of todaySalesDetail) {
-    const hourPart = new Intl.DateTimeFormat('en-US', {
-      timeZone: PK_TZ,
-      hour: 'numeric',
-      hour12: false,
-    })
-      .formatToParts(sale.createdAt)
-      .find((p) => p.type === 'hour')?.value;
-    const hour = Number(hourPart === '24' ? '0' : hourPart) % 24;
-    const bucket = hourlyMap.get(hour);
-    if (bucket) {
+  let hourlySales: Array<{ hour: string; revenue: number; transactions: number }> = [];
+
+  if (isSingleDay) {
+    const hourlyMap = new Map<number, { revenue: number; transactions: number }>();
+    for (let h = 8; h <= 22; h++) hourlyMap.set(h, { revenue: 0, transactions: 0 });
+
+    for (const sale of periodSalesDetail) {
+      const hourPart = new Intl.DateTimeFormat('en-US', {
+        timeZone: PK_TZ,
+        hour: 'numeric',
+        hour12: false,
+      })
+        .formatToParts(sale.createdAt)
+        .find((p) => p.type === 'hour')?.value;
+      const hour = Number(hourPart === '24' ? '0' : hourPart) % 24;
+      const bucket = hourlyMap.get(hour);
+      if (bucket) {
+        bucket.revenue += Number(sale.grandTotal);
+        bucket.transactions += 1;
+      }
+
+      for (const p of sale.payments) {
+        paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
+      }
+      for (const item of sale.items) {
+        const existing = productMap.get(item.productId) ?? {
+          name: item.productName,
+          revenue: 0,
+        };
+        existing.revenue += Number(item.lineTotal);
+        productMap.set(item.productId, existing);
+      }
+    }
+
+    hourlySales = [...hourlyMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([hour, data]) => ({
+        hour: hourLabel(hour),
+        revenue: Math.round(data.revenue * 100) / 100,
+        transactions: data.transactions,
+      }));
+  } else {
+    const dailyMap = new Map<string, { revenue: number; transactions: number }>();
+    for (let t = start.getTime(); t <= end.getTime(); t += 24 * 60 * 60 * 1000) {
+      dailyMap.set(dayKeyInPk(new Date(t)), { revenue: 0, transactions: 0 });
+    }
+
+    for (const sale of periodSalesDetail) {
+      const key = dayKeyInPk(sale.createdAt);
+      const bucket = dailyMap.get(key) ?? { revenue: 0, transactions: 0 };
       bucket.revenue += Number(sale.grandTotal);
       bucket.transactions += 1;
+      dailyMap.set(key, bucket);
+
+      for (const p of sale.payments) {
+        paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
+      }
+      for (const item of sale.items) {
+        const existing = productMap.get(item.productId) ?? {
+          name: item.productName,
+          revenue: 0,
+        };
+        existing.revenue += Number(item.lineTotal);
+        productMap.set(item.productId, existing);
+      }
     }
 
-    for (const p of sale.payments) {
-      paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
-    }
-
-    for (const item of sale.items) {
-      const existing = productMap.get(item.productId) ?? {
-        name: item.productName,
-        revenue: 0,
-      };
-      existing.revenue += Number(item.lineTotal);
-      productMap.set(item.productId, existing);
-    }
+    hourlySales = [...dailyMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([iso, data]) => ({
+        hour: shortDayLabel(iso),
+        revenue: Math.round(data.revenue * 100) / 100,
+        transactions: data.transactions,
+      }));
   }
-
-  const hourlySales = [...hourlyMap.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([hour, data]) => ({
-      hour: hourLabel(hour),
-      revenue: Math.round(data.revenue * 100) / 100,
-      transactions: data.transactions,
-    }));
 
   const paymentTotal = [...paymentMap.values()].reduce((s, v) => s + v, 0);
   const paymentMethods =
@@ -249,20 +324,24 @@ export async function getDashboardSummary(tenantId: string, branchId?: string) {
     .slice(0, 5);
 
   return {
+    from: fromIso,
+    to: toIso,
+    chartMode: isSingleDay ? ('hourly' as const) : ('daily' as const),
+    compareLabel: isSingleDay ? 'vs yesterday' : 'vs prior period',
     todaySalesTotal: netSales.toFixed(2),
     todayGrossSalesTotal: grossSales.toFixed(2),
-    todayTransactionCount: todayCount,
-    averageOrderValue: todayAov.toFixed(2),
-    revenueChangePct: changePct(todayRevenue, yesterdayRevenue),
-    aovChangePct: changePct(todayAov, yesterdayAov),
-    transactionChangePct: changePct(todayCount, yesterdayCount),
+    todayTransactionCount: periodCount,
+    averageOrderValue: periodAov.toFixed(2),
+    revenueChangePct: changePct(periodRevenue, prevRevenue),
+    aovChangePct: changePct(periodAov, prevAov),
+    transactionChangePct: changePct(periodCount, prevCount),
     lowStockCount,
     lowStockAlerts,
     inventoryValue,
     totalProducts: productCount,
     outstandingUdhaar: udhaarTotal._sum.balance?.toFixed(2) ?? '0.00',
     todayReturnsAmount: returnsAmount.toFixed(2),
-    todayReturnsCount: todayReturns._count,
+    todayReturnsCount: periodReturns._count,
     todayReturnedUnits: returnItemsAgg._sum.quantity?.toFixed(3) ?? '0.000',
     hourlySales,
     paymentMethods,

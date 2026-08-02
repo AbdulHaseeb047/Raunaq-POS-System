@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PageSkeleton, TableSkeleton } from '@/components/ui/PageSkeleton';
 import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
+import { IconBox } from '@/components/icons';
 import { api, ApiError } from '@/lib/api-client';
 import {
   CSV_IMPORT_MAX_BYTES,
@@ -29,16 +31,58 @@ import {
 } from '@/lib/csv-utils';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, todayIso } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Product } from '@/types/api';
 
 const PAGE_SIZE = 20;
 const STOCK_FILTERS = new Set(['all', 'healthy', 'low', 'out']);
+const MOVEMENT_DAYS = 14;
 
 function parseStockParam(value: string | null): string {
   if (value && STOCK_FILTERS.has(value)) return value;
   return 'all';
+}
+
+function daysAgoIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function shortDayLabel(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+}
+
+function MovementTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string | number; value?: number; color?: string }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-border bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+      <p className="mb-1.5 font-semibold text-text">{label}</p>
+      {payload.map((row) => {
+        const key = String(row.dataKey ?? '');
+        const isIn = key === 'in';
+        return (
+          <p
+            key={key}
+            className={`font-semibold tabular-nums ${isIn ? 'text-emerald-700' : 'text-rose-700'}`}
+          >
+            {isIn ? 'Stock in' : 'Stock out'}:{' '}
+            {Number(row.value ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 2 })}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function InventoryPage() {
@@ -149,6 +193,53 @@ export function InventoryPage() {
     staleTime: 60_000,
   });
 
+  const movementFrom = daysAgoIso(MOVEMENT_DAYS - 1);
+  const movementTo = todayIso();
+  const { data: stockMovement } = useQuery({
+    queryKey: ['reports', 'stock', 'inventory-card', movementFrom, movementTo],
+    queryFn: () => api.reports.stockMovement(movementFrom, movementTo, 500),
+    enabled: Boolean(data),
+    staleTime: 60_000,
+  });
+
+  const movementChart = useMemo(() => {
+    const days: Array<{ key: string; label: string; inQty: number; outQty: number }> = [];
+    for (let i = MOVEMENT_DAYS - 1; i >= 0; i--) {
+      const key = daysAgoIso(i);
+      days.push({ key, label: shortDayLabel(key), inQty: 0, outQty: 0 });
+    }
+    const byKey = new Map(days.map((d) => [d.key, d]));
+    for (const m of stockMovement?.movements ?? []) {
+      const key = m.createdAt.slice(0, 10);
+      const bucket = byKey.get(key);
+      if (!bucket) continue;
+      const delta = Number(m.quantityDelta);
+      if (!Number.isFinite(delta) || delta === 0) continue;
+      if (delta > 0) bucket.inQty += delta;
+      else bucket.outQty += Math.abs(delta);
+    }
+    return days.map((d) => ({
+      label: d.label,
+      in: Math.round(d.inQty * 1000) / 1000,
+      out: Math.round(d.outQty * 1000) / 1000,
+      volume: Math.round((d.inQty + d.outQty) * 1000) / 1000,
+    }));
+  }, [stockMovement]);
+
+  const hasMovement = movementChart.some((d) => d.volume > 0);
+  const movementTotals = useMemo(() => {
+    let inn = 0;
+    let out = 0;
+    for (const d of movementChart) {
+      inn += d.in;
+      out += d.out;
+    }
+    return {
+      in: Math.round(inn * 1000) / 1000,
+      out: Math.round(out * 1000) / 1000,
+    };
+  }, [movementChart]);
+
   const displayedProducts = data?.data ?? [];
   const meta = data?.meta;
   const listLoading = isLoading || (isFetching && !data);
@@ -200,6 +291,8 @@ export function InventoryPage() {
     onSuccess: () => {
       setModal(null);
       void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports', 'stock'] });
     },
   });
 
@@ -486,7 +579,7 @@ export function InventoryPage() {
     <div>
       <PageHeader
         title="Inventory"
-        subtitle={`${summary?.totalProducts ?? data?.meta.total ?? 0} products in system · Value ${formatMoney(summary?.inventoryValue ?? '0', currency)}`}
+        subtitle={`${summary?.totalProducts ?? data?.meta.total ?? 0} products in system`}
         action={
           canEdit ? (
             <div className="flex flex-wrap gap-2">
@@ -505,6 +598,127 @@ export function InventoryPage() {
           ) : undefined
         }
       />
+
+      <div className="mb-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 via-white to-emerald-50 p-5 shadow-[var(--shadow-card)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 shrink-0 items-start gap-3 lg:max-w-[42%]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-sm shadow-brand-600/30">
+              <IconBox className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+                Total inventory cost
+              </p>
+              <p className="mt-1 text-3xl font-black tracking-tight text-brand-900 tabular-nums sm:text-4xl">
+                {formatMoney(summary?.inventoryValue ?? '0', currency)}
+              </p>
+              <p className="mt-1 text-sm text-text-muted">Cost price × quantity on hand</p>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1 lg:max-w-xl">
+            <div className="overflow-hidden rounded-2xl border border-white/80 bg-white/70 p-3 shadow-sm backdrop-blur-sm ring-1 ring-brand-100/60">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-800">
+                    Stock movement
+                  </p>
+                  <p className="text-[11px] text-text-muted">
+                    Last {MOVEMENT_DAYS} days · qty flow
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-100">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    In {movementTotals.in.toLocaleString('en-PK', { maximumFractionDigits: 1 })}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-800 ring-1 ring-rose-100">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    Out {movementTotals.out.toLocaleString('en-PK', { maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-28 w-full sm:h-32">
+                {!hasMovement ? (
+                  <div className="flex h-full items-center justify-center rounded-xl bg-surface-muted/40 text-xs text-text-muted">
+                    No stock movements in the last {MOVEMENT_DAYS} days
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={movementChart}
+                      margin={{ top: 8, right: 6, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="invInFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
+                          <stop offset="55%" stopColor="#059669" stopOpacity={0.12} />
+                          <stop offset="100%" stopColor="#059669" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="invOutFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#fb7185" stopOpacity={0.4} />
+                          <stop offset="55%" stopColor="#e11d48" stopOpacity={0.1} />
+                          <stop offset="100%" stopColor="#e11d48" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 6"
+                        stroke="#d1e7e2"
+                        vertical={false}
+                        strokeOpacity={0.7}
+                      />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: '#5f7a75', fontSize: 10, fontWeight: 600 }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={18}
+                        dy={4}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: '#94a3b8', strokeDasharray: '4 4', strokeWidth: 1 }}
+                        content={<MovementTooltip />}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="in"
+                        stroke="#059669"
+                        strokeWidth={2.5}
+                        fill="url(#invInFill)"
+                        name="in"
+                        activeDot={{
+                          r: 4.5,
+                          strokeWidth: 2,
+                          stroke: '#fff',
+                          fill: '#059669',
+                        }}
+                        dot={false}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="out"
+                        stroke="#e11d48"
+                        strokeWidth={2.5}
+                        fill="url(#invOutFill)"
+                        name="out"
+                        activeDot={{
+                          r: 4.5,
+                          strokeWidth: 2,
+                          stroke: '#fff',
+                          fill: '#e11d48',
+                        }}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {isFetching && (
         <div className="mb-3" aria-busy="true" aria-label="Updating products">

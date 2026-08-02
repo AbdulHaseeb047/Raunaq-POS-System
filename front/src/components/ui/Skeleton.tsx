@@ -1,10 +1,18 @@
-type SkeletonProps = {
+type SkeletonShimmerProps = {
   className?: string;
 };
 
-/** Shimmer placeholder for loading states. */
-export function Skeleton({ className = '' }: SkeletonProps) {
+/**
+ * Glossy skeleton placeholder with a diagonal light-sweep animation.
+ * Use for page/table/card/chart loading states across the app.
+ */
+export function SkeletonShimmer({ className = '' }: SkeletonShimmerProps) {
   return (
     <div className={`skeleton-shine rounded-xl bg-surface-muted ${className}`} aria-hidden="true" />
   );
+}
+
+/** @deprecated Prefer SkeletonShimmer — alias kept for existing call sites. */
+export function Skeleton({ className = '' }: SkeletonShimmerProps) {
+  return <SkeletonShimmer className={className} />;
 }

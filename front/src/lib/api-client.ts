@@ -233,8 +233,14 @@ export const api = {
   },
 
   reports: {
-    dashboard: (branchId?: string) =>
-      apiRequest<DashboardSummary>(`/reports/dashboard${branchId ? `?branchId=${branchId}` : ''}`),
+    dashboard: (branchId?: string, from?: string, to?: string) => {
+      const params = new URLSearchParams();
+      if (branchId) params.set('branchId', branchId);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      const q = params.toString();
+      return apiRequest<DashboardSummary>(`/reports/dashboard${q ? `?${q}` : ''}`);
+    },
     dailySales: (date?: string, branchId?: string) => {
       const params = new URLSearchParams();
       if (date) params.set('date', date);

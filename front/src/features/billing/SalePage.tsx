@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
+import { useToast } from '@/components/ui/Toast';
 import {
   isExchangeSaleLocationState,
   type ExchangeSaleLocationState,
@@ -67,6 +68,7 @@ function summarizeHeldCart(data: Record<string, unknown>) {
 export function SalePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -519,7 +521,15 @@ export function SalePage() {
   };
 
   const completeSale = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.sales.create(body),
+    mutationFn: async (body: Record<string, unknown>) => {
+      try {
+        return await api.sales.create(body);
+      } catch (err) {
+        // Re-sync stock so UI matches server after a failed checkout.
+        void queryClient.invalidateQueries({ queryKey: ['products'] });
+        throw err;
+      }
+    },
     onMutate: () => {
       setError('');
       setWarning('');
@@ -527,6 +537,7 @@ export function SalePage() {
     onSuccess: (result) => {
       // Keep checkout open until save succeeds, flash confirmation, then receipt.
       setSaleSuccessFlash(true);
+      toast.success('Sale completed successfully!');
       const detail = result.detail;
       const creditWarn = result.creditLimitWarning;
 
@@ -535,13 +546,18 @@ export function SalePage() {
         setShowCheckout(false);
         resetRegisterAfterSale();
 
-        if (creditWarn) setWarning(creditWarn);
+        if (creditWarn) {
+          setWarning(creditWarn);
+          toast.info(creditWarn);
+        }
 
         if (detail) {
           setReceiptSale(detail);
           if (canPrint && settings?.printReceiptsDefault) {
             void printSaleReceipt(detail, settings, currency).catch((err) => {
-              setWarning(err instanceof Error ? err.message : 'Receipt print failed');
+              const msg = err instanceof Error ? err.message : 'Receipt print failed';
+              setWarning(msg);
+              toast.error(msg);
             });
           }
         } else {
@@ -550,6 +566,7 @@ export function SalePage() {
             .then(setReceiptSale)
             .catch(() => {
               setError('Sale saved, but receipt failed to load');
+              toast.error('Sale saved, but receipt failed to load');
             });
         }
 
@@ -557,16 +574,20 @@ export function SalePage() {
         void queryClient.invalidateQueries({ queryKey: ['sales'] });
         void queryClient.invalidateQueries({ queryKey: ['customers'] });
         void queryClient.invalidateQueries({ queryKey: ['products'] });
+        void queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
       }, 1000);
     },
     onError: (err) => {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Sale failed — check API connection and try again',
-      );
+            : 'Sale failed — check API connection and try again';
+      setError(message);
+      toast.error(message);
+      // Keep checkout open; re-enable Authorize via isPending clearing.
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 
@@ -1269,6 +1290,7 @@ export function SalePage() {
 
       <Modal
         open={showCheckout}
+        closeLocked={completeSale.isPending || saleSuccessFlash}
         onClose={() => {
           if (completeSale.isPending || saleSuccessFlash) return;
           setShowCheckout(false);
@@ -1305,11 +1327,12 @@ export function SalePage() {
                 onClick={() => {
                   setError('');
                   if (!cashTenderOk) {
-                    setError(
+                    const msg =
                       exchangeCredit > 0
                         ? 'Enter the extra cash collected from the customer.'
-                        : 'Enter the amount received from the customer.',
-                    );
+                        : 'Enter the amount received from the customer.';
+                    setError(msg);
+                    toast.error(msg);
                     return;
                   }
                   completeSale.mutate(buildSalePayload());
@@ -1332,7 +1355,7 @@ export function SalePage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl font-bold text-emerald-700">
               ✓
             </div>
-            <p className="text-lg font-bold text-emerald-900">Sale added</p>
+            <p className="text-lg font-bold text-emerald-900">Sale completed successfully!</p>
             <p className="text-sm text-text-muted">Opening receipt…</p>
           </div>
         ) : (
