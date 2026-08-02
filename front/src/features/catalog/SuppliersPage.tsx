@@ -11,12 +11,14 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PageLoader } from '@/components/ui/Spinner';
 import { Select } from '@/components/ui/Select';
+import { useToast } from '@/components/ui/Toast';
 import { api } from '@/lib/api-client';
 import { formatDate, formatMoney } from '@/lib/format';
 import type { Supplier, SupplierLedgerEntry } from '@/types/api';
 
 export function SuppliersPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [modal, setModal] = useState(false);
   const [stockModal, setStockModal] = useState<Supplier | null>(null);
   const [paymentModal, setPaymentModal] = useState<Supplier | null>(null);
@@ -65,6 +67,9 @@ export function SuppliersPage() {
       setEditing(null);
       setForm({ name: '', phone: '', email: '', address: '', notes: '' });
       void queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Could not save supplier');
     },
   });
 

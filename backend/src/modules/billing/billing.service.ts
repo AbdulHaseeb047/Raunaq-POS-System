@@ -8,6 +8,7 @@ import { writeAuditLog } from '../audit/audit.service.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
+import { compactText, findIdsByCompactSearch } from '../core/text-match.js';
 import { calculateSaleTotals } from './billing.totals.js';
 import { nextSaleNumber } from './sale-sequence.js';
 import { recordCreditSale } from '../customers/ledger.service.js';
@@ -890,14 +891,28 @@ export async function listSales(
   const skip = (page - 1) * pageSize;
   const term = search?.trim();
   const createdAt = dateRangeBounds(from, to);
+  const compact = term ? compactText(term) : '';
   const statusMatches = term
     ? (['PAID', 'ON_CREDIT', 'PARTIAL'] as const).filter(
         (s) =>
           s.toLowerCase().includes(term.toLowerCase()) ||
-          (term.toLowerCase().includes('credit') && s === 'ON_CREDIT') ||
-          (term.toLowerCase().includes('udhaar') && s === 'ON_CREDIT'),
+          (compact.includes('credit') && s === 'ON_CREDIT') ||
+          (compact.includes('udhaar') && s === 'ON_CREDIT') ||
+          s.toLowerCase().replace(/_/g, '').includes(compact),
       )
     : [];
+
+  const customerIds = term
+    ? await findIdsByCompactSearch('customers', tenantId, term, ['phone'], null)
+    : null;
+
+  const saleNumberFilters =
+    term && compact
+      ? Array.from(new Set([term, compact])).map((value) => ({
+          saleNumber: { contains: value, mode: 'insensitive' as const },
+        }))
+      : [];
+
   const where = {
     tenantId,
     status: 'COMPLETED' as const,
@@ -906,8 +921,8 @@ export async function listSales(
     ...(term
       ? {
           OR: [
-            { saleNumber: { contains: term, mode: 'insensitive' as const } },
-            { customer: { name: { contains: term, mode: 'insensitive' as const } } },
+            ...saleNumberFilters,
+            ...(customerIds && customerIds.length > 0 ? [{ customerId: { in: customerIds } }] : []),
             ...(statusMatches.length > 0 ? [{ paymentStatus: { in: [...statusMatches] } }] : []),
           ],
         }

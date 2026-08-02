@@ -125,8 +125,8 @@ export function SalePage() {
     queryFn: () => api.discounts.list(false),
     enabled: canDiscount,
   });
-  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 150);
-  const debouncedSearch = useDebouncedValue(search, 200);
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 300);
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const {
     data: searchPage,
@@ -150,7 +150,7 @@ export function SalePage() {
   const { data: customers } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
     queryFn: () => api.customers.list(debouncedCustomerSearch || undefined, 1, 15),
-    enabled: debouncedCustomerSearch.length >= 1,
+    enabled: debouncedCustomerSearch.trim().length >= 2,
     placeholderData: (prev) => prev,
   });
   const canHoldBills = hasFeature(user, FEATURES.BILLING_HELD_CARTS);

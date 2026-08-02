@@ -4,6 +4,11 @@ import { z } from 'zod';
 import { NotFoundError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
+import {
+  assertUniqueCompactName,
+  compactText,
+  findIdsByCompactSearch,
+} from '../core/text-match.js';
 import { SYNC_TABLES, syncInsert, syncUpdate } from '../sync/sync-payload.js';
 import { ensureMiscProduct } from '../billing/misc-product.js';
 
@@ -58,23 +63,28 @@ export const importProductsSchema = z.object({
 });
 
 export async function listCategories(tenantId: string, search?: string) {
-  const term = search?.trim();
+  const searchIds = await findIdsByCompactSearch('categories', tenantId, search ?? '', [], null);
+  if (searchIds && searchIds.length === 0) return [];
+
   return prisma.category.findMany({
     where: {
       tenantId,
       deletedAt: null,
-      ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
+      ...(searchIds ? { id: { in: searchIds } } : {}),
     },
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
   });
 }
 
 export async function createCategory(tenantId: string, input: z.infer<typeof categorySchema>) {
+  const name = input.name.trim();
+  await assertUniqueCompactName('categories', tenantId, name, 'category');
+
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.create({
       data: {
         tenantId,
-        name: input.name,
+        name,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -91,10 +101,16 @@ export async function updateCategory(
 ) {
   const cat = await prisma.category.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!cat) throw new NotFoundError('Category not found');
+
+  const name = input.name?.trim();
+  if (name) {
+    await assertUniqueCompactName('categories', tenantId, name, 'category', id);
+  }
+
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.update({
       where: { id },
-      data: { name: input.name, sortOrder: input.sortOrder, isActive: input.isActive },
+      data: { name, sortOrder: input.sortOrder, isActive: input.isActive },
     });
     await syncUpdate(tx, SYNC_TABLES.categories, category);
     return category;
@@ -132,7 +148,20 @@ export async function listProducts(
   const page = options?.page ?? 1;
   const pageSize = Math.min(options?.pageSize ?? 50, 5000);
   const skip = (page - 1) * pageSize;
-  const search = options?.search?.trim();
+  const searchIds = await findIdsByCompactSearch(
+    'products',
+    tenantId,
+    options?.search ?? '',
+    ['sku', 'barcode'],
+    null,
+  );
+
+  if (searchIds && searchIds.length === 0) {
+    return {
+      data: [],
+      meta: { total: 0, page, pageSize, totalPages: 0 },
+    };
+  }
 
   const where: Prisma.ProductWhereInput = {
     tenantId,
@@ -140,15 +169,7 @@ export async function listProducts(
     ...(options?.activeOnly ? { isActive: true } : {}),
     ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
     ...(options?.brandId ? { brandId: options.brandId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { sku: { contains: search, mode: 'insensitive' } },
-            { barcode: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
+    ...(searchIds ? { id: { in: searchIds } } : {}),
     ...(options?.stockStatus === 'out' ? { trackStock: true, stockQuantity: { lte: 0 } } : {}),
   };
 
@@ -255,11 +276,14 @@ export async function getProductByBarcode(tenantId: string, barcode: string) {
 }
 
 export async function createProduct(tenantId: string, input: z.infer<typeof productSchema>) {
+  const name = input.name.trim();
+  await assertUniqueCompactName('products', tenantId, name, 'product');
+
   const product = await prisma.$transaction(async (tx) => {
     const created = await tx.product.create({
       data: {
         tenantId,
-        name: input.name,
+        name,
         categoryId: input.categoryId ?? null,
         brandId: input.brandId ?? null,
         supplierId: input.supplierId ?? null,
@@ -295,11 +319,16 @@ export async function updateProduct(
   const existing = await prisma.product.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!existing) throw new NotFoundError('Product not found');
 
+  const name = input.name?.trim();
+  if (name) {
+    await assertUniqueCompactName('products', tenantId, name, 'product', id);
+  }
+
   const product = await prisma.$transaction(async (tx) => {
     const updated = await tx.product.update({
       where: { id },
       data: {
-        name: input.name,
+        name,
         categoryId: input.categoryId,
         brandId: input.brandId,
         supplierId: input.supplierId,
@@ -432,7 +461,7 @@ function serializeProduct(p: {
 function buildNameIdMap(items: Array<{ id: string; name: string }>): Map<string, string> {
   const map = new Map<string, string>();
   for (const item of items) {
-    map.set(item.name.trim().toLowerCase(), item.id);
+    map.set(compactText(item.name), item.id);
   }
   return map;
 }
@@ -472,7 +501,7 @@ export async function importProducts(
 
   const resolveName = (map: Map<string, string>, name: string | null | undefined) => {
     if (!name?.trim()) return null;
-    return map.get(name.trim().toLowerCase()) ?? null;
+    return map.get(compactText(name)) ?? null;
   };
 
   let created = 0;

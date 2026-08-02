@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PageSkeleton, TableSkeleton } from '@/components/ui/PageSkeleton';
 import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
+import { useToast } from '@/components/ui/Toast';
 import { IconBox } from '@/components/icons';
 import { api, ApiError } from '@/lib/api-client';
 import {
@@ -87,10 +88,11 @@ function MovementTooltip({
 
 export function InventoryPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search, 200);
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [stockStatus, setStockStatus] = useState(() => parseStockParam(searchParams.get('stock')));
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -279,6 +281,9 @@ export function InventoryPage() {
     onSuccess: () => {
       setModal(null);
       void queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Could not save product');
     },
   });
 

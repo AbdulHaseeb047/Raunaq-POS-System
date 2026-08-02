@@ -9,19 +9,21 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
+import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { api } from '@/lib/api-client';
 import type { Brand } from '@/types/api';
 
 export function BrandsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<Brand | null>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<Brand | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search, 250);
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -57,6 +59,9 @@ export function BrandsPage() {
       setEditing(null);
       setName('');
       void queryClient.invalidateQueries({ queryKey: ['brands'] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Could not save brand');
     },
   });
 

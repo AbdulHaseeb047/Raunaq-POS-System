@@ -79,7 +79,7 @@ export function SalesHistoryPage() {
     const t = window.setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
-    }, 200);
+    }, 300);
     return () => window.clearTimeout(t);
   }, [search]);
 

@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { api } from '@/lib/api-client';
 import { useDateRangeFilter } from '@/lib/date-range';
 import { FEATURES, hasFeature } from '@/lib/features';
@@ -50,9 +51,10 @@ function printStatement(
 
 export function CustomersPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search, 200);
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
   const [sortByBalance, setSortByBalance] = useState(true);
   const { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, dates } =
@@ -79,29 +81,20 @@ export function CustomersPage() {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['customers', debouncedSearch, sortByBalance, page, dates.from, dates.to],
+    queryKey: ['customers', debouncedSearch, sortByBalance, page],
     queryFn: () =>
       api.customers.list(
         debouncedSearch || undefined,
         page,
         CUSTOMER_PAGE_SIZE,
         sortByBalance ? 'balance' : 'name',
-        dates.from,
-        dates.to,
       ),
     placeholderData: (prev) => prev,
   });
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, sortByBalance, dates.from, dates.to]);
-
-  useEffect(() => {
-    if (!selected || !data?.data) return;
-    if (!data.data.some((c) => c.id === selected.id)) {
-      setSelected(null);
-    }
-  }, [data?.data, selected]);
+  }, [debouncedSearch, sortByBalance]);
 
   const { data: aging } = useQuery({
     queryKey: ['reports', 'aging'],
@@ -189,6 +182,9 @@ export function CustomersPage() {
       setSelected(c);
       void queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Could not save customer');
+    },
   });
 
   const recordPayment = useMutation({
@@ -250,7 +246,7 @@ export function CustomersPage() {
       <div className={`lg:col-span-2 ${selected ? 'hidden lg:block' : ''}`}>
         <PageHeader
           title="Udhaar accounts"
-          subtitle="Customers with udhaar activity in the selected period"
+          subtitle="All customers — use the date filter to focus ledger activity"
           action={
             canEdit ? (
               <Button
@@ -346,7 +342,7 @@ export function CustomersPage() {
           })}
           {(data?.data ?? []).length === 0 && (
             <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-muted">
-              No udhaar activity in this date range.
+              {debouncedSearch ? 'No customers match your search.' : 'No customers yet.'}
             </p>
           )}
         </div>

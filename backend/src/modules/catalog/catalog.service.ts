@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { NotFoundError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
+import { assertUniqueCompactName, findIdsByCompactSearch } from '../core/text-match.js';
 import { SYNC_TABLES, syncInsert, syncUpdate } from '../sync/sync-payload.js';
 import { recordSupplierPurchase, serializeSupplier } from './supplier-ledger.service.js';
 
@@ -21,20 +22,24 @@ export const supplierSchema = z.object({
 });
 
 export async function listBrands(tenantId: string, search?: string) {
-  const term = search?.trim();
+  const searchIds = await findIdsByCompactSearch('brands', tenantId, search ?? '', [], null);
+  if (searchIds && searchIds.length === 0) return [];
+
   return prisma.brand.findMany({
     where: {
       tenantId,
       deletedAt: null,
-      ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
+      ...(searchIds ? { id: { in: searchIds } } : {}),
     },
     orderBy: { name: 'asc' },
   });
 }
 
 export async function createBrand(tenantId: string, input: z.infer<typeof brandSchema>) {
+  const name = input.name.trim();
+  await assertUniqueCompactName('brands', tenantId, name, 'brand');
   return prisma.brand.create({
-    data: { tenantId, name: input.name, isActive: input.isActive ?? true },
+    data: { tenantId, name, isActive: input.isActive ?? true },
   });
 }
 
@@ -45,9 +50,13 @@ export async function updateBrand(
 ) {
   const brand = await prisma.brand.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!brand) throw new NotFoundError('Brand not found');
+  const name = input.name?.trim();
+  if (name) {
+    await assertUniqueCompactName('brands', tenantId, name, 'brand', id);
+  }
   return prisma.brand.update({
     where: { id },
-    data: { name: input.name, isActive: input.isActive },
+    data: { name, isActive: input.isActive },
   });
 }
 
@@ -59,20 +68,20 @@ export async function deleteBrand(tenantId: string, id: string) {
 }
 
 export async function listSuppliers(tenantId: string, search?: string) {
-  const term = search?.trim();
+  const searchIds = await findIdsByCompactSearch(
+    'suppliers',
+    tenantId,
+    search ?? '',
+    ['phone', 'email'],
+    null,
+  );
+  if (searchIds && searchIds.length === 0) return [];
+
   const suppliers = await prisma.supplier.findMany({
     where: {
       tenantId,
       deletedAt: null,
-      ...(term
-        ? {
-            OR: [
-              { name: { contains: term, mode: 'insensitive' } },
-              { phone: { contains: term, mode: 'insensitive' } },
-              { email: { contains: term, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      ...(searchIds ? { id: { in: searchIds } } : {}),
     },
     orderBy: [{ balance: 'desc' }, { name: 'asc' }],
   });
@@ -80,10 +89,12 @@ export async function listSuppliers(tenantId: string, search?: string) {
 }
 
 export async function createSupplier(tenantId: string, input: z.infer<typeof supplierSchema>) {
+  const name = input.name.trim();
+  await assertUniqueCompactName('suppliers', tenantId, name, 'supplier');
   const supplier = await prisma.supplier.create({
     data: {
       tenantId,
-      name: input.name,
+      name,
       phone: input.phone ?? null,
       email: input.email ?? null,
       address: input.address ?? null,
@@ -101,10 +112,14 @@ export async function updateSupplier(
 ) {
   const supplier = await prisma.supplier.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!supplier) throw new NotFoundError('Supplier not found');
+  const name = input.name?.trim();
+  if (name) {
+    await assertUniqueCompactName('suppliers', tenantId, name, 'supplier', id);
+  }
   const updated = await prisma.supplier.update({
     where: { id },
     data: {
-      name: input.name,
+      name,
       phone: input.phone,
       email: input.email,
       address: input.address,

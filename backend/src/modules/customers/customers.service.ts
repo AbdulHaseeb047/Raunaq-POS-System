@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { NotFoundError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
+import { assertUniqueCompactName, findIdsByCompactSearch } from '../core/text-match.js';
 import {
   getCustomerLedger,
   getUdhaarAging,
@@ -27,59 +28,35 @@ export const recordPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
-function startOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function dateRangeBounds(from?: string, to?: string): { gte: Date; lte: Date } | undefined {
-  if (!from && !to) return undefined;
-  const rangeStart = startOfLocalDay(from ? new Date(from) : new Date());
-  const rangeEnd = endOfLocalDay(to ? new Date(to) : new Date());
-  const gte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
-  const lte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
-  return { gte, lte };
-}
-
 export async function listCustomers(
   tenantId: string,
   search?: string,
   page = 1,
   pageSize = 50,
   sortBy?: 'name' | 'balance',
-  from?: string,
-  to?: string,
+  _from?: string,
+  _to?: string,
 ) {
   const skip = (page - 1) * pageSize;
-  const createdAt = dateRangeBounds(from, to);
+  const searchIds = await findIdsByCompactSearch(
+    'customers',
+    tenantId,
+    search ?? '',
+    ['phone'],
+    null,
+  );
+
+  if (searchIds && searchIds.length === 0) {
+    return {
+      data: [],
+      meta: { total: 0, page, pageSize, totalPages: 0 },
+    };
+  }
+
   const where = {
     tenantId,
     deletedAt: null,
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { phone: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {}),
-    ...(createdAt
-      ? {
-          ledgerEntries: {
-            some: {
-              voidedAt: null,
-              createdAt,
-            },
-          },
-        }
-      : {}),
+    ...(searchIds ? { id: { in: searchIds } } : {}),
   };
 
   const orderBy = sortBy === 'balance' ? { balance: 'desc' as const } : { name: 'asc' as const };
@@ -102,11 +79,14 @@ export async function getCustomer(tenantId: string, id: string) {
 }
 
 export async function createCustomer(tenantId: string, input: z.infer<typeof customerSchema>) {
+  const name = input.name.trim();
+  await assertUniqueCompactName('customers', tenantId, name, 'customer');
+
   const customer = await prisma.$transaction(async (tx) => {
     const created = await tx.customer.create({
       data: {
         tenantId,
-        name: input.name,
+        name,
         phone: input.phone ?? null,
         email: input.email ?? null,
         address: input.address ?? null,
@@ -129,11 +109,16 @@ export async function updateCustomer(
   const existing = await prisma.customer.findFirst({ where: { id, tenantId, deletedAt: null } });
   if (!existing) throw new NotFoundError('Customer not found');
 
+  const name = input.name?.trim();
+  if (name) {
+    await assertUniqueCompactName('customers', tenantId, name, 'customer', id);
+  }
+
   const customer = await prisma.$transaction(async (tx) => {
     const updated = await tx.customer.update({
       where: { id },
       data: {
-        name: input.name,
+        name,
         phone: input.phone,
         email: input.email,
         address: input.address,
