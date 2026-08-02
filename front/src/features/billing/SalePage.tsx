@@ -109,6 +109,7 @@ export function SalePage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [deleteHeldTarget, setDeleteHeldTarget] = useState<HeldCart | null>(null);
   const [exchangeBanner, setExchangeBanner] = useState<ExchangeSaleLocationState | null>(null);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const canDiscount = hasFeature(user, FEATURES.BILLING_DISCOUNT);
   const canDiscountUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
@@ -314,11 +315,13 @@ export function SalePage() {
           },
         ];
       });
+      const nextItemCount = existing ? cart.length : cart.length + 1;
+      toast.info(`Added · ${nextItemCount} item${nextItemCount === 1 ? '' : 's'}`);
       setSearch('');
       setShowDropdown(false);
       safeFocus(searchRef.current);
     },
-    [cart],
+    [cart, toast],
   );
 
   const applyDiscountRule = useCallback(
@@ -805,11 +808,13 @@ export function SalePage() {
     setError('');
     if (!canOpenCheckout) {
       setError('Customer is required for udhaar or split payment.');
+      setMobileCartOpen(true);
       return;
     }
     const due = exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
     // Fully covered by exchange — no cash to collect.
     setAmountReceived(paymentMode === 'CASH' && due === 0 ? '0' : '');
+    setMobileCartOpen(false);
     setShowCheckout(true);
   };
 
@@ -828,10 +833,198 @@ export function SalePage() {
 
   const customerDisplay = customerSearch || (customer ? customer.name : '');
 
+  useEffect(() => {
+    if (cart.length === 0) setMobileCartOpen(false);
+  }, [cart.length]);
+
+  useEffect(() => {
+    if (!mobileCartOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileCartOpen]);
+
+  useEffect(() => {
+    if (!mobileCartOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileCartOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileCartOpen]);
+
+  const proceedPaymentLabel =
+    exchangeCredit > 0 && payableAfterExchange === 0
+      ? exchangeRemaining > 0
+        ? `Return ${formatMoney(exchangeRemaining, currency)} & finish`
+        : 'Complete exchange'
+      : exchangeCredit > 0
+        ? `Collect ${formatMoney(payableAfterExchange, currency)}`
+        : 'Proceed to Payment';
+
+  const displayTotal = exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
+
+  const renderCartLines = () =>
+    cart.length === 0 ? (
+      <div className="flex h-full min-h-[120px] items-center justify-center">
+        <p className="text-center text-xs text-text-muted">Add products from the register</p>
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {cart.map((line) => (
+          <div
+            key={line.key}
+            className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="line-clamp-2 text-sm font-medium leading-tight">
+                {line.customName ?? line.product.name}
+              </p>
+              <button
+                type="button"
+                className="shrink-0 text-[10px] text-danger"
+                onClick={() => setCart((c) => c.filter((l) => l.key !== line.key))}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-0.5 text-[10px] text-text-muted">
+              {formatMoney(line.unitPrice, currency)} × {line.quantity}
+              {line.customName ? ' · Other' : ''}
+            </p>
+            <div className="mt-2 flex items-center gap-1.5">
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
+                onClick={() =>
+                  setCart((c) =>
+                    c.map((l) =>
+                      l.key === line.key ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l,
+                    ),
+                  )
+                }
+              >
+                −
+              </button>
+              <span className="min-w-[24px] text-center text-sm font-semibold">
+                {line.quantity}
+              </span>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
+                onClick={() => {
+                  if (canAddToCart(line.product, 1, line.quantity)) {
+                    setCart((c) =>
+                      c.map((l) => (l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l)),
+                    );
+                  } else setError('Insufficient stock');
+                }}
+              >
+                +
+              </button>
+              <span className="ml-auto text-sm font-bold text-brand-700">
+                {formatMoney(line.quantity * line.unitPrice - line.discountAmount, currency)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+  const renderCustomerPicker = () => (
+    <div className="relative">
+      <input
+        className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        placeholder="Walk-in Customer (Cash Sale)"
+        value={customerDisplay}
+        autoComplete="off"
+        onChange={(e) => {
+          const v = e.target.value;
+          setCustomerSearch(v);
+          if (!v) {
+            setCustomer(null);
+            setPaymentMode('CASH');
+          }
+          setShowCustomerDropdown(true);
+        }}
+        onFocus={() => setShowCustomerDropdown(true)}
+      />
+      {showCustomerDropdown && customerSearch && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-36 overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
+          {customerSearch.trim().length < 2 ? (
+            <p className="px-3 py-2 text-xs text-text-muted">Type at least 2 characters…</p>
+          ) : customersFetching && !customers?.data?.length ? (
+            <p className="px-3 py-2 text-xs text-text-muted">Searching…</p>
+          ) : (
+            <>
+              {(customers?.data ?? [])
+                .filter((c) => customerMatchesSearch(c, customerSearch))
+                .map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
+                    onClick={() => {
+                      setCustomer(c);
+                      setCustomerSearch(c.name);
+                      setShowCustomerDropdown(false);
+                    }}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
+                  </button>
+                ))}
+              {(customers?.data ?? []).filter((c) => customerMatchesSearch(c, customerSearch))
+                .length === 0 && (
+                <p className="px-3 py-2 text-xs text-text-muted">
+                  No customer found. Add from Udhaar page.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDiscountControls = (compact = false) =>
+    canDiscount ? (
+      <div className={`flex gap-2 ${compact ? '' : 'mb-3'}`}>
+        {discountRules && discountRules.length > 0 ? (
+          <Select
+            value={selectedRuleId}
+            onChange={(e) => applyDiscountRule(e.target.value)}
+            options={[
+              { value: '', label: 'Discount rule...' },
+              ...discountRules.map((r) => ({
+                value: r.id,
+                label: `${r.name} (${r.discountType === 'PERCENTAGE' ? `${r.value}%` : `Rs ${r.value}`})`,
+              })),
+            ]}
+            className="flex-1"
+          />
+        ) : (
+          <Input
+            type="number"
+            min={0}
+            className="flex-1"
+            value={discountInput}
+            onChange={(e) => setDiscountInput(e.target.value)}
+            placeholder="Discount"
+          />
+        )}
+        <Button size="sm" variant="secondary" onClick={applyManualDiscount}>
+          Apply
+        </Button>
+      </div>
+    ) : null;
+
   return (
     <div
       className={`relative flex min-h-[calc(100dvh-8.5rem)] flex-1 flex-col md:h-full md:min-h-0 md:overflow-hidden ${
-        cart.length > 0 ? 'pb-20 lg:pb-0' : ''
+        cart.length > 0 ? (canDiscount ? 'pb-[14.5rem] lg:pb-0' : 'pb-[11.5rem] lg:pb-0') : ''
       }`}
     >
       <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -1089,7 +1282,7 @@ export function SalePage() {
           </Card>
         </div>
 
-        <div className="flex min-h-[320px] flex-col rounded-2xl border border-border bg-white shadow-sm lg:h-full lg:min-h-0">
+        <div className="hidden min-h-0 flex-col rounded-2xl border border-border bg-white shadow-sm lg:flex lg:h-full lg:min-h-0">
           <div className="shrink-0 border-b border-border px-3 py-2.5">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1108,170 +1301,13 @@ export function SalePage() {
               )}
             </div>
 
-            <div className="relative">
-              <input
-                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                placeholder="Walk-in Customer (Cash Sale)"
-                value={customerDisplay}
-                autoComplete="off"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setCustomerSearch(v);
-                  if (!v) {
-                    setCustomer(null);
-                    setPaymentMode('CASH');
-                  }
-                  setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
-              />
-              {showCustomerDropdown && customerSearch && (
-                <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-36 overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
-                  {customerSearch.trim().length < 2 ? (
-                    <p className="px-3 py-2 text-xs text-text-muted">Type at least 2 characters…</p>
-                  ) : customersFetching && !customers?.data?.length ? (
-                    <p className="px-3 py-2 text-xs text-text-muted">Searching…</p>
-                  ) : (
-                    <>
-                      {(customers?.data ?? [])
-                        .filter((c) => customerMatchesSearch(c, customerSearch))
-                        .map((c) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
-                            onClick={() => {
-                              setCustomer(c);
-                              setCustomerSearch(c.name);
-                              setShowCustomerDropdown(false);
-                            }}
-                          >
-                            <span className="font-medium">{c.name}</span>
-                            {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
-                          </button>
-                        ))}
-                      {(customers?.data ?? []).filter((c) =>
-                        customerMatchesSearch(c, customerSearch),
-                      ).length === 0 && (
-                        <p className="px-3 py-2 text-xs text-text-muted">
-                          No customer found. Add from Udhaar page.
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            {renderCustomerPicker()}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-            {cart.length === 0 ? (
-              <div className="flex h-full min-h-[120px] items-center justify-center">
-                <p className="text-center text-xs text-text-muted">
-                  Add products from the register
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {cart.map((line) => (
-                  <div
-                    key={line.key}
-                    className="rounded-xl border border-border/80 bg-surface-muted/60 p-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-2 text-sm font-medium leading-tight">
-                        {line.customName ?? line.product.name}
-                      </p>
-                      <button
-                        type="button"
-                        className="shrink-0 text-[10px] text-danger"
-                        onClick={() => setCart((c) => c.filter((l) => l.key !== line.key))}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-text-muted">
-                      {formatMoney(line.unitPrice, currency)} × {line.quantity}
-                      {line.customName ? ' · Other' : ''}
-                    </p>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
-                        onClick={() =>
-                          setCart((c) =>
-                            c.map((l) =>
-                              l.key === line.key
-                                ? { ...l, quantity: Math.max(1, l.quantity - 1) }
-                                : l,
-                            ),
-                          )
-                        }
-                      >
-                        −
-                      </button>
-                      <span className="min-w-[24px] text-center text-sm font-semibold">
-                        {line.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-sm font-bold"
-                        onClick={() => {
-                          if (canAddToCart(line.product, 1, line.quantity)) {
-                            setCart((c) =>
-                              c.map((l) =>
-                                l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l,
-                              ),
-                            );
-                          } else setError('Insufficient stock');
-                        }}
-                      >
-                        +
-                      </button>
-                      <span className="ml-auto text-sm font-bold text-brand-700">
-                        {formatMoney(
-                          line.quantity * line.unitPrice - line.discountAmount,
-                          currency,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">{renderCartLines()}</div>
 
           <div className="shrink-0 border-t border-border bg-surface-muted/40 px-4 py-3">
-            {canDiscount && (
-              <div className="mb-3 flex gap-2">
-                {discountRules && discountRules.length > 0 ? (
-                  <Select
-                    value={selectedRuleId}
-                    onChange={(e) => applyDiscountRule(e.target.value)}
-                    options={[
-                      { value: '', label: 'Discount rule...' },
-                      ...discountRules.map((r) => ({
-                        value: r.id,
-                        label: `${r.name} (${r.discountType === 'PERCENTAGE' ? `${r.value}%` : `Rs ${r.value}`})`,
-                      })),
-                    ]}
-                    className="flex-1"
-                  />
-                ) : (
-                  <Input
-                    type="number"
-                    min={0}
-                    className="flex-1"
-                    value={discountInput}
-                    onChange={(e) => setDiscountInput(e.target.value)}
-                    placeholder="Discount"
-                  />
-                )}
-                <Button size="sm" variant="secondary" onClick={applyManualDiscount}>
-                  Apply
-                </Button>
-              </div>
-            )}
+            {renderDiscountControls()}
 
             <div className="space-y-1 text-xs">
               <div className="flex justify-between text-text-muted">
@@ -1338,37 +1374,100 @@ export function SalePage() {
               disabled={cart.length === 0}
               onClick={openCheckout}
             >
-              {exchangeCredit > 0 && payableAfterExchange === 0
-                ? exchangeRemaining > 0
-                  ? `Return ${formatMoney(exchangeRemaining, currency)} & finish`
-                  : 'Complete exchange'
-                : exchangeCredit > 0
-                  ? `Collect ${formatMoney(payableAfterExchange, currency)}`
-                  : 'Proceed to Payment'}
+              {proceedPaymentLabel}
             </Button>
           </div>
         </div>
       </div>
 
       {cart.length > 0 && !showCheckout && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-medium text-text-muted">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+          <button
+            type="button"
+            className="mb-2 flex w-full items-center justify-between rounded-xl bg-surface-muted/80 px-3 py-2 text-sm"
+            onClick={() => setMobileCartOpen(true)}
+          >
+            <span className="font-semibold text-text">
               {cart.length} item{cart.length === 1 ? '' : 's'}
+              <span className="ml-1.5 font-normal text-text-muted">· View cart</span>
             </span>
-            <span className="font-bold text-brand-800">
-              {formatMoney(exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal, currency)}
+            <span className="text-text-muted" aria-hidden>
+              ▴
+            </span>
+          </button>
+
+          {renderDiscountControls(true)}
+
+          <div className="mb-2 mt-2 flex items-baseline justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              {exchangeCredit > 0 && payableAfterExchange > 0 ? 'To collect' : 'Total'}
+            </span>
+            <span className="text-lg font-bold text-brand-800">
+              {formatMoney(displayTotal, currency)}
             </span>
           </div>
+
+          {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+
           <Button className="w-full" size="lg" variant="accent" onClick={openCheckout}>
-            {exchangeCredit > 0 && payableAfterExchange === 0
-              ? exchangeRemaining > 0
-                ? `Return ${formatMoney(exchangeRemaining, currency)} & finish`
-                : 'Complete exchange'
-              : exchangeCredit > 0
-                ? `Collect ${formatMoney(payableAfterExchange, currency)}`
-                : 'Proceed to Payment'}
+            {proceedPaymentLabel}
           </Button>
+        </div>
+      )}
+
+      {mobileCartOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close cart"
+            onClick={() => setMobileCartOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[75dvh] flex-col rounded-t-2xl border border-border bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <IconWallet className="h-4 w-4 text-brand-600" />
+                <h3 className="text-sm font-semibold text-text">Cart</h3>
+                <Badge variant="brand">{cart.length}</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-danger hover:underline"
+                    onClick={cancelSale}
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-text-muted"
+                  onClick={() => setMobileCartOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="shrink-0 border-b border-border px-4 py-3">
+              {renderCustomerPicker()}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{renderCartLines()}</div>
+            <div className="shrink-0 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Grand Total
+                </span>
+                <span className="text-xl font-bold text-brand-800">
+                  {formatMoney(displayTotal, currency)}
+                </span>
+              </div>
+              <Button className="w-full" size="lg" variant="accent" onClick={openCheckout}>
+                {proceedPaymentLabel}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
