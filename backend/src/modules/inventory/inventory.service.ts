@@ -151,9 +151,7 @@ export async function listProducts(
   const pageSize = Math.min(options?.pageSize ?? 50, 5000);
   const skip = (page - 1) * pageSize;
   const idFilter =
-    options?.ids && options.ids.length > 0
-      ? Array.from(new Set(options.ids)).slice(0, 40)
-      : null;
+    options?.ids && options.ids.length > 0 ? Array.from(new Set(options.ids)).slice(0, 40) : null;
 
   if (idFilter) {
     const include = {

@@ -182,8 +182,8 @@ export async function findIdsByCompactSearch(
 
     // Join fields so tokens can span columns (e.g. name + phone: "john 0300").
     const matched = rows.filter((r) => {
-      const fields = [r.name, r.sku, r.barcode, r.phone, r.email].filter(
-        (v): v is string => Boolean(v && String(v).trim()),
+      const fields = [r.name, r.sku, r.barcode, r.phone, r.email].filter((v): v is string =>
+        Boolean(v && String(v).trim()),
       );
       return fields.length > 0 && matchesSearchTokens(fields.join(' '), term);
     });

@@ -272,9 +272,7 @@ export async function updateSettings(
     receiptFooter: input.receiptFooter,
     ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
     maxDiscountPercentStaff:
-      input.maxDiscountPercentStaff != null
-        ? toDecimal(input.maxDiscountPercentStaff)
-        : undefined,
+      input.maxDiscountPercentStaff != null ? toDecimal(input.maxDiscountPercentStaff) : undefined,
     fbrEnabled: input.fbrEnabled,
     fbrPosId: input.fbrPosId,
     fbrStrn: input.fbrStrn,
@@ -290,8 +288,7 @@ export async function updateSettings(
       data.saleQuickPickIds = input.saleQuickPickIds;
     }
     if (input.dashboardLayout !== undefined) {
-      data.dashboardLayout =
-        input.dashboardLayout === null ? Prisma.DbNull : input.dashboardLayout;
+      data.dashboardLayout = input.dashboardLayout === null ? Prisma.DbNull : input.dashboardLayout;
     }
   }
 

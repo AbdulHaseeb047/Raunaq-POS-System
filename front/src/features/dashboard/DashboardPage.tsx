@@ -186,13 +186,13 @@ export function DashboardPage() {
           key={`charts-${chartRun.join('-')}`}
           className="mt-0 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6"
         >
-          {showLoading || !data
-            ? chartsSkeleton
-            : (
-                <div className={isFetching ? 'opacity-80 transition-opacity' : ''}>
-                  <SalesDashboard data={data} currency={currency} visibleIds={chartRun} />
-                </div>
-              )}
+          {showLoading || !data ? (
+            chartsSkeleton
+          ) : (
+            <div className={isFetching ? 'opacity-80 transition-opacity' : ''}>
+              <SalesDashboard data={data} currency={currency} visibleIds={chartRun} />
+            </div>
+          )}
         </div>,
       );
       continue;

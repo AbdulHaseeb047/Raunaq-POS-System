@@ -1136,20 +1136,20 @@ export function SalePage() {
                       {(customers?.data ?? [])
                         .filter((c) => customerMatchesSearch(c, customerSearch))
                         .map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
-                          onClick={() => {
-                            setCustomer(c);
-                            setCustomerSearch(c.name);
-                            setShowCustomerDropdown(false);
-                          }}
-                        >
-                          <span className="font-medium">{c.name}</span>
-                          {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
-                        </button>
-                      ))}
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
+                            onClick={() => {
+                              setCustomer(c);
+                              setCustomerSearch(c.name);
+                              setShowCustomerDropdown(false);
+                            }}
+                          >
+                            <span className="font-medium">{c.name}</span>
+                            {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
+                          </button>
+                        ))}
                       {(customers?.data ?? []).filter((c) =>
                         customerMatchesSearch(c, customerSearch),
                       ).length === 0 && (

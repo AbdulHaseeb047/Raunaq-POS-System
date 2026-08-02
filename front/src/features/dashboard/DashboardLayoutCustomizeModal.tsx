@@ -4,11 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { api } from '@/lib/api-client';
-import {
-  DASHBOARD_WIDGET_META,
-  resolveDashboardLayout,
-  widgetLabel,
-} from '@/lib/dashboard-layout';
+import { DASHBOARD_WIDGET_META, resolveDashboardLayout, widgetLabel } from '@/lib/dashboard-layout';
 import { useToast } from '@/components/ui/Toast';
 import type { DashboardLayout, DashboardWidgetId } from '@/types/api';
 

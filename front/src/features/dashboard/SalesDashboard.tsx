@@ -220,7 +220,10 @@ export function SalesDashboard({
   );
 
   const paymentsNode = (
-    <div key="payments" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <div
+      key="payments"
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+    >
       <div className="mb-4">
         <h3 className="text-base font-semibold text-slate-900">Payment methods</h3>
         <p className="text-sm text-slate-500">Share of sales by tender type in this period</p>
@@ -321,7 +324,10 @@ export function SalesDashboard({
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip content={<MoneyTooltip currency={currency} />} cursor={{ fill: '#f1f5f9' }} />
+              <Tooltip
+                content={<MoneyTooltip currency={currency} />}
+                cursor={{ fill: '#f1f5f9' }}
+              />
               <Bar dataKey="revenue" name="Revenue" radius={[0, 8, 8, 0]} barSize={18}>
                 {topProducts.map((item) => (
                   <Cell key={item.name} fill="#059669" />

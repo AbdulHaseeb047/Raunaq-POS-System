@@ -435,12 +435,7 @@ export interface BusinessSettings {
 }
 
 export type DashboardWidgetId =
-  | 'kpis'
-  | 'trend'
-  | 'payments'
-  | 'topProducts'
-  | 'returns'
-  | 'lowStock';
+  'kpis' | 'trend' | 'payments' | 'topProducts' | 'returns' | 'lowStock';
 
 export interface DashboardLayoutWidget {
   id: DashboardWidgetId;
