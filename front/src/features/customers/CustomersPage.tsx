@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { GrowingChart } from '@/components/ui/GrowingChart';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -13,9 +14,10 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageLoader } from '@/components/ui/Spinner';
 import { api } from '@/lib/api-client';
+import { useDateRangeFilter } from '@/lib/date-range';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatMoney, isTimestampInLocalDateRange, localDateIso } from '@/lib/format';
 import { buildCustomerStatementHtml, openPrintDocument } from '@/lib/print-document';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
@@ -53,6 +55,8 @@ export function CustomersPage() {
   const debouncedSearch = useDebouncedValue(search, 200);
   const [page, setPage] = useState(1);
   const [sortByBalance, setSortByBalance] = useState(true);
+  const { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, dates } =
+    useDateRangeFilter('month');
   const [selected, setSelected] = useState<Customer | null>(null);
   const [modal, setModal] = useState<'create' | 'edit' | 'payment' | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', creditLimit: '', address: '' });
@@ -75,20 +79,29 @@ export function CustomersPage() {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['customers', debouncedSearch, sortByBalance, page],
+    queryKey: ['customers', debouncedSearch, sortByBalance, page, dates.from, dates.to],
     queryFn: () =>
       api.customers.list(
         debouncedSearch || undefined,
         page,
         CUSTOMER_PAGE_SIZE,
         sortByBalance ? 'balance' : 'name',
+        dates.from,
+        dates.to,
       ),
     placeholderData: (prev) => prev,
   });
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, sortByBalance]);
+  }, [debouncedSearch, sortByBalance, dates.from, dates.to]);
+
+  useEffect(() => {
+    if (!selected || !data?.data) return;
+    if (!data.data.some((c) => c.id === selected.id)) {
+      setSelected(null);
+    }
+  }, [data?.data, selected]);
 
   const { data: aging } = useQuery({
     queryKey: ['reports', 'aging'],
@@ -127,9 +140,10 @@ export function CustomersPage() {
     const byDay = new Map<string, { out: number; inn: number }>();
     const sorted = [...ledger]
       .filter((e) => !e.voidedAt)
+      .filter((e) => isTimestampInLocalDateRange(e.createdAt, dates.from, dates.to))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const e of sorted) {
-      const day = e.createdAt.slice(0, 10);
+      const day = localDateIso(new Date(e.createdAt));
       const bucket = byDay.get(day) ?? { out: 0, inn: 0 };
       const amt = Math.abs(parseFloat(e.amount) || 0);
       if (e.entryType === 'PAYMENT' || parseFloat(e.amount) < 0) bucket.inn += amt;
@@ -141,7 +155,7 @@ export function CustomersPage() {
       value: v.out,
       secondary: v.inn,
     }));
-  }, [ledger]);
+  }, [ledger, dates.from, dates.to]);
 
   const cashflowTotals = useMemo(() => {
     let out = 0;
@@ -152,6 +166,11 @@ export function CustomersPage() {
     }
     return { out, inn };
   }, [cashflowSeries]);
+
+  const filteredLedger = useMemo(() => {
+    if (!ledger?.length) return [];
+    return ledger.filter((e) => isTimestampInLocalDateRange(e.createdAt, dates.from, dates.to));
+  }, [ledger, dates.from, dates.to]);
 
   const saveCustomer = useMutation({
     mutationFn: () => {
@@ -231,7 +250,7 @@ export function CustomersPage() {
       <div className={`lg:col-span-2 ${selected ? 'hidden lg:block' : ''}`}>
         <PageHeader
           title="Udhaar accounts"
-          subtitle="All customers with credit balances — select to view trades"
+          subtitle="Customers with udhaar activity in the selected period"
           action={
             canEdit ? (
               <Button
@@ -245,6 +264,16 @@ export function CustomersPage() {
               </Button>
             ) : undefined
           }
+        />
+        <DateRangeFilter
+          range={range}
+          onRangeChange={setRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+          from={dates.from}
+          to={dates.to}
         />
         <div className="mb-3 flex gap-2">
           <Input
@@ -315,6 +344,11 @@ export function CustomersPage() {
               </button>
             );
           })}
+          {(data?.data ?? []).length === 0 && (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-muted">
+              No udhaar activity in this date range.
+            </p>
+          )}
         </div>
         {data?.meta ? (
           <Pagination
@@ -407,14 +441,14 @@ export function CustomersPage() {
                     Record payment
                   </Button>
                 )}
-                {canLedger && ledger && (
+                {canLedger && filteredLedger.length > 0 && (
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() =>
                       printStatement(
                         selected,
-                        ledger,
+                        filteredLedger,
                         currency,
                         settings?.businessName ?? 'Statement',
                       )
@@ -465,10 +499,14 @@ export function CustomersPage() {
               <Card>
                 <CardHeader
                   title="Trade history"
-                  subtitle="Click a sale row to view the original receipt"
+                  subtitle={`Entries from ${dates.from === dates.to ? dates.from : `${dates.from} → ${dates.to}`}`}
                 />
                 {ledgerLoading ? (
                   <PageLoader />
+                ) : filteredLedger.length === 0 ? (
+                  <p className="px-1 py-6 text-center text-sm text-text-muted">
+                    No udhaar activity in this date range.
+                  </p>
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border">
                     <div className="overflow-x-auto">
@@ -484,7 +522,7 @@ export function CustomersPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {(ledger ?? []).map((e) => (
+                          {filteredLedger.map((e) => (
                             <tr
                               key={e.id}
                               className={`border-t border-border/60 ${e.saleId ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${e.voidedAt ? 'opacity-50' : ''}`}

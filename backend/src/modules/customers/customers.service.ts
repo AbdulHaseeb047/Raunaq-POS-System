@@ -27,14 +27,38 @@ export const recordPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function dateRangeBounds(from?: string, to?: string): { gte: Date; lte: Date } | undefined {
+  if (!from && !to) return undefined;
+  const rangeStart = startOfLocalDay(from ? new Date(from) : new Date());
+  const rangeEnd = endOfLocalDay(to ? new Date(to) : new Date());
+  const gte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
+  const lte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
+  return { gte, lte };
+}
+
 export async function listCustomers(
   tenantId: string,
   search?: string,
   page = 1,
   pageSize = 50,
   sortBy?: 'name' | 'balance',
+  from?: string,
+  to?: string,
 ) {
   const skip = (page - 1) * pageSize;
+  const createdAt = dateRangeBounds(from, to);
   const where = {
     tenantId,
     deletedAt: null,
@@ -44,6 +68,16 @@ export async function listCustomers(
             { name: { contains: search, mode: 'insensitive' as const } },
             { phone: { contains: search, mode: 'insensitive' as const } },
           ],
+        }
+      : {}),
+    ...(createdAt
+      ? {
+          ledgerEntries: {
+            some: {
+              voidedAt: null,
+              createdAt,
+            },
+          },
         }
       : {}),
   };

@@ -857,15 +857,39 @@ export async function partialReturn(
   });
 }
 
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function dateRangeBounds(from?: string, to?: string): { gte: Date; lte: Date } | undefined {
+  if (!from && !to) return undefined;
+  const rangeStart = startOfLocalDay(from ? new Date(from) : new Date());
+  const rangeEnd = endOfLocalDay(to ? new Date(to) : new Date());
+  const gte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
+  const lte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
+  return { gte, lte };
+}
+
 export async function listSales(
   tenantId: string,
   page = 1,
   pageSize = 20,
   branchId?: string,
   search?: string,
+  from?: string,
+  to?: string,
 ) {
   const skip = (page - 1) * pageSize;
   const term = search?.trim();
+  const createdAt = dateRangeBounds(from, to);
   const statusMatches = term
     ? (['PAID', 'ON_CREDIT', 'PARTIAL'] as const).filter(
         (s) =>
@@ -878,6 +902,7 @@ export async function listSales(
     tenantId,
     status: 'COMPLETED' as const,
     ...(branchId ? { branchId } : {}),
+    ...(createdAt ? { createdAt } : {}),
     ...(term
       ? {
           OR: [

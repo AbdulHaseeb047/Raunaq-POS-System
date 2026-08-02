@@ -42,13 +42,21 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     { preHandler: [authenticate, requireFeature(FEATURES.BILLING_CREATE_SALE)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
-      const q = request.query as { page?: string; pageSize?: string; search?: string };
+      const q = request.query as {
+        page?: string;
+        pageSize?: string;
+        search?: string;
+        from?: string;
+        to?: string;
+      };
       return listSales(
         tenantId,
         q.page ? Number(q.page) : 1,
         q.pageSize ? Number(q.pageSize) : 20,
         undefined,
         q.search,
+        q.from,
+        q.to,
       );
     },
   );

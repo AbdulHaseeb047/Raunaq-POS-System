@@ -1,22 +1,20 @@
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { IconSale } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
+import { DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { ListSkeleton } from '@/components/ui/PageSkeleton';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryError } from '@/components/ui/QueryError';
 import { SkeletonShimmer } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
-import { formatMoney, todayIso } from '@/lib/format';
+import { useDateRangeFilter } from '@/lib/date-range';
+import { formatMoney } from '@/lib/format';
 import { FEATURES, hasFeature } from '@/lib/features';
 
 import { SalesDashboard } from './SalesDashboard';
-
-type RangeKey = 'today' | 'week' | 'month' | 'custom';
 
 function formatQty(value: string) {
   const n = Number(value);
@@ -24,31 +22,10 @@ function formatQty(value: string) {
   return n.toLocaleString('en-PK', { maximumFractionDigits: 3 });
 }
 
-function startOfWeekIso(d = new Date()): string {
-  const x = new Date(d);
-  const day = x.getDay();
-  const diff = day === 0 ? 6 : day - 1;
-  x.setDate(x.getDate() - diff);
-  return x.toISOString().slice(0, 10);
-}
-
-function startOfMonthIso(d = new Date()): string {
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
-
 export function DashboardPage() {
   const { user, branchId } = useAuth();
-  const [range, setRange] = useState<RangeKey>('today');
-  const [customFrom, setCustomFrom] = useState(todayIso());
-  const [customTo, setCustomTo] = useState(todayIso());
-
-  const dates = useMemo(() => {
-    const today = todayIso();
-    if (range === 'today') return { from: today, to: today };
-    if (range === 'week') return { from: startOfWeekIso(), to: today };
-    if (range === 'month') return { from: startOfMonthIso(), to: today };
-    return { from: customFrom, to: customTo };
-  }, [range, customFrom, customTo]);
+  const { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, dates } =
+    useDateRangeFilter('today');
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -77,13 +54,6 @@ export function DashboardPage() {
   const lowStockPreview = (data?.lowStockAlerts ?? []).slice(0, 5);
   const showLoading = isLoading || (isFetching && !data);
 
-  const rangeButtons: Array<{ key: RangeKey; label: string }> = [
-    { key: 'today', label: 'Today' },
-    { key: 'week', label: 'This week' },
-    { key: 'month', label: 'This month' },
-    { key: 'custom', label: 'Custom' },
-  ];
-
   return (
     <div>
       <PageHeader
@@ -101,46 +71,16 @@ export function DashboardPage() {
         }
       />
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface p-1">
-          {rangeButtons.map((b) => (
-            <button
-              key={b.key}
-              type="button"
-              onClick={() => setRange(b.key)}
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                range === b.key
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'text-text-muted hover:bg-surface-muted hover:text-text'
-              }`}
-            >
-              {b.label}
-            </button>
-          ))}
-        </div>
-        {range === 'custom' ? (
-          <div className="flex flex-wrap gap-2">
-            <Input
-              label="From"
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="max-w-[160px]"
-            />
-            <Input
-              label="To"
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="max-w-[160px]"
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted">
-            Showing {dates.from === dates.to ? dates.from : `${dates.from} → ${dates.to}`}
-          </p>
-        )}
-      </div>
+      <DateRangeFilter
+        range={range}
+        onRangeChange={setRange}
+        customFrom={customFrom}
+        customTo={customTo}
+        onCustomFromChange={setCustomFrom}
+        onCustomToChange={setCustomTo}
+        from={dates.from}
+        to={dates.to}
+      />
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
         {showLoading || !data ? (

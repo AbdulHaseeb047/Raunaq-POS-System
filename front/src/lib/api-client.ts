@@ -410,12 +410,14 @@ export const api = {
   },
 
   sales: {
-    list: (page = 1, pageSize = 20, search?: string) => {
+    list: (page = 1, pageSize = 20, search?: string, from?: string, to?: string) => {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
       });
       if (search?.trim()) params.set('search', search.trim());
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
       return apiRequest<Paginated<SaleListItem>>(`/sales?${params.toString()}`);
     },
     get: (saleId: string) => apiRequest<SaleDetail>(`/sales/${saleId}`),
@@ -476,10 +478,19 @@ export const api = {
   },
 
   customers: {
-    list: (search?: string, page = 1, pageSize = 50, sortBy?: 'name' | 'balance') => {
+    list: (
+      search?: string,
+      page = 1,
+      pageSize = 50,
+      sortBy?: 'name' | 'balance',
+      from?: string,
+      to?: string,
+    ) => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (search) params.set('search', search);
       if (sortBy) params.set('sortBy', sortBy);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
       return apiRequest<Paginated<Customer>>(`/customers?${params}`);
     },
     get: (id: string) => apiRequest<Customer>(`/customers/${id}`),

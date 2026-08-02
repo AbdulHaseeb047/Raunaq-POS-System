@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -20,6 +21,7 @@ import {
   type ReasonPickerValue,
 } from '@/features/billing/ReasonPicker';
 import { api } from '@/lib/api-client';
+import { useDateRangeFilter } from '@/lib/date-range';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
@@ -57,6 +59,8 @@ export function SalesHistoryPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, dates } =
+    useDateRangeFilter('today');
   const [selected, setSelected] = useState<SaleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [panel, setPanel] = useState<InvoicePanel>('receipt');
@@ -79,13 +83,18 @@ export function SalesHistoryPage() {
     return () => window.clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [dates.from, dates.to]);
+
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
   });
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['sales', page, debouncedSearch],
-    queryFn: () => api.sales.list(page, PAGE_SIZE, debouncedSearch || undefined),
+    queryKey: ['sales', page, debouncedSearch, dates.from, dates.to],
+    queryFn: () =>
+      api.sales.list(page, PAGE_SIZE, debouncedSearch || undefined, dates.from, dates.to),
     placeholderData: (prev) => prev,
   });
 
@@ -234,6 +243,17 @@ export function SalesHistoryPage() {
         }
       />
 
+      <DateRangeFilter
+        range={range}
+        onRangeChange={setRange}
+        customFrom={customFrom}
+        customTo={customTo}
+        onCustomFromChange={setCustomFrom}
+        onCustomToChange={setCustomTo}
+        from={dates.from}
+        to={dates.to}
+      />
+
       <Card className="mb-4 bg-white" padding="md">
         <Input
           placeholder="Search invoice #, customer, or payment status..."
@@ -262,7 +282,9 @@ export function SalesHistoryPage() {
               {sales.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-text-muted">
-                    {debouncedSearch ? 'No invoices match your search.' : 'No sales yet.'}
+                    {debouncedSearch
+                      ? 'No invoices match your search.'
+                      : 'No sales in this date range.'}
                   </td>
                 </tr>
               ) : (

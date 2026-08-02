@@ -27,6 +27,8 @@ export async function registerCustomerRoutes(app: FastifyInstance): Promise<void
         page?: string;
         pageSize?: string;
         sortBy?: string;
+        from?: string;
+        to?: string;
       };
       return listCustomers(
         resolveTenantId(request),
@@ -34,6 +36,8 @@ export async function registerCustomerRoutes(app: FastifyInstance): Promise<void
         q.page ? Number(q.page) : 1,
         q.pageSize ? Number(q.pageSize) : 50,
         q.sortBy === 'balance' ? 'balance' : 'name',
+        q.from,
+        q.to,
       );
     },
   );
