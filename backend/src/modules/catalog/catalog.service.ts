@@ -20,9 +20,14 @@ export const supplierSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function listBrands(tenantId: string) {
+export async function listBrands(tenantId: string, search?: string) {
+  const term = search?.trim();
   return prisma.brand.findMany({
-    where: { tenantId, deletedAt: null },
+    where: {
+      tenantId,
+      deletedAt: null,
+      ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
+    },
     orderBy: { name: 'asc' },
   });
 }
@@ -53,9 +58,22 @@ export async function deleteBrand(tenantId: string, id: string) {
   return { success: true };
 }
 
-export async function listSuppliers(tenantId: string) {
+export async function listSuppliers(tenantId: string, search?: string) {
+  const term = search?.trim();
   const suppliers = await prisma.supplier.findMany({
-    where: { tenantId, deletedAt: null },
+    where: {
+      tenantId,
+      deletedAt: null,
+      ...(term
+        ? {
+            OR: [
+              { name: { contains: term, mode: 'insensitive' } },
+              { phone: { contains: term, mode: 'insensitive' } },
+              { email: { contains: term, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
     orderBy: [{ balance: 'desc' }, { name: 'asc' }],
   });
   return suppliers.map(serializeSupplier);

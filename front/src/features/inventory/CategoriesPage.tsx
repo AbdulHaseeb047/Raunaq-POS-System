@@ -9,7 +9,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PageLoader } from '@/components/ui/Spinner';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { api } from '@/lib/api-client';
 import type { Category } from '@/types/api';
 
@@ -21,19 +22,23 @@ export function CategoriesPage() {
   const [selected, setSelected] = useState<Category | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
   });
-  const { data, isLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api.categories.list(),
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['categories', debouncedSearch],
+    queryFn: () => api.categories.list(debouncedSearch.trim() || undefined),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
-  const { data: productsPage } = useQuery({
+  const { data: productsPage, isLoading: countsLoading } = useQuery({
     queryKey: ['products', 'category-counts'],
-    queryFn: () => api.products.list({ pageSize: 500 }),
+    queryFn: () => api.products.list({ pageSize: 500, skipCount: true }),
+    staleTime: 60_000,
   });
 
   const productCountByCategory = useMemo(() => {
@@ -45,10 +50,7 @@ export function CategoriesPage() {
     return map;
   }, [productsPage]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (data ?? []).filter((c) => !term || c.name.toLowerCase().includes(term));
-  }, [data, search]);
+  const filtered = data ?? [];
 
   const save = useMutation({
     mutationFn: () =>
@@ -72,8 +74,9 @@ export function CategoriesPage() {
   });
 
   const currency = settings?.currency ?? 'PKR';
+  const listLoading = isLoading || (isFetching && !data);
 
-  if (isLoading) return <PageLoader />;
+  if (listLoading) return <PageSkeleton rows={6} />;
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
@@ -100,7 +103,15 @@ export function CategoriesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto">
+        {isFetching && (
+          <div className="mb-3">
+            <div className="skeleton-shine mb-2 h-14 rounded-xl bg-surface-muted" />
+            <div className="skeleton-shine h-14 rounded-xl bg-surface-muted" />
+          </div>
+        )}
+        <div
+          className={`max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}
+        >
           {filtered.map((cat) => {
             const count = productCountByCategory.get(cat.id) ?? 0;
             return (
@@ -116,7 +127,9 @@ export function CategoriesPage() {
               >
                 <div>
                   <p className="font-semibold text-text">{cat.name}</p>
-                  <p className="text-xs text-text-muted">{count} products</p>
+                  <p className="text-xs text-text-muted">
+                    {countsLoading ? '…' : `${count} products`}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <Badge variant={cat.isActive ? 'brand' : 'default'}>

@@ -44,6 +44,9 @@ const DiscountsPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 );
+const StockMovementsPage = lazy(() =>
+  import('@/features/reports/StockMovementsPage').then((m) => ({ default: m.StockMovementsPage })),
+);
 const StaffPage = lazy(() =>
   import('@/features/staff/StaffPage').then((m) => ({ default: m.StaffPage })),
 );
@@ -165,6 +168,16 @@ export function AppRoutes() {
               }
             />
             <Route
+              path="inventory/low-stock"
+              element={<Navigate to="/inventory?stock=low" replace />}
+            />
+            <Route path="low-stock" element={<Navigate to="/inventory?stock=low" replace />} />
+            <Route
+              path="inventory/out-of-stock"
+              element={<Navigate to="/inventory?stock=out" replace />}
+            />
+            <Route path="out-of-stock" element={<Navigate to="/inventory?stock=out" replace />} />
+            <Route
               path="categories"
               element={
                 <FeatureRoute feature={FEATURES.INVENTORY_CATEGORIES}>
@@ -200,6 +213,16 @@ export function AppRoutes() {
                 <FeatureRoute feature={FEATURES.REPORTS_VIEW}>
                   <LazyPage>
                     <ReportsPage />
+                  </LazyPage>
+                </FeatureRoute>
+              }
+            />
+            <Route
+              path="stock-movements"
+              element={
+                <FeatureRoute feature={FEATURES.REPORTS_VIEW}>
+                  <LazyPage>
+                    <StockMovementsPage />
                   </LazyPage>
                 </FeatureRoute>
               }

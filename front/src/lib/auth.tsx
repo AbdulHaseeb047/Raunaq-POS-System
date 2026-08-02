@@ -12,8 +12,9 @@ import {
   api,
   clearTokens,
   getStoredBranchId,
+  hasSessionFlag,
+  markSession,
   setStoredBranchId,
-  setTokens,
 } from '@/lib/api-client';
 import type { AuthUser, Branch } from '@/types/api';
 import { canUsePosApp, FEATURES, hasFeature, isPlatformAdmin } from '@/lib/features';
@@ -57,10 +58,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     if (typeof localStorage === 'undefined') return null;
-    if (!localStorage.getItem('pos_access_token')) return null;
+    if (!hasSessionFlag()) return null;
     return readCachedUser();
   });
-  // Never block first paint on /me — token + optional cache paint immediately.
   const [isLoading, setIsLoading] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchIdState] = useState<string | null>(getStoredBranchId());
@@ -100,8 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setBranches([]);
         return;
       }
+      markSession();
       applyUser(me);
-      // Branches are not required for first paint — load in background.
       if (canUsePosApp(me)) {
         void loadBranches(me);
       } else {
@@ -115,13 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const accessToken = localStorage.getItem('pos_access_token');
-      if (!accessToken) {
+      if (!hasSessionFlag()) {
         applyUser(null);
         setIsLoading(false);
         return;
       }
-      // Paint shell immediately; refresh session without blocking navigation.
       setIsLoading(false);
       await refreshUser();
     })();
@@ -130,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (email: string, password: string) => {
       const result = await api.auth.login(email, password);
-      setTokens(result.accessToken, result.refreshToken);
+      markSession();
       applyUser(result.user);
       if (canUsePosApp(result.user)) {
         void loadBranches(result.user);
@@ -157,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
       const result = await api.auth.changePassword(currentPassword, newPassword);
-      setTokens(result.accessToken, result.refreshToken);
+      markSession();
       applyUser(result.user);
     },
     [applyUser],

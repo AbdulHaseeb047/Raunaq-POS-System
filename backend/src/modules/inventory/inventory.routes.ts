@@ -30,7 +30,8 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
     '/categories',
     { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_CATEGORIES)] },
     async (request) => {
-      return listCategories(resolveTenantId(request));
+      const q = request.query as { search?: string };
+      return listCategories(resolveTenantId(request), q.search);
     },
   );
 

@@ -54,7 +54,13 @@ const navSections: NavSection[] = [
   {
     title: 'Catalog',
     items: [
-      { to: '/inventory', label: 'Inventory', icon: IconBox, feature: FEATURES.INVENTORY_VIEW },
+      {
+        to: '/inventory',
+        label: 'Inventory',
+        icon: IconBox,
+        feature: FEATURES.INVENTORY_VIEW,
+        end: true,
+      },
       {
         to: '/categories',
         label: 'Categories',

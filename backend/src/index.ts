@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -31,6 +32,19 @@ export async function buildApp() {
   const app = Fastify({
     logger: {
       level: appConfig.nodeEnv === 'production' ? 'info' : 'debug',
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'res.headers["set-cookie"]',
+          'body.password',
+          'body.currentPassword',
+          'body.newPassword',
+          'body.refreshToken',
+          'body.accessToken',
+        ],
+        censor: '[Redacted]',
+      },
     },
   });
 
@@ -43,6 +57,7 @@ export async function buildApp() {
   await app.register(helmet, {
     contentSecurityPolicy: appConfig.nodeEnv === 'production',
   });
+  await app.register(cookie);
   await app.register(cors, {
     origin: appConfig.corsOrigins,
     credentials: true,

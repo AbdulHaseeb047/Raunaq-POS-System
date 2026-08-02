@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Button } from './Button';
 
@@ -9,11 +9,42 @@ interface ModalProps {
   children: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** When false, skip auto-focusing the first field (default true). */
+  autoFocus?: boolean;
 }
 
 const sizes = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
-export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  size = 'md',
+  autoFocus = true,
+}: ModalProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !autoFocus) return;
+    const timer = window.setTimeout(() => {
+      const el = bodyRef.current?.querySelector<HTMLElement>(
+        'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled])',
+      );
+      el?.focus();
+      if (el instanceof HTMLInputElement && el.type !== 'number') {
+        const len = el.value.length;
+        try {
+          el.setSelectionRange(len, len);
+        } catch {
+          /* some input types don't support selection */
+        }
+      }
+    }, 30);
+    return () => window.clearTimeout(timer);
+  }, [open, autoFocus, title]);
+
   if (!open) return null;
 
   return (
@@ -35,7 +66,10 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
             ✕
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-4">
+        <div
+          ref={bodyRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-4"
+        >
           {children}
         </div>
         {footer && (

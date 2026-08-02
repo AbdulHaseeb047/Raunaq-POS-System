@@ -4,6 +4,8 @@ Offline-first point-of-sale system for SMBs in Pakistan. The repository is a Typ
 
 ## Documentation
 
+- [Project Context](PROJECT-CONTEXT.md) - full product/tech/workflow brief for humans and AI agents.
+- [Cursor agent rule](.cursor/rules/raunaq-pos-context.mdc) - always-on guidance that points agents at Project Context.
 - [Architecture](ARCHITECTURE.md) - system design and implementation notes.
 - [Database Schema](docs/SCHEMA.md) - database tables and relationships.
 - [Backend-for-Frontend](docs/BACKEND-FOR-FRONTEND.md) - API contract notes.

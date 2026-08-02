@@ -91,16 +91,53 @@ select:disabled {
   @apply outline-2 outline-offset-2 outline-brand-500;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — visible on content areas */
 ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #e8f2ef;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #7aa89e;
+  border: 2px solid #e8f2ef;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5f8f85;
+}
+
+/* Firefox (content) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #7aa89e #e8f2ef;
+}
+
+/* Sidebar / navbar — original subtle scrollbar */
+.sidebar-shell,
+.sidebar-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(168 213 204 / 0.6) transparent;
+}
+.sidebar-shell::-webkit-scrollbar,
+.sidebar-shell *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-::-webkit-scrollbar-track {
-  @apply bg-transparent;
+.sidebar-shell::-webkit-scrollbar-track,
+.sidebar-shell *::-webkit-scrollbar-track {
+  background: transparent;
 }
-::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-border-strong/60;
+.sidebar-shell::-webkit-scrollbar-thumb,
+.sidebar-shell *::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgb(168 213 204 / 0.6);
+  border: none;
+}
+.sidebar-shell::-webkit-scrollbar-thumb:hover,
+.sidebar-shell *::-webkit-scrollbar-thumb:hover {
+  background: rgb(168 213 204 / 0.85);
 }
 
 /* Sidebar logo hover animations */
@@ -272,4 +309,25 @@ select:disabled {
 .sidebar-nav-link:active .sidebar-nav-label {
   transform: translateX(2px);
   transition-duration: 0.1s;
+}
+
+/* Shimmer skeleton for slow loads */
+@keyframes skeleton-shine {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: skeleton-shine 1.25s ease-in-out infinite;
 }

@@ -1,43 +1,27 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { IconBox, IconSale, IconWallet } from '@/components/icons';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { MountainChart } from '@/components/ui/MountainChart';
+import { IconSale } from '@/components/icons';
+import { Card } from '@/components/ui/Card';
+import { ListSkeleton } from '@/components/ui/PageSkeleton';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryError } from '@/components/ui/QueryError';
-import { StatCard } from '@/components/ui/StatCard';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { FEATURES, hasFeature } from '@/lib/features';
-import { prefetchSaleCatalog } from '@/lib/use-sale-catalog';
 
-function shortDay(isoDate: string) {
-  const d = new Date(`${isoDate}T12:00:00`);
-  return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
-}
+import { SalesDashboard } from './SalesDashboard';
 
-function StatSkeleton() {
-  return (
-    <div className="h-[104px] animate-pulse rounded-2xl border border-border bg-surface-muted" />
-  );
+function formatQty(value: string) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  return n.toLocaleString('en-PK', { maximumFractionDigits: 3 });
 }
 
 export function DashboardPage() {
   const { user, branchId } = useAuth();
-  const queryClient = useQueryClient();
-
-  // Warm sale catalog after first paint — don't steal bandwidth from dashboard APIs.
-  useEffect(() => {
-    if (!hasFeature(user, FEATURES.BILLING_CREATE_SALE)) return;
-    const t = window.setTimeout(() => {
-      void prefetchSaleCatalog(queryClient);
-    }, 2000);
-    return () => window.clearTimeout(t);
-  }, [user, queryClient]);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -45,15 +29,11 @@ export function DashboardPage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['dashboard', branchId],
     queryFn: () => api.reports.dashboard(branchId ?? undefined),
-  });
-
-  const { data: trend, isLoading: trendLoading } = useQuery({
-    queryKey: ['sales-trend', branchId],
-    queryFn: () => api.reports.salesTrend(14, branchId ?? undefined),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   if (isError) {
@@ -66,12 +46,9 @@ export function DashboardPage() {
   }
 
   const currency = settings?.currency ?? 'PKR';
-  const salesSeries =
-    trend?.series.map((p) => ({ label: shortDay(p.date), value: parseFloat(p.sales) })) ?? [];
-  const txSeries =
-    trend?.series.map((p) => ({ label: shortDay(p.date), value: p.transactions })) ?? [];
-  const returnsSeries =
-    trend?.series.map((p) => ({ label: shortDay(p.date), value: parseFloat(p.returns) })) ?? [];
+  const lowStockCount = data?.lowStockCount ?? data?.lowStockAlerts?.length ?? 0;
+  const lowStockPreview = (data?.lowStockAlerts ?? []).slice(0, 5);
+  const showLoading = isLoading || (isFetching && !data);
 
   return (
     <div>
@@ -81,7 +58,7 @@ export function DashboardPage() {
         action={
           hasFeature(user, FEATURES.BILLING_CREATE_SALE) ? (
             <Link to="/sale">
-              <span className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/25 transition-colors hover:bg-brand-700 min-h-[44px]">
+              <span className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/25 transition-colors hover:bg-brand-700">
                 <IconSale className="h-4 w-4" />
                 New sale
               </span>
@@ -90,111 +67,31 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {isLoading ? (
-          <>
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-          </>
-        ) : (
-          <>
-            <StatCard
-              label="Today's net sales"
-              value={formatMoney(data?.todaySalesTotal ?? '0', currency)}
-              icon={<IconSale className="h-5 w-5" />}
-              accent="brand"
-              trend={
-                data?.todayGrossSalesTotal && data.todayGrossSalesTotal !== data.todaySalesTotal
-                  ? `Gross ${formatMoney(data.todayGrossSalesTotal, currency)} − returns`
-                  : 'Sales minus returns'
-              }
-            />
-            <StatCard
-              label="Transactions"
-              value={data?.todayTransactionCount ?? 0}
-              icon={<IconBox className="h-5 w-5" />}
-              accent="info"
-            />
-            <StatCard
-              label="Returns today"
-              value={formatMoney(data?.todayReturnsAmount ?? '0', currency)}
-              icon={<IconWallet className="h-5 w-5" />}
-              accent="info"
-              trend={
-                (data?.todayReturnsCount ?? 0) > 0
-                  ? `${data?.todayReturnsCount} return${(data?.todayReturnsCount ?? 0) === 1 ? '' : 's'}`
-                  : undefined
-              }
-            />
-            <StatCard
-              label="Outstanding udhaar"
-              value={formatMoney(data?.outstandingUdhaar ?? '0', currency)}
-              icon={<IconWallet className="h-5 w-5" />}
-              accent="accent"
-            />
-            <StatCard
-              label="Low stock items"
-              value={data?.lowStockAlerts?.length ?? 0}
-              icon={<IconBox className="h-5 w-5" />}
-              accent="warning"
-            />
-          </>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-base font-bold text-text">Shop growth</h2>
-            <p className="text-sm text-text-muted">Last 14 days — sales, traffic, and returns</p>
-          </div>
-          {trend && (
-            <p className="text-sm font-semibold text-brand-700">
-              {trend.growthPct >= 0 ? '+' : ''}
-              {trend.growthPct}% vs prior half of period
-            </p>
-          )}
-        </div>
-
-        {trendLoading ? (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
-            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
-            <div className="h-56 animate-pulse rounded-2xl border border-border bg-surface-muted" />
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+        {showLoading || !data ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+            </div>
+            <Skeleton className="h-72 rounded-xl" />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Skeleton className="h-64 rounded-xl" />
+              <Skeleton className="h-64 rounded-xl" />
+            </div>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <MountainChart
-              title="Net sales"
-              subtitle={`${formatMoney(trend?.totalSales ?? '0', currency)} after returns`}
-              data={salesSeries}
-              color="#059669"
-              formatValue={(n) => formatMoney(n, currency)}
-            />
-            <MountainChart
-              title="Transactions"
-              subtitle={`${trend?.totalTransactions ?? 0} bills`}
-              data={txSeries}
-              color="#0284c7"
-              formatValue={(n) => String(Math.round(n))}
-            />
-            <MountainChart
-              title="Returns"
-              subtitle={`${formatMoney(trend?.totalReturns ?? '0', currency)} refunded`}
-              data={returnsSeries}
-              color="#ea580c"
-              formatValue={(n) => formatMoney(n, currency)}
-            />
-          </div>
+          <SalesDashboard data={data} currency={currency} />
         )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Products returned today" subtitle="Refunds processed so far" />
+          <div className="mb-3">
+            <h3 className="text-base font-bold text-text">Products returned today</h3>
+            <p className="text-sm text-text-muted">Refunds processed so far</p>
+          </div>
           <div className="space-y-3">
             <div className="rounded-xl border border-border bg-surface-muted/60 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
@@ -230,22 +127,40 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Low stock alerts" subtitle="Products below threshold" />
-          {isLoading ? (
-            <div className="h-24 animate-pulse rounded-xl bg-surface-muted" />
-          ) : (data?.lowStockAlerts?.length ?? 0) === 0 ? (
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-text">Low stock alerts</h3>
+              <p className="text-sm text-text-muted">Top 5 below threshold</p>
+            </div>
+            {lowStockCount > 0 && hasFeature(user, FEATURES.INVENTORY_VIEW) && (
+              <Link
+                to="/inventory?stock=low"
+                className="shrink-0 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-800 hover:bg-brand-100"
+              >
+                View all
+              </Link>
+            )}
+          </div>
+          {showLoading ? (
+            <ListSkeleton rows={5} />
+          ) : lowStockPreview.length === 0 ? (
             <p className="text-sm text-text-muted">All stock levels look good.</p>
           ) : (
             <ul className="space-y-2">
-              {data?.lowStockAlerts.map((item) => (
+              {lowStockPreview.map((item) => (
                 <li
                   key={item.id}
-                  className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm"
                 >
-                  <span className="font-medium text-text">{item.name}</span>
-                  <Badge variant="warning">
-                    {item.stockQuantity} / {item.lowStockThreshold}
-                  </Badge>
+                  <span className="min-w-0 flex-1 font-medium text-text">{item.name}</span>
+                  <div className="flex shrink-0 items-center gap-2 text-xs">
+                    <span className="rounded-lg bg-amber-100 px-2.5 py-1 font-semibold text-amber-900">
+                      Present {formatQty(item.stockQuantity)}
+                    </span>
+                    <span className="rounded-lg bg-white px-2.5 py-1 font-medium text-text-muted ring-1 ring-border">
+                      Alert at {formatQty(item.lowStockThreshold)}
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>

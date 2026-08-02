@@ -21,14 +21,8 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
-import {
-  calcSaleTotals,
-  canAddToCart,
-  filterAndRankProducts,
-  getStockStatus,
-} from '@/lib/sale-utils';
+import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { useSaleCatalog } from '@/lib/use-sale-catalog';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
 
 const SALE_SEARCH_LIMIT = 40;
@@ -107,6 +101,7 @@ export function SalePage() {
   const [holdLabel, setHoldLabel] = useState('');
   const [holdMessage, setHoldMessage] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [saleSuccessFlash, setSaleSuccessFlash] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [deleteHeldTarget, setDeleteHeldTarget] = useState<HeldCart | null>(null);
   const [exchangeBanner, setExchangeBanner] = useState<ExchangeSaleLocationState | null>(null);
@@ -129,14 +124,27 @@ export function SalePage() {
     enabled: canDiscount,
   });
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 150);
+  const debouncedSearch = useDebouncedValue(search, 200);
 
-  // Chunked catalog: first ~200 products unlock search quickly; rest loads in background.
   const {
-    products: catalogProducts,
-    isLoading: catalogLoading,
-    isFetching: catalogFetching,
-    loadingMore: catalogLoadingMore,
-  } = useSaleCatalog();
+    data: searchPage,
+    isLoading: searchLoading,
+    isFetching: searchFetching,
+  } = useQuery({
+    // "All" (no category) still loads a browse set so cashiers see products immediately.
+    queryKey: ['products', 'sale-browse', debouncedSearch, categoryId || 'all'],
+    queryFn: () =>
+      api.products.list({
+        search: debouncedSearch.trim() || undefined,
+        categoryId: categoryId || undefined,
+        page: 1,
+        pageSize: SALE_SEARCH_LIMIT,
+        activeOnly: true,
+        skipCount: true,
+      }),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
   const { data: customers } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
     queryFn: () => api.customers.list(debouncedCustomerSearch || undefined, 1, 15),
@@ -517,35 +525,39 @@ export function SalePage() {
       setWarning('');
     },
     onSuccess: (result) => {
-      // Only close checkout after the sale is confirmed saved.
-      setShowCheckout(false);
-      resetRegisterAfterSale();
-
-      if (result.creditLimitWarning) setWarning(result.creditLimitWarning);
-
+      // Keep checkout open until save succeeds, flash confirmation, then receipt.
+      setSaleSuccessFlash(true);
       const detail = result.detail;
-      if (detail) {
-        setReceiptSale(detail);
-        if (canPrint && settings?.printReceiptsDefault) {
-          void printSaleReceipt(detail, settings, currency).catch((err) => {
-            setWarning(err instanceof Error ? err.message : 'Receipt print failed');
-          });
-        }
-      } else {
-        void api.sales
-          .get(result.sale.id)
-          .then(setReceiptSale)
-          .catch(() => {
-            setError('Sale saved, but receipt failed to load');
-          });
-      }
+      const creditWarn = result.creditLimitWarning;
 
       window.setTimeout(() => {
+        setSaleSuccessFlash(false);
+        setShowCheckout(false);
+        resetRegisterAfterSale();
+
+        if (creditWarn) setWarning(creditWarn);
+
+        if (detail) {
+          setReceiptSale(detail);
+          if (canPrint && settings?.printReceiptsDefault) {
+            void printSaleReceipt(detail, settings, currency).catch((err) => {
+              setWarning(err instanceof Error ? err.message : 'Receipt print failed');
+            });
+          }
+        } else {
+          void api.sales
+            .get(result.sale.id)
+            .then(setReceiptSale)
+            .catch(() => {
+              setError('Sale saved, but receipt failed to load');
+            });
+        }
+
         void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         void queryClient.invalidateQueries({ queryKey: ['sales'] });
         void queryClient.invalidateQueries({ queryKey: ['customers'] });
         void queryClient.invalidateQueries({ queryKey: ['products'] });
-      }, 0);
+      }, 1000);
     },
     onError: (err) => {
       setError(
@@ -650,17 +662,22 @@ export function SalePage() {
   };
 
   const searchResults = useMemo(() => {
-    const rows = catalogProducts;
-    const q = search.trim();
-    if (!q && !categoryId) return [];
-
-    const inCategory = categoryId ? rows.filter((p) => p.category?.id === categoryId) : rows;
-
-    // Keep all matches that contain the keyword, but put "starts with" first.
-    const ranked = q ? filterAndRankProducts(inCategory, q) : inCategory;
-    return ranked.slice(0, SALE_SEARCH_LIMIT);
-  }, [catalogProducts, search, categoryId]);
-  const productsFetching = catalogLoading || (catalogFetching && catalogProducts.length === 0);
+    const rows = searchPage?.data ?? [];
+    // On All / browse: sellable items first (in stock or untracked), then the rest.
+    if (debouncedSearch.trim() || categoryId) return rows;
+    return [...rows].sort((a, b) => {
+      const score = (p: Product) => {
+        if (!p.trackStock) return 0;
+        const qty = parseFloat(p.stockQuantity);
+        if (qty > 0) return 1;
+        return 2;
+      };
+      const d = score(a) - score(b);
+      if (d !== 0) return d;
+      return a.name.localeCompare(b.name);
+    });
+  }, [searchPage?.data, debouncedSearch, categoryId]);
+  const productsFetching = searchLoading || (searchFetching && searchResults.length === 0);
   const cashDue = useMemo(() => {
     if (paymentMode === 'CASH') {
       return exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
@@ -695,7 +712,7 @@ export function SalePage() {
     cart.length > 0 &&
     (paymentMode !== 'CREDIT' || !!customer) &&
     (paymentMode !== 'SPLIT' || !!customer);
-  const activeCategories = categoryId || search.length >= 1 ? searchResults : [];
+  const browseProducts = searchResults;
   const selectedCustomerLabel = customer?.name ?? 'Walk-in Customer (Cash Sale)';
 
   const paymentModeLabels: Record<PaymentMode, string> = {
@@ -919,49 +936,62 @@ export function SalePage() {
 
           <Card className="bg-white" padding="md">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Products</h3>
-              <span className="text-xs text-text-muted">{activeCategories.length} items</span>
+              <h3 className="text-sm font-semibold">
+                {!categoryId && !search.trim()
+                  ? 'Quick pick'
+                  : categoryId
+                    ? 'Category products'
+                    : 'Search results'}
+              </h3>
+              <span className="text-xs text-text-muted">{browseProducts.length} items</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {activeCategories.map((p) => {
-                const status = getStockStatus(p);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={status === 'out'}
-                    onClick={() => addToCart(p)}
-                    className="flex min-h-[116px] flex-col rounded-2xl border border-border bg-surface p-3 text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50"
-                  >
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                      {p.category?.name ?? 'General'}
-                    </span>
-                    <span className="mt-2 line-clamp-2 text-sm font-semibold">{p.name}</span>
-                    <div className="mt-auto flex items-end justify-between gap-2 pt-3 text-xs">
-                      <div>
-                        <span className="block font-semibold text-brand-700">
-                          {formatMoney(p.sellPrice, currency)}
-                        </span>
-                        <span className="text-[11px] text-text-muted">/ {p.unit}</span>
-                      </div>
-                      {p.trackStock && (
-                        <Badge variant={status === 'low' ? 'warning' : 'default'}>
-                          {p.stockQuantity}
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {!categoryId && !search && (
+            {productsFetching && browseProducts.length === 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-busy="true">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <div key={i} className="skeleton-shine h-[116px] rounded-2xl bg-surface-muted" />
+                ))}
+              </div>
+            ) : browseProducts.length === 0 ? (
               <p className="py-10 text-center text-sm text-text-muted">
-                {catalogLoading
-                  ? 'Loading products…'
-                  : catalogLoadingMore
-                    ? 'Search or choose a category (loading more products…)'
-                    : 'Search or choose a category to start.'}
+                {search.trim()
+                  ? 'No products match your search.'
+                  : 'No products available yet — add items in Inventory.'}
               </p>
+            ) : (
+              <div
+                className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${productsFetching ? 'opacity-70' : ''}`}
+              >
+                {browseProducts.map((p) => {
+                  const status = getStockStatus(p);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={status === 'out'}
+                      onClick={() => addToCart(p)}
+                      className="flex min-h-[116px] flex-col rounded-2xl border border-border bg-surface p-3 text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50"
+                    >
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                        {p.category?.name ?? 'General'}
+                      </span>
+                      <span className="mt-2 line-clamp-2 text-sm font-semibold">{p.name}</span>
+                      <div className="mt-auto flex items-end justify-between gap-2 pt-3 text-xs">
+                        <div>
+                          <span className="block font-semibold text-brand-700">
+                            {formatMoney(p.sellPrice, currency)}
+                          </span>
+                          <span className="text-[11px] text-text-muted">/ {p.unit}</span>
+                        </div>
+                        {p.trackStock && (
+                          <Badge variant={status === 'low' ? 'warning' : 'default'}>
+                            {p.stockQuantity}
+                          </Badge>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </Card>
         </div>
@@ -1240,282 +1270,302 @@ export function SalePage() {
       <Modal
         open={showCheckout}
         onClose={() => {
-          if (completeSale.isPending) return;
+          if (completeSale.isPending || saleSuccessFlash) return;
           setShowCheckout(false);
         }}
         title={
-          paymentMode === 'CASH'
-            ? 'Cash Sale'
-            : paymentMode === 'CREDIT'
-              ? 'Credit Sale'
-              : paymentMode === 'SPLIT'
-                ? 'Split Payment'
-                : 'Payment Checkout'
+          saleSuccessFlash
+            ? 'Sale registered'
+            : paymentMode === 'CASH'
+              ? 'Cash Sale'
+              : paymentMode === 'CREDIT'
+                ? 'Credit Sale'
+                : paymentMode === 'SPLIT'
+                  ? 'Split Payment'
+                  : 'Payment Checkout'
         }
         size="md"
         footer={
-          <>
-            <Button
-              variant="ghost"
-              disabled={completeSale.isPending}
-              onClick={() => setShowCheckout(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              loading={completeSale.isPending}
-              disabled={!canAuthorize || completeSale.isPending}
-              onClick={() => {
-                setError('');
-                if (!cashTenderOk) {
-                  setError(
-                    exchangeCredit > 0
-                      ? 'Enter the extra cash collected from the customer.'
-                      : 'Enter the amount received from the customer.',
-                  );
-                  return;
-                }
-                completeSale.mutate(buildSalePayload());
-              }}
-            >
-              {exchangeCredit > 0 && cashDue === 0
-                ? exchangeRemaining > 0
-                  ? `Complete · return ${formatMoney(exchangeRemaining, currency)}`
-                  : 'Complete exchange'
-                : exchangeCredit > 0
-                  ? `Authorize · collect ${formatMoney(cashDue, currency)}`
-                  : 'Authorize Checkout'}
-            </Button>
-          </>
+          saleSuccessFlash ? undefined : (
+            <>
+              <Button
+                variant="ghost"
+                disabled={completeSale.isPending}
+                onClick={() => {
+                  if (completeSale.isPending) return;
+                  setShowCheckout(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={completeSale.isPending}
+                disabled={!canAuthorize || completeSale.isPending}
+                onClick={() => {
+                  setError('');
+                  if (!cashTenderOk) {
+                    setError(
+                      exchangeCredit > 0
+                        ? 'Enter the extra cash collected from the customer.'
+                        : 'Enter the amount received from the customer.',
+                    );
+                    return;
+                  }
+                  completeSale.mutate(buildSalePayload());
+                }}
+              >
+                {exchangeCredit > 0 && cashDue === 0
+                  ? exchangeRemaining > 0
+                    ? `Complete · return ${formatMoney(exchangeRemaining, currency)}`
+                    : 'Complete exchange'
+                  : exchangeCredit > 0
+                    ? `Authorize · collect ${formatMoney(cashDue, currency)}`
+                    : 'Authorize Checkout'}
+              </Button>
+            </>
+          )
         }
       >
-        <div className="space-y-3">
-          <div className="rounded-xl bg-slate-700 px-3.5 py-3 text-white">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">
-                  Invoice total
-                </p>
-                <p className="truncate text-xs text-slate-200">{selectedCustomerLabel}</p>
-              </div>
-              <p className="shrink-0 text-xl font-bold">
-                {formatMoney(totals.grandTotal, currency)}
-              </p>
+        {saleSuccessFlash ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl font-bold text-emerald-700">
+              ✓
             </div>
-            {exchangeCredit > 0 && (
-              <div className="mt-2 space-y-0.5 border-t border-slate-500 pt-2 text-xs text-slate-200">
-                <div className="flex justify-between">
-                  <span>Exchange credit</span>
-                  <span>−{formatMoney(exchangeApplied, currency)}</span>
+            <p className="text-lg font-bold text-emerald-900">Sale added</p>
+            <p className="text-sm text-text-muted">Opening receipt…</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-slate-700 px-3.5 py-3 text-white">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                    Invoice total
+                  </p>
+                  <p className="truncate text-xs text-slate-200">{selectedCustomerLabel}</p>
                 </div>
-                {exchangeRemaining > 0 && (
-                  <div className="flex justify-between text-emerald-300">
-                    <span>Return cash</span>
-                    <span>{formatMoney(exchangeRemaining, currency)}</span>
+                <p className="shrink-0 text-xl font-bold">
+                  {formatMoney(totals.grandTotal, currency)}
+                </p>
+              </div>
+              {exchangeCredit > 0 && (
+                <div className="mt-2 space-y-0.5 border-t border-slate-500 pt-2 text-xs text-slate-200">
+                  <div className="flex justify-between">
+                    <span>Exchange credit</span>
+                    <span>−{formatMoney(exchangeApplied, currency)}</span>
                   </div>
-                )}
-                <div className="flex justify-between font-semibold text-white">
-                  <span>{payableAfterExchange > 0 ? 'Cash to collect' : 'Cash to return'}</span>
-                  <span>
-                    {payableAfterExchange > 0
-                      ? formatMoney(payableAfterExchange, currency)
-                      : formatMoney(exchangeRemaining, currency)}
-                  </span>
+                  {exchangeRemaining > 0 && (
+                    <div className="flex justify-between text-emerald-300">
+                      <span>Return cash</span>
+                      <span>{formatMoney(exchangeRemaining, currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-white">
+                    <span>{payableAfterExchange > 0 ? 'Cash to collect' : 'Cash to return'}</span>
+                    <span>
+                      {payableAfterExchange > 0
+                        ? formatMoney(payableAfterExchange, currency)
+                        : formatMoney(exchangeRemaining, currency)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Payment mode — only when more than cash is available */}
+            {exchangeCredit === 0 && availablePaymentModes.length > 1 && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Payment mode
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {availablePaymentModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMode(mode);
+                        setAmountReceived('');
+                        if (mode === 'SPLIT') {
+                          setCashAmount('');
+                          setCreditAmount(String(totals.grandTotal));
+                        } else if (mode !== 'CREDIT') {
+                          setCashAmount('');
+                          setCreditAmount('');
+                        }
+                      }}
+                      className={`rounded-xl border px-2 py-2 text-center text-xs font-semibold transition ${
+                        paymentMode === mode
+                          ? 'border-brand-700 bg-brand-50 text-brand-800'
+                          : 'border-border bg-surface-muted text-text'
+                      }`}
+                    >
+                      {paymentModeLabels[mode]}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Payment mode — only when more than cash is available */}
-          {exchangeCredit === 0 && availablePaymentModes.length > 1 && (
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                Payment mode
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {availablePaymentModes.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => {
-                      setPaymentMode(mode);
-                      setAmountReceived('');
-                      if (mode === 'SPLIT') {
-                        setCashAmount('');
-                        setCreditAmount(String(totals.grandTotal));
-                      } else if (mode !== 'CREDIT') {
-                        setCashAmount('');
-                        setCreditAmount('');
-                      }
-                    }}
-                    className={`rounded-xl border px-2 py-2 text-center text-xs font-semibold transition ${
-                      paymentMode === mode
-                        ? 'border-brand-700 bg-brand-50 text-brand-800'
-                        : 'border-border bg-surface-muted text-text'
-                    }`}
-                  >
-                    {paymentModeLabels[mode]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {paymentMode === 'CASH' && cashDue === 0 && exchangeCredit > 0 && (
-            <div
-              className={`rounded-xl border px-3 py-3 text-sm ${
-                exchangeRemaining > 0
-                  ? 'border-emerald-400 bg-emerald-50 text-emerald-950'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-900'
-              }`}
-            >
-              {exchangeRemaining > 0 ? (
-                <>
-                  <p className="text-sm font-semibold">Return cash to customer</p>
-                  <p className="mt-1 text-2xl font-bold text-emerald-800">
-                    {formatMoney(exchangeRemaining, currency)}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm font-medium">No cash to collect or return</p>
-              )}
-            </div>
-          )}
-
-          {paymentMode === 'CASH' && cashDue > 0 && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                {exchangeCredit > 0
-                  ? `Extra cash to collect (${currency})`
-                  : `Amount received from customer (${currency})`}
-              </p>
-              <Input
-                type="number"
-                min={cashDue}
-                step="1"
-                value={amountReceived}
-                onChange={(e) => setAmountReceived(e.target.value)}
-                placeholder={`Due: ${formatMoney(cashDue, currency)}`}
-                autoFocus={prefersDesktopInput()}
-                className="text-base font-semibold"
-              />
-              <div className="flex flex-wrap gap-1.5">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setQuickTender(cashDue)}
-                >
-                  Exact
-                </Button>
-                {[500, 1000, 5000].map((note) => (
-                  <Button
-                    key={note}
-                    size="sm"
-                    variant="ghost"
-                    type="button"
-                    onClick={() => setQuickTender(roundUpToStep(cashDue, note))}
-                  >
-                    {formatMoney(note, currency)}
-                  </Button>
-                ))}
-              </div>
-              <div className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
-                {exchangeCredit > 0 && (
+            {paymentMode === 'CASH' && cashDue === 0 && exchangeCredit > 0 && (
+              <div
+                className={`rounded-xl border px-3 py-3 text-sm ${
+                  exchangeRemaining > 0
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-950'
+                    : 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                }`}
+              >
+                {exchangeRemaining > 0 ? (
                   <>
-                    <div className="mb-1 flex justify-between">
-                      <span>Bill total</span>
-                      <span className="font-medium">
-                        {formatMoney(totals.grandTotal, currency)}
-                      </span>
-                    </div>
-                    <div className="mb-1 flex justify-between">
-                      <span>Exchange credit</span>
-                      <span className="font-medium">−{formatMoney(exchangeApplied, currency)}</span>
-                    </div>
+                    <p className="text-sm font-semibold">Return cash to customer</p>
+                    <p className="mt-1 text-2xl font-bold text-emerald-800">
+                      {formatMoney(exchangeRemaining, currency)}
+                    </p>
                   </>
+                ) : (
+                  <p className="text-sm font-medium">No cash to collect or return</p>
                 )}
-                <div className="flex justify-between">
-                  <span>{exchangeCredit > 0 ? 'Cash due' : 'Bill total'}</span>
-                  <span className="font-medium">{formatMoney(cashDue, currency)}</span>
+              </div>
+            )}
+
+            {paymentMode === 'CASH' && cashDue > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  {exchangeCredit > 0
+                    ? `Extra cash to collect (${currency})`
+                    : `Amount received from customer (${currency})`}
+                </p>
+                <Input
+                  type="number"
+                  min={cashDue}
+                  step="1"
+                  value={amountReceived}
+                  onChange={(e) => setAmountReceived(e.target.value)}
+                  placeholder={`Due: ${formatMoney(cashDue, currency)}`}
+                  autoFocus={prefersDesktopInput()}
+                  className="text-base font-semibold"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    type="button"
+                    onClick={() => setQuickTender(cashDue)}
+                  >
+                    Exact
+                  </Button>
+                  {[500, 1000, 5000].map((note) => (
+                    <Button
+                      key={note}
+                      size="sm"
+                      variant="ghost"
+                      type="button"
+                      onClick={() => setQuickTender(roundUpToStep(cashDue, note))}
+                    >
+                      {formatMoney(note, currency)}
+                    </Button>
+                  ))}
                 </div>
-                <div className="mt-1 flex justify-between">
-                  <span>Received</span>
-                  <span className="font-medium">
-                    {formatMoney(parseFloat(amountReceived) || 0, currency)}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex justify-between border-t border-emerald-200 pt-1.5 text-base font-bold text-emerald-800">
-                  <span>Change back</span>
-                  <span>{formatMoney(changeDue, currency)}</span>
+                <div className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+                  {exchangeCredit > 0 && (
+                    <>
+                      <div className="mb-1 flex justify-between">
+                        <span>Bill total</span>
+                        <span className="font-medium">
+                          {formatMoney(totals.grandTotal, currency)}
+                        </span>
+                      </div>
+                      <div className="mb-1 flex justify-between">
+                        <span>Exchange credit</span>
+                        <span className="font-medium">
+                          −{formatMoney(exchangeApplied, currency)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between">
+                    <span>{exchangeCredit > 0 ? 'Cash due' : 'Bill total'}</span>
+                    <span className="font-medium">{formatMoney(cashDue, currency)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between">
+                    <span>Received</span>
+                    <span className="font-medium">
+                      {formatMoney(parseFloat(amountReceived) || 0, currency)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex justify-between border-t border-emerald-200 pt-1.5 text-base font-bold text-emerald-800">
+                    <span>Change back</span>
+                    <span>{formatMoney(changeDue, currency)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {paymentMode === 'CREDIT' && (
-            <div className="rounded-xl border border-brand-200 bg-brand-50/70 px-3 py-2.5 text-sm text-brand-900">
-              Full invoice will be posted to customer udhaar.
-            </div>
-          )}
+            {paymentMode === 'CREDIT' && (
+              <div className="rounded-xl border border-brand-200 bg-brand-50/70 px-3 py-2.5 text-sm text-brand-900">
+                Full invoice will be posted to customer udhaar.
+              </div>
+            )}
 
-          {paymentMode === 'SPLIT' && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Cash customer is giving now ({currency})
+            {paymentMode === 'SPLIT' && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Cash customer is giving now ({currency})
+                </p>
+                <Input
+                  type="number"
+                  min={0}
+                  max={totals.grandTotal}
+                  step="1"
+                  value={cashAmount}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setCashAmount(raw);
+                    const cash = Math.min(Math.max(0, parseFloat(raw) || 0), totals.grandTotal);
+                    const credit = Math.max(0, Math.round((totals.grandTotal - cash) * 100) / 100);
+                    setCreditAmount(String(credit));
+                    setAmountReceived(raw === '' ? '' : String(cash));
+                  }}
+                  placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
+                  autoFocus={prefersDesktopInput()}
+                />
+                <div className="rounded-xl bg-brand-50 px-3 py-2.5 text-sm text-brand-900">
+                  <div className="flex justify-between">
+                    <span>Bill total</span>
+                    <span className="font-medium">{formatMoney(totals.grandTotal, currency)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between">
+                    <span>Cash now</span>
+                    <span className="font-medium">
+                      {formatMoney(parseFloat(cashAmount) || 0, currency)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex justify-between border-t border-brand-200 pt-1.5 font-bold">
+                    <span>Remaining on udhaar</span>
+                    <span>
+                      {formatMoney(
+                        Math.max(
+                          0,
+                          Math.round((totals.grandTotal - (parseFloat(cashAmount) || 0)) * 100) /
+                            100,
+                        ),
+                        currency,
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {creditLimitWarning && (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800">
+                {creditLimitWarning}
               </p>
-              <Input
-                type="number"
-                min={0}
-                max={totals.grandTotal}
-                step="1"
-                value={cashAmount}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  setCashAmount(raw);
-                  const cash = Math.min(Math.max(0, parseFloat(raw) || 0), totals.grandTotal);
-                  const credit = Math.max(0, Math.round((totals.grandTotal - cash) * 100) / 100);
-                  setCreditAmount(String(credit));
-                  setAmountReceived(raw === '' ? '' : String(cash));
-                }}
-                placeholder={`Less than ${formatMoney(totals.grandTotal, currency)}`}
-                autoFocus={prefersDesktopInput()}
-              />
-              <div className="rounded-xl bg-brand-50 px-3 py-2.5 text-sm text-brand-900">
-                <div className="flex justify-between">
-                  <span>Bill total</span>
-                  <span className="font-medium">{formatMoney(totals.grandTotal, currency)}</span>
-                </div>
-                <div className="mt-1 flex justify-between">
-                  <span>Cash now</span>
-                  <span className="font-medium">
-                    {formatMoney(parseFloat(cashAmount) || 0, currency)}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex justify-between border-t border-brand-200 pt-1.5 font-bold">
-                  <span>Remaining on udhaar</span>
-                  <span>
-                    {formatMoney(
-                      Math.max(
-                        0,
-                        Math.round((totals.grandTotal - (parseFloat(cashAmount) || 0)) * 100) / 100,
-                      ),
-                      currency,
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {creditLimitWarning && (
-            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800">
-              {creditLimitWarning}
-            </p>
-          )}
-          {error && <p className="text-xs text-danger">{error}</p>}
-        </div>
+            )}
+            {error && <p className="text-xs text-danger">{error}</p>}
+          </div>
+        )}
       </Modal>
 
       <Modal

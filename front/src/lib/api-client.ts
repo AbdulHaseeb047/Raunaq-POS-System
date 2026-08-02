@@ -31,15 +31,17 @@ import type {
   TenantDetail,
   TenantRow,
   TenantUser,
-  TokenPair,
   UdhaarAgingRow,
 } from '@/types/api';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/$/, '');
 
-const STORAGE_ACCESS = 'pos_access_token';
-const STORAGE_REFRESH = 'pos_refresh_token';
+/** Non-secret flag so the UI knows a cookie session may exist (tokens stay httpOnly). */
+const STORAGE_SESSION = 'pos_session';
 const STORAGE_BRANCH = 'pos_branch_id';
+/** Legacy keys — cleared on login/logout so tokens are never left in localStorage. */
+const LEGACY_ACCESS = 'pos_access_token';
+const LEGACY_REFRESH = 'pos_refresh_token';
 
 export class ApiError extends Error {
   constructor(
@@ -53,14 +55,6 @@ export class ApiError extends Error {
   }
 }
 
-function getAccessToken(): string | null {
-  return localStorage.getItem(STORAGE_ACCESS);
-}
-
-function getRefreshToken(): string | null {
-  return localStorage.getItem(STORAGE_REFRESH);
-}
-
 export function getStoredBranchId(): string | null {
   return localStorage.getItem(STORAGE_BRANCH);
 }
@@ -70,21 +64,32 @@ export function setStoredBranchId(id: string | null): void {
   else localStorage.removeItem(STORAGE_BRANCH);
 }
 
-export function setTokens(access: string, refresh: string): void {
-  localStorage.setItem(STORAGE_ACCESS, access);
-  localStorage.setItem(STORAGE_REFRESH, refresh);
+export function hasSessionFlag(): boolean {
+  return localStorage.getItem(STORAGE_SESSION) === '1';
+}
+
+/** Mark cookie session active; clears any legacy token storage. */
+export function markSession(): void {
+  localStorage.setItem(STORAGE_SESSION, '1');
+  localStorage.removeItem(LEGACY_ACCESS);
+  localStorage.removeItem(LEGACY_REFRESH);
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(STORAGE_ACCESS);
-  localStorage.removeItem(STORAGE_REFRESH);
+  localStorage.removeItem(STORAGE_SESSION);
+  localStorage.removeItem(LEGACY_ACCESS);
+  localStorage.removeItem(LEGACY_REFRESH);
 }
 
-let refreshPromise: Promise<TokenPair | null> | null = null;
+/** @deprecated No-op — auth uses httpOnly cookies. Kept for call-site compatibility. */
+export function setTokens(_access?: string, _refresh?: string): void {
+  markSession();
+}
 
-async function refreshTokens(): Promise<TokenPair | null> {
-  const refresh = getRefreshToken();
-  if (!refresh) return null;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshTokens(): Promise<boolean> {
+  if (!hasSessionFlag()) return false;
 
   if (!refreshPromise) {
     refreshPromise = (async () => {
@@ -92,14 +97,14 @@ async function refreshTokens(): Promise<TokenPair | null> {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: refresh }),
+          credentials: 'include',
+          body: JSON.stringify({}),
         });
-        if (!res.ok) return null;
-        const data = (await res.json()) as TokenPair;
-        setTokens(data.accessToken, data.refreshToken);
-        return data;
+        if (!res.ok) return false;
+        markSession();
+        return true;
       } catch {
-        return null;
+        return false;
       } finally {
         refreshPromise = null;
       }
@@ -130,8 +135,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // Session is httpOnly cookie — browser sends it with credentials: 'include'.
   }
 
   if (branch) {
@@ -144,6 +148,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers,
+      credentials: 'include',
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
@@ -164,10 +169,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (res.status === 401 && !skipAuth) {
     const refreshed = await refreshTokens();
     if (refreshed) {
-      headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
       res = await fetch(`${API_BASE}${path}`, {
         ...init,
         headers,
+        credentials: 'include',
         signal: init.signal ?? AbortSignal.timeout(20_000),
       });
     }
@@ -206,11 +211,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, password }),
         skipAuth: true,
+      }).then((data) => {
+        markSession();
+        return data;
       }),
     logout: () =>
       apiRequest<{ success: boolean }>('/auth/logout', {
         method: 'POST',
-        body: JSON.stringify({ refreshToken: getRefreshToken() }),
+        body: JSON.stringify({}),
         skipAuth: true,
       }),
     me: () => apiRequest<AuthUser>('/auth/me'),
@@ -218,6 +226,9 @@ export const api = {
       apiRequest<LoginResponse>('/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
+      }).then((data) => {
+        markSession();
+        return data;
       }),
   },
 
@@ -245,10 +256,11 @@ export const api = {
       if (branchId) params.set('branchId', branchId);
       return apiRequest<import('@/types/api').SalesTrendReport>(`/reports/sales-trend?${params}`);
     },
-    stockMovement: (from?: string, to?: string) => {
+    stockMovement: (from?: string, to?: string, limit?: number) => {
       const params = new URLSearchParams();
       if (from) params.set('from', from);
       if (to) params.set('to', to);
+      if (limit != null) params.set('limit', String(limit));
       const q = params.toString();
       return apiRequest<import('@/types/api').StockMovementReport>(
         `/reports/stock-movement${q ? `?${q}` : ''}`,
@@ -337,7 +349,12 @@ export const api = {
   },
 
   brands: {
-    list: () => apiRequest<Brand[]>('/brands'),
+    list: (search?: string) => {
+      const params = new URLSearchParams();
+      if (search?.trim()) params.set('search', search.trim());
+      const q = params.toString();
+      return apiRequest<Brand[]>(`/brands${q ? `?${q}` : ''}`);
+    },
     create: (body: Record<string, unknown>) =>
       apiRequest<Brand>('/brands', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
@@ -346,7 +363,12 @@ export const api = {
   },
 
   suppliers: {
-    list: () => apiRequest<Supplier[]>('/suppliers'),
+    list: (search?: string) => {
+      const params = new URLSearchParams();
+      if (search?.trim()) params.set('search', search.trim());
+      const q = params.toString();
+      return apiRequest<Supplier[]>(`/suppliers${q ? `?${q}` : ''}`);
+    },
     create: (body: Record<string, unknown>) =>
       apiRequest<Supplier>('/suppliers', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
@@ -367,7 +389,12 @@ export const api = {
   },
 
   categories: {
-    list: () => apiRequest<Category[]>('/categories'),
+    list: (search?: string) => {
+      const params = new URLSearchParams();
+      if (search?.trim()) params.set('search', search.trim());
+      const q = params.toString();
+      return apiRequest<Category[]>(`/categories${q ? `?${q}` : ''}`);
+    },
     create: (body: Record<string, unknown>) =>
       apiRequest<Category>('/categories', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>

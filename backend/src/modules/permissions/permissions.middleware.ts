@@ -2,6 +2,7 @@ import type { FeatureKey, UserRole } from '@pos/shared';
 import { USER_ROLES } from '@pos/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { readAccessToken } from '../auth/auth-cookies.js';
 import { verifyAccessToken } from '../auth/auth.service.js';
 import { ForbiddenError, UnauthorizedError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
@@ -39,12 +40,11 @@ async function assertTenantPortalAccessCached(tenantId: string): Promise<void> {
 }
 
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Missing or invalid Authorization header');
+  const token = readAccessToken(request);
+  if (!token) {
+    throw new UnauthorizedError('Missing or invalid session');
   }
 
-  const token = header.slice(7);
   request.user = verifyAccessToken(token);
 
   const bypass = request.user.role === USER_ROLES.SUPER_ADMIN;

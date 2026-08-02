@@ -29,8 +29,8 @@ export function ChangePasswordPage() {
     }
     setLoading(true);
     try {
-      const res = await api.auth.changePassword(current, next);
-      setTokens(res.accessToken, res.refreshToken);
+      await api.auth.changePassword(current, next);
+      setTokens();
       await refreshUser();
       setSuccess('Password updated successfully');
       setCurrent('');

@@ -3,78 +3,270 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../core/prisma.js';
 import { getUdhaarAging } from '../customers/ledger.service.js';
 
+const PK_TZ = 'Asia/Karachi';
+
+const PAYMENT_LABELS: Record<string, string> = {
+  CASH: 'Cash',
+  CARD: 'Credit Card',
+  BANK_TRANSFER: 'Mobile Wallet',
+  CREDIT: 'Udhaar / Credit',
+  SPLIT: 'Split',
+};
+
+const PAYMENT_COLORS: Record<string, string> = {
+  CASH: '#059669',
+  CARD: '#0284c7',
+  BANK_TRANSFER: '#7c3aed',
+  CREDIT: '#ea580c',
+  SPLIT: '#64748b',
+};
+
+function changePct(today: number, yesterday: number): number {
+  if (yesterday <= 0) return today > 0 ? 100 : 0;
+  return Math.round(((today - yesterday) / yesterday) * 1000) / 10;
+}
+
+function hourLabel(hour: number): string {
+  if (hour === 0) return '12 AM';
+  if (hour === 12) return '12 PM';
+  if (hour < 12) return `${hour} AM`;
+  return `${hour - 12} PM`;
+}
+
 export async function getDashboardSummary(tenantId: string, branchId?: string) {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const saleWhere = {
+  const startOfYesterday = new Date(startOfDay);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  const saleWhereToday = {
     tenantId,
     status: 'COMPLETED' as const,
     createdAt: { gte: startOfDay },
     ...(branchId ? { branchId } : {}),
   };
+  const saleWhereYesterday = {
+    tenantId,
+    status: 'COMPLETED' as const,
+    createdAt: { gte: startOfYesterday, lt: startOfDay },
+    ...(branchId ? { branchId } : {}),
+  };
 
-  const [todaySales, todayCount, lowStock, udhaarTotal, todayReturns, returnItemsAgg] =
-    await Promise.all([
-      prisma.sale.aggregate({ where: saleWhere, _sum: { grandTotal: true } }),
-      prisma.sale.count({ where: saleWhere }),
-      prisma.product.findMany({
-        where: {
-          tenantId,
-          deletedAt: null,
-          isActive: true,
-          trackStock: true,
-          lowStockThreshold: { not: null },
-        },
-        select: { id: true, name: true, stockQuantity: true, lowStockThreshold: true },
-        take: 200,
-      }),
-      prisma.customer.aggregate({
-        where: { tenantId, deletedAt: null, balance: { gt: 0 } },
-        _sum: { balance: true },
-      }),
-      prisma.saleReturn.aggregate({
-        where: {
-          tenantId,
+  const [
+    todaySalesAgg,
+    todayCount,
+    yesterdaySalesAgg,
+    yesterdayCount,
+    lowStockRows,
+    lowStockCountRow,
+    inventoryValueRow,
+    productCount,
+    udhaarTotal,
+    todayReturns,
+    returnItemsAgg,
+    yesterdayReturns,
+    todaySalesDetail,
+  ] = await Promise.all([
+    prisma.sale.aggregate({ where: saleWhereToday, _sum: { grandTotal: true } }),
+    prisma.sale.count({ where: saleWhereToday }),
+    prisma.sale.aggregate({ where: saleWhereYesterday, _sum: { grandTotal: true } }),
+    prisma.sale.count({ where: saleWhereYesterday }),
+    prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        stock_quantity: { toString(): string } | string | number;
+        low_stock_threshold: { toString(): string } | string | number;
+      }>
+    >`
+      SELECT id, name, stock_quantity, low_stock_threshold
+      FROM products
+      WHERE tenant_id = ${tenantId}::uuid
+        AND deleted_at IS NULL
+        AND is_active = true
+        AND track_stock = true
+        AND low_stock_threshold IS NOT NULL
+        AND stock_quantity > 0
+        AND stock_quantity <= low_stock_threshold
+      ORDER BY stock_quantity ASC, name ASC
+      LIMIT 5
+    `,
+    prisma.$queryRaw<Array<{ count: bigint | number }>>`
+      SELECT COUNT(*)::int AS count
+      FROM products
+      WHERE tenant_id = ${tenantId}::uuid
+        AND deleted_at IS NULL
+        AND is_active = true
+        AND track_stock = true
+        AND low_stock_threshold IS NOT NULL
+        AND stock_quantity > 0
+        AND stock_quantity <= low_stock_threshold
+    `,
+    prisma.$queryRaw<Array<{ value: { toString(): string } | string | number | null }>>`
+      SELECT COALESCE(SUM(COALESCE(cost_price, 0) * stock_quantity), 0) AS value
+      FROM products
+      WHERE tenant_id = ${tenantId}::uuid
+        AND deleted_at IS NULL
+        AND is_active = true
+    `,
+    prisma.product.count({
+      where: { tenantId, deletedAt: null, isActive: true },
+    }),
+    prisma.customer.aggregate({
+      where: { tenantId, deletedAt: null, balance: { gt: 0 } },
+      _sum: { balance: true },
+    }),
+    prisma.saleReturn.aggregate({
+      where: {
+        tenantId,
+        createdAt: { gte: startOfDay },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    }),
+    prisma.saleReturnItem.aggregate({
+      where: {
+        tenantId,
+        saleReturn: {
           createdAt: { gte: startOfDay },
           ...(branchId ? { sale: { branchId } } : {}),
         },
-        _sum: { totalAmount: true },
-        _count: true,
-      }),
-      prisma.saleReturnItem.aggregate({
-        where: {
-          tenantId,
-          saleReturn: {
-            createdAt: { gte: startOfDay },
-            ...(branchId ? { sale: { branchId } } : {}),
+      },
+      _sum: { quantity: true },
+    }),
+    prisma.saleReturn.aggregate({
+      where: {
+        tenantId,
+        createdAt: { gte: startOfYesterday, lt: startOfDay },
+        ...(branchId ? { sale: { branchId } } : {}),
+      },
+      _sum: { totalAmount: true },
+    }),
+    prisma.sale.findMany({
+      where: saleWhereToday,
+      select: {
+        createdAt: true,
+        grandTotal: true,
+        payments: { select: { paymentMethod: true, amount: true } },
+        items: {
+          select: {
+            productId: true,
+            productName: true,
+            lineTotal: true,
+            quantity: true,
           },
         },
-        _sum: { quantity: true },
-      }),
-    ]);
+      },
+    }),
+  ]);
 
-  const lowStockAlerts = lowStock
-    .filter((p) => p.lowStockThreshold && p.stockQuantity.lte(p.lowStockThreshold))
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      stockQuantity: p.stockQuantity.toFixed(3),
-      lowStockThreshold: p.lowStockThreshold!.toFixed(3),
-    }));
+  const lowStockAlerts = lowStockRows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    stockQuantity: Number(p.stock_quantity).toFixed(3),
+    lowStockThreshold: Number(p.low_stock_threshold).toFixed(3),
+  }));
+  const lowStockCount = Number(lowStockCountRow[0]?.count ?? 0);
+  const inventoryValue = Number(inventoryValueRow[0]?.value ?? 0).toFixed(2);
 
-  const grossSales = todaySales._sum.grandTotal ?? new Decimal(0);
+  const grossSales = todaySalesAgg._sum.grandTotal ?? new Decimal(0);
   const returnsAmount = todayReturns._sum.totalAmount ?? new Decimal(0);
   const netSales = Decimal.max(0, grossSales.minus(returnsAmount));
+
+  const yGross = yesterdaySalesAgg._sum.grandTotal ?? new Decimal(0);
+  const yReturns = yesterdayReturns._sum.totalAmount ?? new Decimal(0);
+  const yNet = Decimal.max(0, yGross.minus(yReturns));
+
+  const todayRevenue = Number(netSales);
+  const yesterdayRevenue = Number(yNet);
+  const todayAov = todayCount > 0 ? todayRevenue / todayCount : 0;
+  const yesterdayAov = yesterdayCount > 0 ? yesterdayRevenue / yesterdayCount : 0;
+
+  // Hourly buckets 8 AM – 10 PM in Asia/Karachi
+  const hourlyMap = new Map<number, { revenue: number; transactions: number }>();
+  for (let h = 8; h <= 22; h++) hourlyMap.set(h, { revenue: 0, transactions: 0 });
+
+  const paymentMap = new Map<string, number>();
+  const productMap = new Map<string, { name: string; revenue: number }>();
+
+  for (const sale of todaySalesDetail) {
+    const hourPart = new Intl.DateTimeFormat('en-US', {
+      timeZone: PK_TZ,
+      hour: 'numeric',
+      hour12: false,
+    })
+      .formatToParts(sale.createdAt)
+      .find((p) => p.type === 'hour')?.value;
+    const hour = Number(hourPart === '24' ? '0' : hourPart) % 24;
+    const bucket = hourlyMap.get(hour);
+    if (bucket) {
+      bucket.revenue += Number(sale.grandTotal);
+      bucket.transactions += 1;
+    }
+
+    for (const p of sale.payments) {
+      paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
+    }
+
+    for (const item of sale.items) {
+      const existing = productMap.get(item.productId) ?? {
+        name: item.productName,
+        revenue: 0,
+      };
+      existing.revenue += Number(item.lineTotal);
+      productMap.set(item.productId, existing);
+    }
+  }
+
+  const hourlySales = [...hourlyMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([hour, data]) => ({
+      hour: hourLabel(hour),
+      revenue: Math.round(data.revenue * 100) / 100,
+      transactions: data.transactions,
+    }));
+
+  const paymentTotal = [...paymentMap.values()].reduce((s, v) => s + v, 0);
+  const paymentMethods =
+    paymentTotal > 0
+      ? [...paymentMap.entries()]
+          .map(([method, amount]) => ({
+            name: PAYMENT_LABELS[method] ?? method.replace(/_/g, ' '),
+            value: Math.round((amount / paymentTotal) * 1000) / 10,
+            amount: amount.toFixed(2),
+            color: PAYMENT_COLORS[method] ?? '#64748b',
+          }))
+          .sort((a, b) => b.value - a.value)
+      : [];
+
+  const topProducts = [...productMap.entries()]
+    .map(([, data]) => ({
+      name: data.name,
+      revenue: Math.round(data.revenue * 100) / 100,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
 
   return {
     todaySalesTotal: netSales.toFixed(2),
     todayGrossSalesTotal: grossSales.toFixed(2),
     todayTransactionCount: todayCount,
+    averageOrderValue: todayAov.toFixed(2),
+    revenueChangePct: changePct(todayRevenue, yesterdayRevenue),
+    aovChangePct: changePct(todayAov, yesterdayAov),
+    transactionChangePct: changePct(todayCount, yesterdayCount),
+    lowStockCount,
     lowStockAlerts,
+    inventoryValue,
+    totalProducts: productCount,
     outstandingUdhaar: udhaarTotal._sum.balance?.toFixed(2) ?? '0.00',
     todayReturnsAmount: returnsAmount.toFixed(2),
     todayReturnsCount: todayReturns._count,
     todayReturnedUnits: returnItemsAgg._sum.quantity?.toFixed(3) ?? '0.000',
+    hourlySales,
+    paymentMethods,
+    topProducts,
   };
 }
 
@@ -350,32 +542,24 @@ export async function getSalesTrend(tenantId: string, days = 14, branchId?: stri
   };
 }
 
-export async function getStockMovementReport(tenantId: string, from?: string, to?: string) {
+export async function getStockMovementReport(
+  tenantId: string,
+  from?: string,
+  to?: string,
+  limit = 100,
+) {
   const start = from ? new Date(from) : new Date();
   start.setHours(0, 0, 0, 0);
   const end = to ? new Date(to) : new Date();
   end.setHours(23, 59, 59, 999);
+  const take = Math.min(Math.max(limit, 1), 1000);
 
   const movements = await prisma.stockMovement.findMany({
     where: { tenantId, createdAt: { gte: start, lte: end } },
     include: { product: { select: { name: true, sku: true } } },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take,
   });
-
-  const products = await prisma.product.findMany({
-    where: { tenantId, deletedAt: null, isActive: true, trackStock: true },
-    select: { id: true, name: true, stockQuantity: true, lowStockThreshold: true },
-  });
-
-  const lowStock = products
-    .filter((p) => p.lowStockThreshold && p.stockQuantity.lte(p.lowStockThreshold))
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      stockQuantity: p.stockQuantity.toFixed(3),
-      lowStockThreshold: p.lowStockThreshold!.toFixed(3),
-    }));
 
   return {
     movements: movements.map((m) => ({
@@ -385,7 +569,6 @@ export async function getStockMovementReport(tenantId: string, from?: string, to
       quantityDelta: m.quantityDelta.toFixed(3),
       createdAt: m.createdAt.toISOString(),
     })),
-    lowStockAlerts: lowStock,
   };
 }
 

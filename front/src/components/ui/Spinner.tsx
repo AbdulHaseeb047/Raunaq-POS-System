@@ -1,3 +1,5 @@
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
+
 export function Spinner({ className = '' }: { className?: string }) {
   return (
     <div
@@ -9,9 +11,5 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 export function PageLoader() {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center">
-      <Spinner className="h-10 w-10" />
-    </div>
-  );
+  return <PageSkeleton rows={6} />;
 }

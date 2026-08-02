@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { PageLoader } from '@/components/ui/Spinner';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { api } from '@/lib/api-client';
 import { formatMoney } from '@/lib/format';
 import { getStockStatus } from '@/lib/sale-utils';
@@ -22,15 +22,17 @@ export function ProductListPanel({
   currency: string;
   onClose?: () => void;
 }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['products', 'catalog-panel', categoryId, brandId],
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['products', 'catalog-panel', categoryId ?? 'all', brandId ?? 'all'],
     queryFn: () =>
       api.products.list({
-        categoryId,
-        brandId,
-        pageSize: 100,
+        categoryId: categoryId || undefined,
+        brandId: brandId || undefined,
+        pageSize: 200,
       }),
     enabled: !!(categoryId || brandId),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const products = data?.data ?? [];
@@ -52,8 +54,8 @@ export function ProductListPanel({
           ) : undefined
         }
       />
-      {isLoading ? (
-        <PageLoader />
+      {isLoading || (isFetching && !data) ? (
+        <PageSkeleton rows={5} />
       ) : products.length === 0 ? (
         <p className="py-12 text-center text-sm text-text-muted">No products linked yet.</p>
       ) : (

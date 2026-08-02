@@ -57,9 +57,14 @@ export const importProductsSchema = z.object({
   updateExisting: z.boolean().optional().default(true),
 });
 
-export async function listCategories(tenantId: string) {
+export async function listCategories(tenantId: string, search?: string) {
+  const term = search?.trim();
   return prisma.category.findMany({
-    where: { tenantId, deletedAt: null },
+    where: {
+      tenantId,
+      deletedAt: null,
+      ...(term ? { name: { contains: term, mode: 'insensitive' } } : {}),
+    },
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
   });
 }

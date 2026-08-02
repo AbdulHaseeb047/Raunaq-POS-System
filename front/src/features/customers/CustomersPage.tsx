@@ -1,14 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { ReceiptView } from '@/components/billing/ReceiptView';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { GrowingChart } from '@/components/ui/GrowingChart';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Pagination } from '@/components/ui/Pagination';
 import { PageLoader } from '@/components/ui/Spinner';
 import { api } from '@/lib/api-client';
 import { FEATURES, hasFeature } from '@/lib/features';
@@ -17,7 +19,14 @@ import { formatDate, formatMoney } from '@/lib/format';
 import { buildCustomerStatementHtml, openPrintDocument } from '@/lib/print-document';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import type { Customer, LedgerEntry, SaleDetail } from '@/types/api';
+import type { Customer, LedgerEntry, SaleDetail, UdhaarAgingRow } from '@/types/api';
+
+const CUSTOMER_PAGE_SIZE = 20;
+
+function shortDay(isoDate: string) {
+  const d = new Date(`${isoDate.slice(0, 10)}T12:00:00`);
+  return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+}
 
 function printStatement(
   customer: Customer,
@@ -42,6 +51,7 @@ export function CustomersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 200);
+  const [page, setPage] = useState(1);
   const [sortByBalance, setSortByBalance] = useState(true);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [modal, setModal] = useState<'create' | 'edit' | 'payment' | null>(null);
@@ -65,11 +75,20 @@ export function CustomersPage() {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['customers', debouncedSearch, sortByBalance],
+    queryKey: ['customers', debouncedSearch, sortByBalance, page],
     queryFn: () =>
-      api.customers.list(debouncedSearch || undefined, 1, 100, sortByBalance ? 'balance' : 'name'),
+      api.customers.list(
+        debouncedSearch || undefined,
+        page,
+        CUSTOMER_PAGE_SIZE,
+        sortByBalance ? 'balance' : 'name',
+      ),
     placeholderData: (prev) => prev,
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, sortByBalance]);
 
   const { data: aging } = useQuery({
     queryKey: ['reports', 'aging'],
@@ -82,6 +101,14 @@ export function CustomersPage() {
     enabled: !!selected && canLedger,
   });
 
+  const agingByCustomer = useMemo(() => {
+    const map = new Map<string, UdhaarAgingRow>();
+    for (const row of aging ?? []) {
+      map.set(row.customerId, row);
+    }
+    return map;
+  }, [aging]);
+
   const overdueMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const row of aging ?? []) {
@@ -91,9 +118,40 @@ export function CustomersPage() {
   }, [aging]);
 
   const customerAging = useMemo(
-    () => (selected ? aging?.find((a) => a.customerId === selected.id) : null),
-    [aging, selected],
+    () => (selected ? (agingByCustomer.get(selected.id) ?? null) : null),
+    [agingByCustomer, selected],
   );
+
+  const cashflowSeries = useMemo(() => {
+    if (!ledger?.length) return [];
+    const byDay = new Map<string, { out: number; inn: number }>();
+    const sorted = [...ledger]
+      .filter((e) => !e.voidedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const e of sorted) {
+      const day = e.createdAt.slice(0, 10);
+      const bucket = byDay.get(day) ?? { out: 0, inn: 0 };
+      const amt = Math.abs(parseFloat(e.amount) || 0);
+      if (e.entryType === 'PAYMENT' || parseFloat(e.amount) < 0) bucket.inn += amt;
+      else bucket.out += amt;
+      byDay.set(day, bucket);
+    }
+    return [...byDay.entries()].map(([iso, v]) => ({
+      label: shortDay(iso),
+      value: v.out,
+      secondary: v.inn,
+    }));
+  }, [ledger]);
+
+  const cashflowTotals = useMemo(() => {
+    let out = 0;
+    let inn = 0;
+    for (const p of cashflowSeries) {
+      out += p.value;
+      inn += p.secondary;
+    }
+    return { out, inn };
+  }, [cashflowSeries]);
 
   const saveCustomer = useMutation({
     mutationFn: () => {
@@ -201,10 +259,12 @@ export function CustomersPage() {
           </Button>
         </div>
         <div
-          className={`max-h-[calc(100vh-14rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}
+          className={`max-h-[calc(100vh-16rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}
         >
           {(data?.data ?? []).map((c) => {
             const overdue = overdueMap.get(c.id);
+            const rowAging = agingByCustomer.get(c.id);
+            const hasAging = rowAging && parseFloat(rowAging.total) > 0;
             return (
               <button
                 key={c.id}
@@ -230,10 +290,41 @@ export function CustomersPage() {
                     )}
                   </div>
                 </div>
+                {hasAging ? (
+                  <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-lg bg-surface-muted/80 px-2 py-2 text-[11px]">
+                    <div>
+                      <p className="text-text-muted">0–7d</p>
+                      <p className="font-semibold text-text">
+                        {formatMoney(rowAging.bucket0_7, currency)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-text-muted">8–30d</p>
+                      <p className="font-semibold text-text">
+                        {formatMoney(rowAging.bucket8_30, currency)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-text-muted">30+d</p>
+                      <p className="font-semibold text-danger">
+                        {formatMoney(rowAging.bucket30_plus, currency)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </button>
             );
           })}
         </div>
+        {data?.meta ? (
+          <Pagination
+            page={data.meta.page}
+            totalPages={data.meta.totalPages}
+            total={data.meta.total}
+            pageSize={data.meta.pageSize}
+            onPageChange={setPage}
+          />
+        ) : null}
       </div>
 
       <div className={`lg:col-span-3 ${!selected ? 'hidden lg:block' : ''}`}>
@@ -346,6 +437,29 @@ export function CustomersPage() {
                 )}
               </div>
             </Card>
+
+            {canLedger && (
+              <div className="mb-4">
+                {ledgerLoading ? (
+                  <Card className="flex h-48 items-center justify-center text-sm text-text-muted">
+                    Loading cashflow…
+                  </Card>
+                ) : (
+                  <GrowingChart
+                    title="Money in & out"
+                    subtitle={`${formatMoney(cashflowTotals.out, currency)} charged · ${formatMoney(cashflowTotals.inn, currency)} received`}
+                    data={cashflowSeries}
+                    color="#be123c"
+                    secondaryColor="#059669"
+                    primaryLabel="Udhaar charged"
+                    secondaryLabel="Payments received"
+                    formatValue={(n) => formatMoney(n, currency)}
+                    cumulative
+                    height={200}
+                  />
+                )}
+              </div>
+            )}
 
             {canLedger && (
               <Card>

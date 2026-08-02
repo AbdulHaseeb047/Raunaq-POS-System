@@ -31,7 +31,8 @@ export async function registerCatalogRoutes(app: FastifyInstance): Promise<void>
     '/brands',
     { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_BRANDS)] },
     async (request) => {
-      return listBrands(resolveTenantId(request));
+      const q = request.query as { search?: string };
+      return listBrands(resolveTenantId(request), q.search);
     },
   );
 
@@ -71,7 +72,8 @@ export async function registerCatalogRoutes(app: FastifyInstance): Promise<void>
     '/suppliers',
     { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_SUPPLIERS)] },
     async (request) => {
-      return listSuppliers(resolveTenantId(request));
+      const q = request.query as { search?: string };
+      return listSuppliers(resolveTenantId(request), q.search);
     },
   );
 

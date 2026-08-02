@@ -86,8 +86,9 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] },
     async (request) => {
       const tenantId = resolveTenantId(request);
-      const q = request.query as { from?: string; to?: string };
-      return getStockMovementReport(tenantId, q.from, q.to);
+      const q = request.query as { from?: string; to?: string; limit?: string };
+      const limit = q.limit ? Number(q.limit) : 100;
+      return getStockMovementReport(tenantId, q.from, q.to, Number.isFinite(limit) ? limit : 100);
     },
   );
 

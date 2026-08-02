@@ -5,8 +5,9 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+/** Refresh token may come from httpOnly cookie instead of body. */
 export const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 
 export const changePasswordSchema = z.object({

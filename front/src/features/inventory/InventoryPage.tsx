@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +9,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PageLoader } from '@/components/ui/Spinner';
+import { PageSkeleton, TableSkeleton } from '@/components/ui/PageSkeleton';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
 import { api, ApiError } from '@/lib/api-client';
 import {
@@ -28,16 +30,25 @@ import {
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
-import { filterAndRankProducts } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Product } from '@/types/api';
+
+const PAGE_SIZE = 20;
+const STOCK_FILTERS = new Set(['all', 'healthy', 'low', 'out']);
+
+function parseStockParam(value: string | null): string {
+  if (value && STOCK_FILTERS.has(value)) return value;
+  return 'all';
+}
 
 export function InventoryPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 200);
-  const [stockStatus, setStockStatus] = useState('all');
+  const [stockStatus, setStockStatus] = useState(() => parseStockParam(searchParams.get('stock')));
+  const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [modal, setModal] = useState<'create' | 'edit' | 'stock' | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -56,6 +67,7 @@ export function InventoryPage() {
     trackStock: true,
     lowStockThreshold: '',
   });
+  const [formErrorVisible, setFormErrorVisible] = useState(false);
   const [stockDelta, setStockDelta] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<{ count: number; errors: string[] } | null>(
@@ -78,6 +90,27 @@ export function InventoryPage() {
   const canEdit = hasFeature(user, FEATURES.INVENTORY_EDIT);
   const canAdjust = hasFeature(user, FEATURES.INVENTORY_STOCK_ADJUST);
 
+  useEffect(() => {
+    const next = parseStockParam(searchParams.get('stock'));
+    setStockStatus((prev) => (prev === next ? prev : next));
+    setPage(1);
+  }, [searchParams]);
+
+  const applyStockStatus = (value: string) => {
+    const next = parseStockParam(value);
+    setStockStatus(next);
+    setPage(1);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === 'all') params.delete('stock');
+        else params.set('stock', next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
@@ -94,13 +127,17 @@ export function InventoryPage() {
   });
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['products', debouncedSearch, stockStatus, categoryFilter],
+    queryKey: ['products', 'inventory', debouncedSearch, stockStatus, categoryFilter, page],
     queryFn: () =>
       api.products.list({
-        search: debouncedSearch || undefined,
+        search: debouncedSearch.trim() || undefined,
         stockStatus: stockStatus === 'all' ? undefined : stockStatus,
-        categoryId: categoryFilter || undefined,
+        categoryId: categoryFilter.trim() || undefined,
+        page,
+        pageSize: PAGE_SIZE,
       }),
+    staleTime: 0,
+    refetchOnMount: 'always',
     placeholderData: (prev) => prev,
   });
 
@@ -112,13 +149,13 @@ export function InventoryPage() {
     staleTime: 60_000,
   });
 
-  // Filter + rank by live keyword: starts-with first, then contains.
-  const displayedProducts = useMemo(() => {
-    const rows = data?.data ?? [];
-    const q = search.trim();
-    if (!q) return rows;
-    return filterAndRankProducts(rows, q);
-  }, [data?.data, search]);
+  const displayedProducts = data?.data ?? [];
+  const meta = data?.meta;
+  const listLoading = isLoading || (isFetching && !data);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, categoryFilter]);
 
   const deleteProduct = useMutation({
     mutationFn: (id: string) => api.products.delete(id),
@@ -393,6 +430,7 @@ export function InventoryPage() {
       lowStockThreshold: '',
     });
     setSelected(null);
+    setFormErrorVisible(false);
     setModal('create');
   };
 
@@ -412,18 +450,43 @@ export function InventoryPage() {
       trackStock: p.trackStock,
       lowStockThreshold: p.lowStockThreshold ?? '',
     });
+    setFormErrorVisible(false);
     setModal('edit');
   };
 
   const currency = settings?.currency ?? 'PKR';
 
-  if (isLoading && !data) return <PageLoader />;
+  const sellPriceNum = parseFloat(form.sellPrice);
+  const costPriceNum = parseFloat(form.costPrice);
+  const lowStockNum = parseFloat(form.lowStockThreshold);
+  const productFormErrors = {
+    name: !form.name.trim() ? 'Name is required' : '',
+    sellPrice:
+      form.sellPrice.trim() === '' || !Number.isFinite(sellPriceNum) || sellPriceNum < 0
+        ? 'Sell price is required'
+        : '',
+    costPrice:
+      form.costPrice.trim() === '' || !Number.isFinite(costPriceNum) || costPriceNum < 0
+        ? 'Cost price is required'
+        : '',
+    lowStockThreshold:
+      form.lowStockThreshold.trim() === '' || !Number.isFinite(lowStockNum) || lowStockNum < 0
+        ? 'Low stock threshold is required'
+        : '',
+  };
+  const canSaveProduct =
+    !productFormErrors.name &&
+    !productFormErrors.sellPrice &&
+    !productFormErrors.costPrice &&
+    !productFormErrors.lowStockThreshold;
+
+  if (listLoading) return <PageSkeleton rows={8} />;
 
   return (
     <div>
       <PageHeader
         title="Inventory"
-        subtitle={`${data?.meta.total ?? 0} products · Value ${formatMoney(summary?.inventoryValue ?? '0', currency)}`}
+        subtitle={`${summary?.totalProducts ?? data?.meta.total ?? 0} products in system · Value ${formatMoney(summary?.inventoryValue ?? '0', currency)}`}
         action={
           canEdit ? (
             <div className="flex flex-wrap gap-2">
@@ -443,6 +506,11 @@ export function InventoryPage() {
         }
       />
 
+      {isFetching && (
+        <div className="mb-3" aria-busy="true" aria-label="Updating products">
+          <TableSkeleton rows={3} />
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -470,14 +538,22 @@ export function InventoryPage() {
             <p className="text-text-muted">Healthy</p>
             <p className="text-lg font-bold">{summary.healthyCount}</p>
           </div>
-          <div className="rounded-xl border bg-slate-50 p-3 text-sm">
+          <Link
+            to="/inventory?stock=low"
+            className="rounded-xl border bg-slate-50 p-3 text-sm transition hover:border-brand-300 hover:bg-brand-50/40"
+          >
             <p className="text-text-muted">Low stock</p>
             <p className="text-lg font-bold text-slate-800">{summary.lowStockCount}</p>
-          </div>
-          <div className="rounded-xl border bg-rose-50 p-3 text-sm">
+            <p className="mt-1 text-[11px] font-semibold text-brand-700">View all →</p>
+          </Link>
+          <Link
+            to="/inventory?stock=out"
+            className="rounded-xl border bg-rose-50 p-3 text-sm transition hover:border-rose-300 hover:bg-rose-100/60"
+          >
             <p className="text-text-muted">Out of stock</p>
             <p className="text-lg font-bold text-rose-800">{summary.outOfStockCount}</p>
-          </div>
+            <p className="mt-1 text-[11px] font-semibold text-rose-700">View all →</p>
+          </Link>
           <div className="rounded-xl border bg-brand-50 p-3 text-sm">
             <p className="text-text-muted">Projected profit</p>
             <p className="text-lg font-bold text-brand-800">
@@ -487,9 +563,9 @@ export function InventoryPage() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Input
-          className="w-full min-w-0 flex-1 sm:min-w-[200px]"
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+        <input
+          className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border border-border bg-white px-3 py-2 text-sm text-text placeholder:text-text-muted/60 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 sm:min-w-[200px]"
           placeholder="Search name, SKU, or barcode..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -498,9 +574,9 @@ export function InventoryPage() {
           enterKeyHint="search"
         />
         <select
-          className="min-h-[44px] w-full rounded-xl border border-border px-3 py-2 text-sm sm:w-auto"
+          className="min-h-[44px] w-full shrink-0 rounded-xl border border-border bg-white px-3 py-2 text-sm sm:w-auto sm:min-w-[140px]"
           value={stockStatus}
-          onChange={(e) => setStockStatus(e.target.value)}
+          onChange={(e) => applyStockStatus(e.target.value)}
         >
           <option value="all">All stock</option>
           <option value="healthy">Healthy</option>
@@ -508,9 +584,12 @@ export function InventoryPage() {
           <option value="out">Out of stock</option>
         </select>
         <select
-          className="min-h-[44px] w-full rounded-xl border border-border px-3 py-2 text-sm sm:w-auto"
+          className="min-h-[44px] w-full shrink-0 rounded-xl border border-border bg-white px-3 py-2 text-sm sm:w-auto sm:min-w-[160px]"
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            setPage(1);
+          }}
         >
           <option value="">All categories</option>
           {(categories ?? []).map((c) => (
@@ -684,6 +763,16 @@ export function InventoryPage() {
               </table>
             </div>
           </div>
+
+          {meta ? (
+            <Pagination
+              page={meta.page}
+              totalPages={meta.totalPages}
+              total={meta.total}
+              pageSize={meta.pageSize}
+              onPageChange={setPage}
+            />
+          ) : null}
         </>
       )}
 
@@ -696,7 +785,16 @@ export function InventoryPage() {
             <Button variant="ghost" onClick={() => setModal(null)}>
               Cancel
             </Button>
-            <Button loading={saveProduct.isPending} onClick={() => saveProduct.mutate()}>
+            <Button
+              loading={saveProduct.isPending}
+              onClick={() => {
+                if (!canSaveProduct) {
+                  setFormErrorVisible(true);
+                  return;
+                }
+                saveProduct.mutate();
+              }}
+            >
               Save
             </Button>
           </>
@@ -708,18 +806,23 @@ export function InventoryPage() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
+            error={formErrorVisible ? productFormErrors.name || undefined : undefined}
           />
           <Input
             label="Sell price"
             type="number"
             value={form.sellPrice}
             onChange={(e) => setForm({ ...form, sellPrice: e.target.value })}
+            required
+            error={formErrorVisible ? productFormErrors.sellPrice || undefined : undefined}
           />
           <Input
             label="Cost price"
             type="number"
             value={form.costPrice}
             onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+            required
+            error={formErrorVisible ? productFormErrors.costPrice || undefined : undefined}
           />
           <Input
             label="Barcode"
@@ -778,7 +881,12 @@ export function InventoryPage() {
             type="number"
             value={form.lowStockThreshold}
             onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })}
+            required
+            error={formErrorVisible ? productFormErrors.lowStockThreshold || undefined : undefined}
           />
+          <p className="text-xs text-text-muted">
+            Required: name, sell price, cost price, and low stock threshold.
+          </p>
         </div>
       </Modal>
 
@@ -791,7 +899,13 @@ export function InventoryPage() {
             <Button variant="ghost" onClick={() => setModal(null)}>
               Cancel
             </Button>
-            <Button loading={adjustStock.isPending} onClick={() => adjustStock.mutate()}>
+            <Button
+              loading={adjustStock.isPending}
+              onClick={() => {
+                if (!stockDelta.trim() || !Number.isFinite(parseFloat(stockDelta))) return;
+                adjustStock.mutate();
+              }}
+            >
               Apply
             </Button>
           </>
@@ -803,6 +917,7 @@ export function InventoryPage() {
           type="number"
           value={stockDelta}
           onChange={(e) => setStockDelta(e.target.value)}
+          required
         />
       </Modal>
 
@@ -846,7 +961,7 @@ export function InventoryPage() {
       >
         {importParsing ? (
           <div className="space-y-3 py-6 text-center text-sm text-text-muted">
-            <PageLoader />
+            <PageSkeleton rows={4} />
             <p>Reading and matching CSV columns…</p>
           </div>
         ) : importPreview ? (

@@ -9,47 +9,50 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
-const STORAGE_ACCESS = 'admin_access_token';
-const STORAGE_REFRESH = 'admin_refresh_token';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/$/, '');
+const STORAGE_SESSION = 'admin_session';
+const LEGACY_ACCESS = 'admin_access_token';
+const LEGACY_REFRESH = 'admin_refresh_token';
 
-export function getAccessToken(): string | null {
-  return localStorage.getItem(STORAGE_ACCESS);
+export function hasSessionFlag(): boolean {
+  return localStorage.getItem(STORAGE_SESSION) === '1';
 }
 
-function getRefreshToken(): string | null {
-  return localStorage.getItem(STORAGE_REFRESH);
-}
-
-export function setTokens(access: string, refresh: string): void {
-  localStorage.setItem(STORAGE_ACCESS, access);
-  localStorage.setItem(STORAGE_REFRESH, refresh);
+export function markSession(): void {
+  localStorage.setItem(STORAGE_SESSION, '1');
+  localStorage.removeItem(LEGACY_ACCESS);
+  localStorage.removeItem(LEGACY_REFRESH);
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(STORAGE_ACCESS);
-  localStorage.removeItem(STORAGE_REFRESH);
+  localStorage.removeItem(STORAGE_SESSION);
+  localStorage.removeItem(LEGACY_ACCESS);
+  localStorage.removeItem(LEGACY_REFRESH);
 }
 
-let refreshPromise: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
+/** @deprecated httpOnly cookies — kept for call-site compatibility. */
+export function setTokens(_access?: string, _refresh?: string): void {
+  markSession();
+}
+
+let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshTokens() {
-  const refresh = getRefreshToken();
-  if (!refresh) return null;
+  if (!hasSessionFlag()) return false;
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: refresh }),
+          credentials: 'include',
+          body: JSON.stringify({}),
         });
-        if (!res.ok) return null;
-        const data = (await res.json()) as { accessToken: string; refreshToken: string };
-        setTokens(data.accessToken, data.refreshToken);
-        return data;
+        if (!res.ok) return false;
+        markSession();
+        return true;
       } catch {
-        return null;
+        return false;
       } finally {
         refreshPromise = null;
       }
@@ -64,17 +67,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { skipAuth = false, headers: initHeaders, ...init } = options;
   const headers = new Headers(initHeaders);
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
-  if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-  }
 
-  let res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  let res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
   if (res.status === 401 && !skipAuth) {
     const refreshed = await refreshTokens();
     if (refreshed) {
-      headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
-      res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+      res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
     }
   }
 
@@ -99,8 +97,7 @@ export interface AuthUser {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
+  mustChangePassword?: boolean;
   user: AuthUser;
 }
 
@@ -198,11 +195,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, password }),
         skipAuth: true,
+      }).then((data) => {
+        markSession();
+        return data;
       }),
     logout: () =>
       apiRequest<{ success: boolean }>('/auth/logout', {
         method: 'POST',
-        body: JSON.stringify({ refreshToken: getRefreshToken() }),
+        body: JSON.stringify({}),
         skipAuth: true,
       }),
     me: () => apiRequest<AuthUser>('/auth/me'),
@@ -210,6 +210,9 @@ export const api = {
       apiRequest<LoginResponse>('/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
+      }).then((data) => {
+        markSession();
+        return data;
       }),
   },
   admin: {

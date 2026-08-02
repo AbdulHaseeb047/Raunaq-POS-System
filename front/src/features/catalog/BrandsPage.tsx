@@ -8,7 +8,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PageLoader } from '@/components/ui/Spinner';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { api } from '@/lib/api-client';
 import type { Brand } from '@/types/api';
 
@@ -20,12 +21,17 @@ export function BrandsPage() {
   const [selected, setSelected] = useState<Brand | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
   });
-  const { data, isLoading } = useQuery({ queryKey: ['brands'], queryFn: () => api.brands.list() });
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['brands', debouncedSearch],
+    queryFn: () => api.brands.list(debouncedSearch || undefined),
+    placeholderData: (prev) => prev,
+  });
 
   const { data: productsPage } = useQuery({
     queryKey: ['products', 'brand-counts'],
@@ -41,10 +47,7 @@ export function BrandsPage() {
     return map;
   }, [productsPage]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (data ?? []).filter((b) => !term || b.name.toLowerCase().includes(term));
-  }, [data, search]);
+  const filtered = data ?? [];
 
   const save = useMutation({
     mutationFn: () =>
@@ -68,10 +71,10 @@ export function BrandsPage() {
 
   const currency = settings?.currency ?? 'PKR';
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading && !data) return <PageSkeleton rows={6} />;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
+    <div className={`grid gap-6 lg:grid-cols-5 ${isFetching ? 'opacity-90' : ''}`}>
       <div className="lg:col-span-2">
         <PageHeader
           title="Brands"

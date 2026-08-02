@@ -51,15 +51,8 @@ export interface AuthUser {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
   mustChangePassword: boolean;
   user: AuthUser;
-}
-
-export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
 }
 
 export interface DashboardSummary {
@@ -67,16 +60,42 @@ export interface DashboardSummary {
   /** Gross COMPLETED sales before subtracting returns. */
   todayGrossSalesTotal?: string;
   todayTransactionCount: number;
+  averageOrderValue?: string;
+  revenueChangePct?: number;
+  aovChangePct?: number;
+  transactionChangePct?: number;
+  /** Total products below threshold (may exceed alerts list). */
+  lowStockCount: number;
+  /** Preview list (top 5). */
   lowStockAlerts: Array<{
     id: string;
     name: string;
     stockQuantity: string;
     lowStockThreshold: string;
   }>;
+  /** Sum of cost × qty for active products. */
+  inventoryValue?: string;
+  /** Total active products in the catalog. */
+  totalProducts?: number;
   outstandingUdhaar: string;
   todayReturnsAmount?: string;
   todayReturnsCount?: number;
   todayReturnedUnits?: string;
+  hourlySales?: Array<{
+    hour: string;
+    revenue: number;
+    transactions: number;
+  }>;
+  paymentMethods?: Array<{
+    name: string;
+    value: number;
+    amount?: string;
+    color: string;
+  }>;
+  topProducts?: Array<{
+    name: string;
+    revenue: number;
+  }>;
 }
 
 export interface SalesTrendPoint {
@@ -278,7 +297,8 @@ export interface StockMovementReport {
     quantityDelta: string;
     createdAt: string;
   }>;
-  lowStockAlerts: Array<{
+  /** @deprecated Prefer Inventory page stock filters (`?stock=low`). */
+  lowStockAlerts?: Array<{
     id: string;
     name: string;
     stockQuantity: string;

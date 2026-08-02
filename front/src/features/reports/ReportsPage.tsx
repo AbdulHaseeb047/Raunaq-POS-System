@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -99,14 +100,9 @@ export function ReportsPage() {
     queryFn: () => api.reports.dailySales(date, branchId ?? undefined),
   });
 
-  const { data: aging } = useQuery({
-    queryKey: ['reports', 'aging'],
-    queryFn: () => api.reports.udhaarAging(),
-  });
-
   const { data: stockMovement } = useQuery({
     queryKey: ['reports', 'stock', dates.from, dates.to],
-    queryFn: () => api.reports.stockMovement(dates.from, dates.to),
+    queryFn: () => api.reports.stockMovement(dates.from, dates.to, 8),
   });
 
   const { data: staffPerf } = useQuery({
@@ -131,12 +127,11 @@ export function ReportsPage() {
   const maxSalesVisual = Math.max(...salesVisuals.map((v) => v.value), 1);
   const topProducts = summary?.topProducts ?? [];
   const maxTopProductRevenue = Math.max(...topProducts.map((p) => toNumber(p.revenue)), 1);
-  const agingRows = aging ?? [];
-  const maxAging = Math.max(...agingRows.map((r) => toNumber(r.total)), 1);
   const maxDiscountUsage = Math.max(
     ...(discountUsage ?? []).map((r) => toNumber(r.totalDiscount)),
     1,
   );
+  const stockPreview = stockMovement?.movements ?? [];
 
   const exportSummaryCsv = () => {
     downloadCsv(`sales-summary-${dates.from}-${dates.to}.csv`, [
@@ -155,29 +150,17 @@ export function ReportsPage() {
     ]);
   };
 
-  const exportAgingCsv = () => {
-    downloadCsv('udhaar-aging.csv', [
-      ['Customer', '0-7 days', '8-30 days', '30+ days', 'Total'],
-      ...(aging ?? []).map((r) => [r.name, r.bucket0_7, r.bucket8_30, r.bucket30_plus, r.total]),
-    ]);
-  };
-
   if (isLoading) return <PageLoader />;
 
   return (
     <div>
       <PageHeader
         title="Reports"
-        subtitle="Sales, stock, udhaar, and staff analytics"
+        subtitle="Sales, stock, and staff analytics"
         action={
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={exportSummaryCsv}>
-              Export CSV
-            </Button>
-            <Button variant="secondary" onClick={exportAgingCsv}>
-              Export aging
-            </Button>
-          </div>
+          <Button variant="secondary" onClick={exportSummaryCsv}>
+            Export CSV
+          </Button>
         }
       />
 
@@ -393,41 +376,60 @@ export function ReportsPage() {
       )}
 
       <Card className="mb-6">
-        <CardHeader title="Stock movement" subtitle="Recent movements and low-stock alerts" />
-        {(stockMovement?.lowStockAlerts?.length ?? 0) > 0 && (
-          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Low stock alerts</p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {stockMovement?.lowStockAlerts.map((p) => (
-                <li key={p.id}>
-                  {p.name}: {p.stockQuantity} left (threshold {p.lowStockThreshold})
-                </li>
-              ))}
-            </ul>
+        <CardHeader
+          title="Stock movement"
+          subtitle="Recent inventory changes in this range"
+          action={
+            <Link to="/stock-movements">
+              <Button variant="secondary" size="sm">
+                View all
+              </Button>
+            </Link>
+          }
+        />
+        {stockPreview.length === 0 ? (
+          <p className="py-6 text-center text-sm text-text-muted">
+            No stock movements in this range.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
+                  <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3 text-right">Qty change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stockPreview.map((m) => {
+                  const delta = Number(m.quantityDelta);
+                  const up = Number.isFinite(delta) && delta > 0;
+                  return (
+                    <tr key={m.id} className="border-t border-border/60">
+                      <td className="px-4 py-3 whitespace-nowrap text-text-muted">
+                        {formatDateShort(m.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{m.productName}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-lg bg-surface-muted px-2 py-1 text-xs font-semibold">
+                          {m.movementType.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-semibold ${up ? 'text-emerald-700' : 'text-rose-700'}`}
+                      >
+                        {up ? '+' : ''}
+                        {m.quantityDelta}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-sm">
-            <thead>
-              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-                <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Qty</th>
-                <th className="px-4 py-3">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(stockMovement?.movements ?? []).slice(0, 20).map((m) => (
-                <tr key={m.id} className="border-t border-border/60">
-                  <td className="px-4 py-3">{m.productName}</td>
-                  <td className="px-4 py-3">{m.movementType}</td>
-                  <td className="px-4 py-3">{m.quantityDelta}</td>
-                  <td className="px-4 py-3 text-text-muted">{formatDateShort(m.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </Card>
 
       <Card className="mb-6">
@@ -464,49 +466,6 @@ export function ReportsPage() {
                   <td className="px-4 py-3 text-text-muted">{s.customerName ?? 'Walk-in'}</td>
                   <td className="px-4 py-3 font-semibold">{formatMoney(s.grandTotal, currency)}</td>
                   <td className="px-4 py-3 text-text-muted">{formatDateShort(s.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="Udhaar aging" subtitle="Outstanding credit by age bucket (FIFO)" />
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
-          {agingRows.slice(0, 6).map((row) => (
-            <div key={row.customerId} className="rounded-xl border border-border bg-white p-3">
-              <HorizontalBar
-                label={row.name}
-                value={toNumber(row.total)}
-                max={maxAging}
-                color="bg-slate-500"
-                valueLabel={formatMoney(row.total, currency)}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="bg-surface-muted text-left text-xs font-semibold uppercase text-text-muted">
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">0–7 days</th>
-                <th className="px-4 py-3">8–30 days</th>
-                <th className="px-4 py-3">30+ days</th>
-                <th className="px-4 py-3">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(aging ?? []).map((row) => (
-                <tr key={row.customerId} className="border-t border-border/60">
-                  <td className="px-4 py-3 font-medium">{row.name}</td>
-                  <td className="px-4 py-3">{formatMoney(row.bucket0_7, currency)}</td>
-                  <td className="px-4 py-3">{formatMoney(row.bucket8_30, currency)}</td>
-                  <td className="px-4 py-3 font-medium text-warning">
-                    {formatMoney(row.bucket30_plus, currency)}
-                  </td>
-                  <td className="px-4 py-3 font-bold">{formatMoney(row.total, currency)}</td>
                 </tr>
               ))}
             </tbody>

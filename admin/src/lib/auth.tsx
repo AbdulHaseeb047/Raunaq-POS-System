@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { ApiError, api, clearTokens, setTokens, type AuthUser } from './api';
+import { ApiError, api, clearTokens, markSession, type AuthUser } from './api';
 
 interface AuthState {
   user: AuthUser | null;
@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         return;
       }
+      markSession();
       setUser(me);
     } catch {
       clearTokens();
@@ -59,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         403,
       );
     }
-    setTokens(res.accessToken, res.refreshToken);
+    markSession();
     setUser(res.user);
   }, []);
 

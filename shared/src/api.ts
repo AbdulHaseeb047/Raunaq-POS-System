@@ -37,7 +37,7 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  accessToken: string;
+  mustChangePassword: boolean;
   user: UserSummary;
 }
 
@@ -50,7 +50,7 @@ export interface UserSummary {
 }
 
 export interface RefreshTokenResponse {
-  accessToken: string;
+  success: boolean;
 }
 
 // --- Health ---

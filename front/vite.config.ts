@@ -27,6 +27,8 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),
+        // Forward auth cookies through the Vite proxy in local dev.
+        cookieDomainRewrite: 'localhost',
       },
     },
   },
