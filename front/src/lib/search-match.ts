@@ -49,8 +49,8 @@ export function productMatchesSearch(
 ): boolean {
   const q = query.trim();
   if (!q) return true;
-  if (matchesSearchTokens(product.name, q)) return true;
-  if (product.sku && matchesSearchTokens(product.sku, q)) return true;
-  if (product.barcode && matchesSearchTokens(product.barcode, q)) return true;
-  return false;
+  const fields = [product.name, product.sku, product.barcode].filter(
+    (v): v is string => Boolean(v && v.trim()),
+  );
+  return fields.length > 0 && matchesSearchTokens(fields.join(' '), q);
 }

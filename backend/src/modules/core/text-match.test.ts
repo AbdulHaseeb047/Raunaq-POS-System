@@ -29,4 +29,8 @@ describe('matchesSearchTokens', () => {
   it('rejects when a token is missing', () => {
     expect(matchesSearchTokens('million supreme', 'mil fay')).toBe(false);
   });
+
+  it('matches tokens spanning joined fields (name + phone)', () => {
+    expect(matchesSearchTokens('Ali Khan 03001234567', 'ali 0300')).toBe(true);
+  });
 });

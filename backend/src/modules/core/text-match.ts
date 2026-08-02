@@ -152,20 +152,41 @@ export async function findIdsByCompactSearch(
     looseParts.push(Prisma.sql`${nameExpr} LIKE ${likeContainsPattern(fullCompact)}`);
   }
 
-  const candidateLimit = Math.max(limit ?? DEFAULT_SEARCH_ID_LIMIT, 200);
+  const candidateLimit = limit == null ? 5000 : Math.max(limit * 3, 200);
   const predicate =
     looseParts.length === 1 ? looseParts[0]! : Prisma.sql`(${Prisma.join(looseParts, ' OR ')})`;
 
+  const selectCols: Prisma.Sql[] = [Prisma.sql`id`, Prisma.sql`name`];
+  if (extraColumns.includes('sku')) selectCols.push(Prisma.sql`sku`);
+  if (extraColumns.includes('barcode')) selectCols.push(Prisma.sql`barcode`);
+  if (extraColumns.includes('phone')) selectCols.push(Prisma.sql`phone`);
+  if (extraColumns.includes('email')) selectCols.push(Prisma.sql`email`);
+
   try {
-    const rows = await prisma.$queryRaw<{ id: string; name: string }[]>`
-      SELECT id, name FROM ${TABLE_SQL[table]}
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        sku?: string | null;
+        barcode?: string | null;
+        phone?: string | null;
+        email?: string | null;
+      }>
+    >`
+      SELECT ${Prisma.join(selectCols, ', ')} FROM ${TABLE_SQL[table]}
       WHERE tenant_id = ${tenantId}::uuid
         AND deleted_at IS NULL
         AND ${predicate}
       LIMIT ${candidateLimit}
     `;
 
-    const matched = rows.filter((r) => matchesSearchTokens(r.name, term));
+    // Join fields so tokens can span columns (e.g. name + phone: "john 0300").
+    const matched = rows.filter((r) => {
+      const fields = [r.name, r.sku, r.barcode, r.phone, r.email].filter(
+        (v): v is string => Boolean(v && String(v).trim()),
+      );
+      return fields.length > 0 && matchesSearchTokens(fields.join(' '), term);
+    });
     const ids = matched.map((r) => r.id);
     if (limit != null && limit > 0) return ids.slice(0, limit);
     return ids;
