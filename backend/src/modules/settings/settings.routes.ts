@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { FEATURES } from '@pos/shared';
+import { FEATURES, USER_ROLES } from '@pos/shared';
 
-import { ValidationError } from '../core/errors.js';
+import { ForbiddenError, ValidationError } from '../core/errors.js';
 import { resolveTenantId } from '../core/tenant.js';
 import { authenticate, requireFeature } from '../permissions/permissions.middleware.js';
 import {
   getSettings,
   exportTenantData,
+  settingsPatchTouchesLayout,
   settingsSchema,
   updateSettings,
 } from './settings.service.js';
@@ -28,7 +29,19 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       const parsed = settingsSchema.safeParse(request.body);
       if (!parsed.success)
         throw new ValidationError('Invalid request body', parsed.error.flatten());
-      return updateSettings(resolveTenantId(request), parsed.data);
+
+      const allowLayout =
+        request.user?.role === USER_ROLES.SUPER_ADMIN ||
+        Boolean(request.user?.features?.includes(FEATURES.UI_CUSTOMIZE));
+
+      if (settingsPatchTouchesLayout(parsed.data) && !allowLayout) {
+        throw new ForbiddenError(
+          'This feature requires a plan upgrade. Contact Raunaq to unlock it.',
+          'UPGRADE_REQUIRED',
+        );
+      }
+
+      return updateSettings(resolveTenantId(request), parsed.data, { allowLayout });
     },
   );
 

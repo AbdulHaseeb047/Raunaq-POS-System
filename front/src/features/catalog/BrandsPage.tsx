@@ -12,6 +12,7 @@ import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { api } from '@/lib/api-client';
+import { entityMatchesSearch } from '@/lib/search-match';
 import type { Brand } from '@/types/api';
 
 export function BrandsPage() {
@@ -49,7 +50,12 @@ export function BrandsPage() {
     return map;
   }, [productsPage]);
 
-  const filtered = data ?? [];
+  const filtered = useMemo(() => {
+    const rows = data ?? [];
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((b) => entityMatchesSearch([b.name], q));
+  }, [data, search]);
 
   const save = useMutation({
     mutationFn: () =>

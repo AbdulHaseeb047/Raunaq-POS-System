@@ -30,6 +30,7 @@ export const FEATURE_LABELS: Partial<Record<FeatureKey, string>> = {
   [FEATURES.SETTINGS_EDIT]: 'Edit settings',
   [FEATURES.SETTINGS_RECEIPT_BRANDING]: 'Receipt branding',
   [FEATURES.SETTINGS_FBR]: 'FBR invoicing',
+  [FEATURES.UI_CUSTOMIZE]: 'Customize front layout',
 };
 
 export function featureLabel(feature: FeatureKey | string): string {

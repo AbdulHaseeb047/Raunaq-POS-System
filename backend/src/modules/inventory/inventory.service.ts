@@ -143,11 +143,43 @@ export async function listProducts(
     activeOnly?: boolean;
     /** Skip COUNT(*) for faster catalog loads. */
     skipCount?: boolean;
+    /** Fetch specific product ids (order preserved in response). */
+    ids?: string[];
   },
 ) {
   const page = options?.page ?? 1;
   const pageSize = Math.min(options?.pageSize ?? 50, 5000);
   const skip = (page - 1) * pageSize;
+  const idFilter =
+    options?.ids && options.ids.length > 0
+      ? Array.from(new Set(options.ids)).slice(0, 40)
+      : null;
+
+  if (idFilter) {
+    const include = {
+      category: { select: { id: true, name: true } },
+      brand: { select: { id: true, name: true } },
+      supplier: { select: { id: true, name: true } },
+    } as const;
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        id: { in: idFilter },
+        ...(options?.activeOnly ? { isActive: true } : {}),
+      },
+      include,
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const ordered = idFilter
+      .map((id) => byId.get(id))
+      .filter((p): p is (typeof products)[number] => Boolean(p));
+    return {
+      data: ordered.map(serializeProduct),
+      meta: { total: ordered.length, page: 1, pageSize: ordered.length, totalPages: 1 },
+    };
+  }
+
   const searchIds = await findIdsByCompactSearch(
     'products',
     tenantId,

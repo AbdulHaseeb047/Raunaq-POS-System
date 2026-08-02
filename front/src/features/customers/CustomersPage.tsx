@@ -21,6 +21,7 @@ import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney, isTimestampInLocalDateRange, localDateIso } from '@/lib/format';
 import { buildCustomerStatementHtml, openPrintDocument } from '@/lib/print-document';
 import { printSaleReceipt } from '@/lib/print-receipt';
+import { customerMatchesSearch } from '@/lib/search-match';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { Customer, LedgerEntry, SaleDetail, UdhaarAgingRow } from '@/types/api';
 
@@ -95,6 +96,13 @@ export function CustomersPage() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, sortByBalance]);
+
+  const visibleCustomers = useMemo(() => {
+    const rows = data?.data ?? [];
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((c) => customerMatchesSearch(c, q));
+  }, [data?.data, search]);
 
   const { data: aging } = useQuery({
     queryKey: ['reports', 'aging'],
@@ -291,7 +299,7 @@ export function CustomersPage() {
         <div
           className={`max-h-[calc(100vh-16rem)] space-y-2 overflow-y-auto ${isFetching ? 'opacity-70' : ''}`}
         >
-          {(data?.data ?? []).map((c) => {
+          {(visibleCustomers ?? []).map((c) => {
             const overdue = overdueMap.get(c.id);
             const rowAging = agingByCustomer.get(c.id);
             const hasAging = rowAging && parseFloat(rowAging.total) > 0;
@@ -345,9 +353,9 @@ export function CustomersPage() {
               </button>
             );
           })}
-          {(data?.data ?? []).length === 0 && (
+          {visibleCustomers.length === 0 && (
             <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-muted">
-              {debouncedSearch ? 'No customers match your search.' : 'No customers yet.'}
+              {search.trim() ? 'No customers match your search.' : 'No customers yet.'}
             </p>
           )}
         </div>

@@ -40,6 +40,9 @@ export const FEATURES = {
 
   // Multi-branch
   MULTI_BRANCH_ACCESS: 'multi_branch.access',
+
+  // Front customization (Standard+)
+  UI_CUSTOMIZE: 'ui.customize',
 } as const;
 
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
@@ -52,6 +55,7 @@ export const FEATURE_MODULES = [
   'users',
   'settings',
   'multi_branch',
+  'ui',
 ] as const;
 
 export type FeatureModule = (typeof FEATURE_MODULES)[number];

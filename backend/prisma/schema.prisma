@@ -759,6 +759,10 @@ model BusinessSettings {
   printerHost              String?  @map("printer_host") @db.VarChar(255)
   printerPort              Int      @default(9100) @map("printer_port")
   printerPaperWidth        Int      @default(80) @map("printer_paper_width")
+  /// Ordered product UUIDs for Sale Quick pick (Standard+ ui.customize)
+  saleQuickPickIds         Json     @default("[]") @map("sale_quick_pick_ids")
+  /// Dashboard widget visibility + order; null = built-in default
+  dashboardLayout          Json?    @map("dashboard_layout")
   updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   version                  Int      @default(1)
 

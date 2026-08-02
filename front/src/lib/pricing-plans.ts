@@ -55,6 +55,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Receipt branding (logo, header, footer)',
       'Full udhaar ledger + statements',
       'Sales & growth reports, CSV import/export',
+      'Customize Sale Quick pick & Dashboard layout',
     ],
     excluded: ['Multi-branch / FBR invoicing'],
   },

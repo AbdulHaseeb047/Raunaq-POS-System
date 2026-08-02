@@ -159,6 +159,12 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     label: 'Multi-Branch Access',
     description: 'Switch branches and manage multiple shop locations',
   },
+  {
+    key: FEATURES.UI_CUSTOMIZE,
+    module: 'ui',
+    label: 'Customize Front',
+    description: 'Curate Sale Quick pick products and rearrange Dashboard sections',
+  },
 ];
 
 export const SHIPPED_FEATURE_KEYS = FEATURE_REGISTRY.map((f) => f.key);
@@ -190,6 +196,7 @@ const STANDARD_FEATURES: FeatureKey[] = [
   FEATURES.USERS_MANAGE,
   FEATURES.SETTINGS_EDIT,
   FEATURES.SETTINGS_RECEIPT_BRANDING,
+  FEATURES.UI_CUSTOMIZE,
 ];
 
 const PRO_FEATURES: FeatureKey[] = [

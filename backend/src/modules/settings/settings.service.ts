@@ -1,8 +1,35 @@
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
+import { ForbiddenError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
 import { SYNC_TABLES, syncUpdate } from '../sync/sync-payload.js';
+
+export const DASHBOARD_WIDGET_IDS = [
+  'kpis',
+  'trend',
+  'payments',
+  'topProducts',
+  'returns',
+  'lowStock',
+] as const;
+
+export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+const dashboardWidgetSchema = z.object({
+  id: z.enum(DASHBOARD_WIDGET_IDS),
+  visible: z.boolean(),
+});
+
+export const dashboardLayoutSchema = z.object({
+  widgets: z.array(dashboardWidgetSchema).min(1).max(DASHBOARD_WIDGET_IDS.length),
+});
+
+const uuidListSchema = z
+  .array(z.string().uuid())
+  .max(40)
+  .transform((ids) => Array.from(new Set(ids)));
 
 export const settingsSchema = z.object({
   businessName: z.string().min(1).max(255).optional(),
@@ -24,7 +51,13 @@ export const settingsSchema = z.object({
   printerHost: z.string().max(255).optional().nullable(),
   printerPort: z.number().int().min(1).max(65535).optional(),
   printerPaperWidth: z.union([z.literal(58), z.literal(80)]).optional(),
+  saleQuickPickIds: uuidListSchema.optional(),
+  dashboardLayout: dashboardLayoutSchema.nullable().optional(),
 });
+
+export function settingsPatchTouchesLayout(input: z.infer<typeof settingsSchema>): boolean {
+  return input.saleQuickPickIds !== undefined || input.dashboardLayout !== undefined;
+}
 
 export async function ensureBusinessSettings(tenantId: string, businessName: string) {
   await prisma.businessSettings.upsert({
@@ -59,7 +92,18 @@ export async function getSettings(tenantId: string) {
   return serialized;
 }
 
-export async function updateSettings(tenantId: string, input: z.infer<typeof settingsSchema>) {
+export async function updateSettings(
+  tenantId: string,
+  input: z.infer<typeof settingsSchema>,
+  opts?: { allowLayout?: boolean },
+) {
+  if (settingsPatchTouchesLayout(input) && !opts?.allowLayout) {
+    throw new ForbiddenError(
+      'This feature requires a plan upgrade. Contact Raunaq to unlock it.',
+      'UPGRADE_REQUIRED',
+    );
+  }
+
   await getSettings(tenantId);
   settingsCache.delete(tenantId);
   const settings = await prisma.$transaction(async (tx) => {
@@ -88,6 +132,15 @@ export async function updateSettings(tenantId: string, input: z.infer<typeof set
         printerHost: input.printerHost,
         printerPort: input.printerPort,
         printerPaperWidth: input.printerPaperWidth,
+        ...(input.saleQuickPickIds !== undefined
+          ? { saleQuickPickIds: input.saleQuickPickIds }
+          : {}),
+        ...(input.dashboardLayout !== undefined
+          ? {
+              dashboardLayout:
+                input.dashboardLayout === null ? Prisma.DbNull : input.dashboardLayout,
+            }
+          : {}),
       },
     });
     await syncUpdate(
@@ -144,6 +197,17 @@ export async function exportTenantData(tenantId: string) {
   };
 }
 
+function parseSaleQuickPickIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 40);
+}
+
+function parseDashboardLayout(raw: unknown): z.infer<typeof dashboardLayoutSchema> | null {
+  if (raw == null) return null;
+  const parsed = dashboardLayoutSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 function serializeSettings(s: {
   tenantId: string;
   businessName: string;
@@ -165,6 +229,8 @@ function serializeSettings(s: {
   printerHost: string | null;
   printerPort: number;
   printerPaperWidth: number;
+  saleQuickPickIds?: unknown;
+  dashboardLayout?: unknown;
 }) {
   return {
     tenantId: s.tenantId,
@@ -189,5 +255,7 @@ function serializeSettings(s: {
     printerHost: s.printerHost,
     printerPort: s.printerPort,
     printerPaperWidth: s.printerPaperWidth,
+    saleQuickPickIds: parseSaleQuickPickIds(s.saleQuickPickIds),
+    dashboardLayout: parseDashboardLayout(s.dashboardLayout),
   };
 }

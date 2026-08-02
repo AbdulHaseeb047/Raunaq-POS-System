@@ -43,14 +43,27 @@ function tokenMatchesAnyWord(token: string, words: string[]): boolean {
   return false;
 }
 
-export function productMatchesSearch(
-  product: { name: string; sku?: string | null; barcode?: string | null },
+/** Match query against one or more fields (tokens may span fields). */
+export function entityMatchesSearch(
+  fields: Array<string | null | undefined>,
   query: string,
 ): boolean {
   const q = query.trim();
   if (!q) return true;
-  const fields = [product.name, product.sku, product.barcode].filter(
-    (v): v is string => Boolean(v && v.trim()),
-  );
-  return fields.length > 0 && matchesSearchTokens(fields.join(' '), q);
+  const parts = fields.filter((v): v is string => Boolean(v && v.trim()));
+  return parts.length > 0 && matchesSearchTokens(parts.join(' '), q);
+}
+
+export function productMatchesSearch(
+  product: { name: string; sku?: string | null; barcode?: string | null },
+  query: string,
+): boolean {
+  return entityMatchesSearch([product.name, product.sku, product.barcode], query);
+}
+
+export function customerMatchesSearch(
+  customer: { name: string; phone?: string | null; email?: string | null },
+  query: string,
+): boolean {
+  return entityMatchesSearch([customer.name, customer.phone, customer.email], query);
 }

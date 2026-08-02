@@ -24,8 +24,9 @@ import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { productMatchesSearch } from '@/lib/search-match';
+import { productMatchesSearch, customerMatchesSearch } from '@/lib/search-match';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
+import { QuickPickCustomizeModal } from '@/features/billing/QuickPickCustomizeModal';
 
 const SALE_SEARCH_LIMIT = 40;
 
@@ -112,11 +113,16 @@ export function SalePage() {
   const canDiscount = hasFeature(user, FEATURES.BILLING_DISCOUNT);
   const canDiscountUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
   const canPrint = hasFeature(user, FEATURES.BILLING_PRINT_RECEIPT);
+  const canCustomize = hasFeature(user, FEATURES.UI_CUSTOMIZE);
+  const [showQuickPickCustomize, setShowQuickPickCustomize] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.get(),
   });
+  const quickPickIds = settings?.saleQuickPickIds ?? [];
+  const useCustomQuickPick =
+    canCustomize && quickPickIds.length > 0 && !categoryId && !search.trim();
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.categories.list(),
@@ -147,6 +153,22 @@ export function SalePage() {
       }),
     staleTime: 30_000,
     placeholderData: (prev) => prev,
+  });
+
+  const {
+    data: quickPickPage,
+    isLoading: quickPickLoading,
+    isFetching: quickPickFetching,
+  } = useQuery({
+    queryKey: ['products', 'sale-quick-pick', quickPickIds],
+    queryFn: () =>
+      api.products.list({
+        ids: quickPickIds,
+        activeOnly: true,
+        pageSize: SALE_SEARCH_LIMIT,
+      }),
+    staleTime: 30_000,
+    enabled: canCustomize && quickPickIds.length > 0,
   });
   const { data: customers, isFetching: customersFetching } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
@@ -707,6 +729,14 @@ export function SalePage() {
   };
 
   const searchResults = useMemo(() => {
+    if (useCustomQuickPick) {
+      const favorites = quickPickPage?.data ?? [];
+      const seen = new Set(favorites.map((p) => p.id));
+      const fill = (searchPage?.data ?? [])
+        .filter((p) => !seen.has(p.id))
+        .slice(0, Math.max(0, SALE_SEARCH_LIMIT - favorites.length));
+      return [...favorites, ...fill];
+    }
     const rows = searchPage?.data ?? [];
     const q = search.trim();
     // Instant local filter while debounce/API catch up.
@@ -723,8 +753,11 @@ export function SalePage() {
       if (d !== 0) return d;
       return a.name.localeCompare(b.name);
     });
-  }, [searchPage?.data, search, categoryId]);
-  const productsFetching = searchLoading || (searchFetching && searchResults.length === 0);
+  }, [searchPage?.data, search, categoryId, useCustomQuickPick, quickPickPage?.data]);
+  const productsFetching = useCustomQuickPick
+    ? quickPickLoading ||
+      (quickPickFetching && (quickPickPage?.data?.length ?? 0) === 0 && searchResults.length === 0)
+    : searchLoading || (searchFetching && searchResults.length === 0);
   const cashDue = useMemo(() => {
     if (paymentMode === 'CASH') {
       return exchangeCredit > 0 ? payableAfterExchange : totals.grandTotal;
@@ -982,15 +1015,28 @@ export function SalePage() {
           </Card>
 
           <Card className="bg-white" padding="md">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">
                 {!categoryId && !search.trim()
-                  ? 'Quick pick'
+                  ? useCustomQuickPick
+                    ? 'Your Quick pick'
+                    : 'Quick pick'
                   : categoryId
                     ? 'Category products'
                     : 'Search results'}
               </h3>
-              <span className="text-xs text-text-muted">{browseProducts.length} items</span>
+              <div className="flex items-center gap-2">
+                {canCustomize && !categoryId && !search.trim() && (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-brand-700 hover:underline"
+                    onClick={() => setShowQuickPickCustomize(true)}
+                  >
+                    Customize
+                  </button>
+                )}
+                <span className="text-xs text-text-muted">{browseProducts.length} items</span>
+              </div>
             </div>
             {productsFetching && browseProducts.length === 0 ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-busy="true">
@@ -1087,7 +1133,9 @@ export function SalePage() {
                     <p className="px-3 py-2 text-xs text-text-muted">Searching…</p>
                   ) : (
                     <>
-                      {(customers?.data ?? []).map((c) => (
+                      {(customers?.data ?? [])
+                        .filter((c) => customerMatchesSearch(c, customerSearch))
+                        .map((c) => (
                         <button
                           key={c.id}
                           type="button"
@@ -1102,7 +1150,9 @@ export function SalePage() {
                           {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
                         </button>
                       ))}
-                      {(customers?.data ?? []).length === 0 && (
+                      {(customers?.data ?? []).filter((c) =>
+                        customerMatchesSearch(c, customerSearch),
+                      ).length === 0 && (
                         <p className="px-3 py-2 text-xs text-text-muted">
                           No customer found. Add from Udhaar page.
                         </p>
@@ -1773,6 +1823,12 @@ export function SalePage() {
         }
         confirmLabel="Delete bill"
         loading={deleteHeld.isPending}
+      />
+
+      <QuickPickCustomizeModal
+        open={showQuickPickCustomize}
+        onClose={() => setShowQuickPickCustomize(false)}
+        initialIds={quickPickIds}
       />
     </div>
   );

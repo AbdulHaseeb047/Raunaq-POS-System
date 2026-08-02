@@ -430,6 +430,25 @@ export interface BusinessSettings {
   printerHost: string | null;
   printerPort: number;
   printerPaperWidth: 58 | 80;
+  saleQuickPickIds: string[];
+  dashboardLayout: DashboardLayout | null;
+}
+
+export type DashboardWidgetId =
+  | 'kpis'
+  | 'trend'
+  | 'payments'
+  | 'topProducts'
+  | 'returns'
+  | 'lowStock';
+
+export interface DashboardLayoutWidget {
+  id: DashboardWidgetId;
+  visible: boolean;
+}
+
+export interface DashboardLayout {
+  widgets: DashboardLayoutWidget[];
 }
 
 export interface Branch {

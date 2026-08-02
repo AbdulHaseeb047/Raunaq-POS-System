@@ -13,6 +13,7 @@ import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { api } from '@/lib/api-client';
+import { entityMatchesSearch } from '@/lib/search-match';
 import type { Category } from '@/types/api';
 
 export function CategoriesPage() {
@@ -52,7 +53,12 @@ export function CategoriesPage() {
     return map;
   }, [productsPage]);
 
-  const filtered = data ?? [];
+  const filtered = useMemo(() => {
+    const rows = data ?? [];
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((c) => entityMatchesSearch([c.name], q));
+  }, [data, search]);
 
   const save = useMutation({
     mutationFn: () =>

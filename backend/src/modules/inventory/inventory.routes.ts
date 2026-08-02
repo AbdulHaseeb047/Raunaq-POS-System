@@ -96,7 +96,15 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
         pageSize?: string;
         activeOnly?: string;
         skipCount?: string;
+        ids?: string;
       };
+      const ids = q.ids
+        ? q.ids
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 40)
+        : undefined;
       return listProducts(resolveTenantId(request), {
         search: q.search,
         categoryId: q.categoryId,
@@ -106,6 +114,7 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
         pageSize: q.pageSize ? Number(q.pageSize) : 50,
         activeOnly: q.activeOnly === 'true' || q.activeOnly === '1',
         skipCount: q.skipCount === 'true' || q.skipCount === '1',
+        ids,
       });
     },
   );
