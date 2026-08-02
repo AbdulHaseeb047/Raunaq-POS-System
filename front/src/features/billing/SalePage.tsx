@@ -147,7 +147,7 @@ export function SalePage() {
     staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
-  const { data: customers } = useQuery({
+  const { data: customers, isFetching: customersFetching } = useQuery({
     queryKey: ['customers', 'sale', debouncedCustomerSearch],
     queryFn: () => api.customers.list(debouncedCustomerSearch || undefined, 1, 15),
     enabled: debouncedCustomerSearch.trim().length >= 2,
@@ -1055,25 +1055,33 @@ export function SalePage() {
               />
               {showCustomerDropdown && customerSearch && (
                 <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-36 overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
-                  {(customers?.data ?? []).map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
-                      onClick={() => {
-                        setCustomer(c);
-                        setCustomerSearch(c.name);
-                        setShowCustomerDropdown(false);
-                      }}
-                    >
-                      <span className="font-medium">{c.name}</span>
-                      {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
-                    </button>
-                  ))}
-                  {(customers?.data ?? []).length === 0 && (
-                    <p className="px-3 py-2 text-xs text-text-muted">
-                      No customer found. Add from Udhaar page.
-                    </p>
+                  {customerSearch.trim().length < 2 ? (
+                    <p className="px-3 py-2 text-xs text-text-muted">Type at least 2 characters…</p>
+                  ) : customersFetching && !customers?.data?.length ? (
+                    <p className="px-3 py-2 text-xs text-text-muted">Searching…</p>
+                  ) : (
+                    <>
+                      {(customers?.data ?? []).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-brand-50"
+                          onClick={() => {
+                            setCustomer(c);
+                            setCustomerSearch(c.name);
+                            setShowCustomerDropdown(false);
+                          }}
+                        >
+                          <span className="font-medium">{c.name}</span>
+                          {c.phone && <span className="text-text-muted"> · {c.phone}</span>}
+                        </button>
+                      ))}
+                      {(customers?.data ?? []).length === 0 && (
+                        <p className="px-3 py-2 text-xs text-text-muted">
+                          No customer found. Add from Udhaar page.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}

@@ -913,20 +913,27 @@ export async function listSales(
         }))
       : [];
 
+  const searchOr = term
+    ? [
+        ...saleNumberFilters,
+        ...(customerIds && customerIds.length > 0 ? [{ customerId: { in: customerIds } }] : []),
+        ...(statusMatches.length > 0 ? [{ paymentStatus: { in: [...statusMatches] } }] : []),
+      ]
+    : [];
+
+  if (term && searchOr.length === 0) {
+    return {
+      data: [],
+      meta: { total: 0, page, pageSize, totalPages: 0 },
+    };
+  }
+
   const where = {
     tenantId,
     status: 'COMPLETED' as const,
     ...(branchId ? { branchId } : {}),
     ...(createdAt ? { createdAt } : {}),
-    ...(term
-      ? {
-          OR: [
-            ...saleNumberFilters,
-            ...(customerIds && customerIds.length > 0 ? [{ customerId: { in: customerIds } }] : []),
-            ...(statusMatches.length > 0 ? [{ paymentStatus: { in: [...statusMatches] } }] : []),
-          ],
-        }
-      : {}),
+    ...(term ? { OR: searchOr } : {}),
   };
   const [data, total] = await prisma.$transaction([
     prisma.sale.findMany({

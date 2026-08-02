@@ -13,4 +13,8 @@ describe('compactText', () => {
     expect(compactText('abc sd')).toBe(compactText('abcsd'));
     expect(compactText('Ali Khan')).toBe(compactText('alikhan'));
   });
+
+  it('strips NBSP like Postgres [[:space:]]', () => {
+    expect(compactText('ali\u00a0khan')).toBe('alikhan');
+  });
 });

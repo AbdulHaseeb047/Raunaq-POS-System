@@ -40,6 +40,8 @@ export function registerErrorHandler(app: FastifyInstance): void {
     let message = 'An unexpected error occurred';
     if (process.env.NODE_ENV !== 'production') {
       message = error.message || message;
+    } else if (/duplicate|already exists|unique constraint/i.test(error.message)) {
+      message = 'A record with this name already exists';
     } else if (
       prismaCode === 'P2028' ||
       /Transaction already closed|expired transaction/i.test(error.message)
@@ -47,11 +49,17 @@ export function registerErrorHandler(app: FastifyInstance): void {
       message =
         'Sale timed out talking to the database. Redeploy with the latest backend (longer TX timeout) and prefer a DB region close to Railway.';
     } else if (
+      prismaCode === 'P2010' ||
+      /name_compact|column .* does not exist/i.test(error.message)
+    ) {
+      message =
+        'Database is missing search indexes. Redeploy API after migrate deploy completes, then retry.';
+    } else if (
       prismaCode.startsWith('P') ||
       /row-level security|RLS|set_config/i.test(error.message)
     ) {
       message =
-        'Database rejected the sale (RLS/connection). Ensure migrate deploy ran and DATABASE_URL is not a transaction pooler (:6543).';
+        'Database rejected the request (RLS/connection). Ensure migrate deploy ran and DATABASE_URL is not a transaction pooler (:6543).';
     } else if (/prepared statement|pgbouncer|40P01/i.test(error.message)) {
       message =
         'Database pooler error. Use a direct or session-mode DATABASE_URL (port 5432), not transaction mode.';
