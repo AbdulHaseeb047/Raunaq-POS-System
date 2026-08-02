@@ -91,28 +91,59 @@ const FULL_SETTINGS_SELECT = {
 
 /** Cached: true when business_settings.sale_quick_pick_ids exists. */
 let layoutColumnsAvailable: boolean | null = null;
+let layoutEnsurePromise: Promise<boolean> | null = null;
 
 export function resetLayoutColumnsCache(): void {
   layoutColumnsAvailable = null;
+  layoutEnsurePromise = null;
+}
+
+/**
+ * Self-heal: add Customize columns if the migration was never applied on this DB.
+ * Safe to run repeatedly (IF NOT EXISTS).
+ */
+export async function ensureLayoutColumns(): Promise<boolean> {
+  if (layoutColumnsAvailable === true) return true;
+  if (layoutEnsurePromise) return layoutEnsurePromise;
+
+  layoutEnsurePromise = (async () => {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'business_settings'
+            AND column_name = 'sale_quick_pick_ids'
+        ) AS ok
+      `;
+      if (rows[0]?.ok) {
+        layoutColumnsAvailable = true;
+        return true;
+      }
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE business_settings
+          ADD COLUMN IF NOT EXISTS sale_quick_pick_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+          ADD COLUMN IF NOT EXISTS dashboard_layout JSONB
+      `);
+
+      layoutColumnsAvailable = true;
+      return true;
+    } catch {
+      layoutColumnsAvailable = false;
+      return false;
+    } finally {
+      layoutEnsurePromise = null;
+    }
+  })();
+
+  return layoutEnsurePromise;
 }
 
 export async function hasLayoutColumns(): Promise<boolean> {
   if (layoutColumnsAvailable != null) return layoutColumnsAvailable;
-  try {
-    const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'business_settings'
-          AND column_name = 'sale_quick_pick_ids'
-      ) AS ok
-    `;
-    layoutColumnsAvailable = Boolean(rows[0]?.ok);
-  } catch {
-    layoutColumnsAvailable = false;
-  }
-  return layoutColumnsAvailable;
+  return ensureLayoutColumns();
 }
 
 function isMissingLayoutColumnError(err: unknown): boolean {
@@ -219,10 +250,10 @@ export async function updateSettings(
     );
   }
 
-  const hasLayout = await hasLayoutColumns();
+  const hasLayout = await ensureLayoutColumns();
   if (settingsPatchTouchesLayout(input) && !hasLayout) {
     throw new ValidationError(
-      'Database is missing layout columns. Run prisma migrate deploy (ui_customize_layout), redeploy API, then retry Customize.',
+      'Could not create layout columns on the database. Check DB permissions, then retry Customize.',
     );
   }
 
@@ -287,8 +318,29 @@ export async function updateSettings(
   } catch (err) {
     if (isMissingLayoutColumnError(err)) {
       layoutColumnsAvailable = false;
+      const healed = await ensureLayoutColumns();
+      if (healed) {
+        // Retry once after self-heal.
+        const settings = await prisma.$transaction(async (tx) => {
+          const updated = await tx.businessSettings.update({
+            where: { tenantId },
+            data,
+            select: FULL_SETTINGS_SELECT,
+          });
+          await syncUpdate(
+            tx,
+            SYNC_TABLES.businessSettings,
+            { ...updated, id: updated.tenantId },
+            { recordId: updated.tenantId },
+          );
+          return updated;
+        });
+        const serialized = serializeSettings(settings);
+        settingsCache.set(tenantId, { at: Date.now(), value: serialized });
+        return serialized;
+      }
       throw new ValidationError(
-        'Database is missing layout columns. Run prisma migrate deploy (ui_customize_layout), redeploy API, then retry Customize.',
+        'Could not create layout columns on the database. Check DB permissions, then retry Customize.',
       );
     }
     throw err;

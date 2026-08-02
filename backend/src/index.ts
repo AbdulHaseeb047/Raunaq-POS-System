@@ -129,6 +129,16 @@ async function start() {
     await app.listen({ port: appConfig.port, host: appConfig.host });
     app.log.info(`Server listening on ${appConfig.host}:${appConfig.port}`);
 
+    // Self-heal Customize columns if migrate deploy was skipped on this DB.
+    const { ensureLayoutColumns } = await import('./modules/settings/settings.service.js');
+    const layoutOk = await ensureLayoutColumns();
+    app.log.info(
+      { layoutColumns: layoutOk },
+      layoutOk
+        ? 'Business settings layout columns ready'
+        : 'Layout columns unavailable — Customize will stay disabled until DB allows ALTER TABLE',
+    );
+
     subscriptionTimer = startSubscriptionInterval(app.log);
 
     if (appConfig.deploymentMode === 'hybrid') {
