@@ -32,9 +32,21 @@ export async function ensureBusinessSettings(tenantId: string, businessName: str
     create: { tenantId, businessName },
     update: {},
   });
+  settingsCache.delete(tenantId);
 }
 
+const SETTINGS_CACHE_TTL_MS = 45_000;
+const settingsCache = new Map<
+  string,
+  { at: number; value: ReturnType<typeof serializeSettings> }
+>();
+
 export async function getSettings(tenantId: string) {
+  const hit = settingsCache.get(tenantId);
+  if (hit && Date.now() - hit.at < SETTINGS_CACHE_TTL_MS) {
+    return hit.value;
+  }
+
   let settings = await prisma.businessSettings.findUnique({ where: { tenantId } });
   if (!settings) {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -42,11 +54,14 @@ export async function getSettings(tenantId: string) {
       data: { tenantId, businessName: tenant?.name ?? 'My Business' },
     });
   }
-  return serializeSettings(settings);
+  const serialized = serializeSettings(settings);
+  settingsCache.set(tenantId, { at: Date.now(), value: serialized });
+  return serialized;
 }
 
 export async function updateSettings(tenantId: string, input: z.infer<typeof settingsSchema>) {
   await getSettings(tenantId);
+  settingsCache.delete(tenantId);
   const settings = await prisma.$transaction(async (tx) => {
     const updated = await tx.businessSettings.update({
       where: { tenantId },
@@ -83,7 +98,9 @@ export async function updateSettings(tenantId: string, input: z.infer<typeof set
     );
     return updated;
   });
-  return serializeSettings(settings);
+  const serialized = serializeSettings(settings);
+  settingsCache.set(tenantId, { at: Date.now(), value: serialized });
+  return serialized;
 }
 
 export async function exportTenantData(tenantId: string) {

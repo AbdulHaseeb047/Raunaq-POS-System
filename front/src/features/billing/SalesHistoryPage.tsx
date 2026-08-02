@@ -150,6 +150,9 @@ export function SalesHistoryPage() {
       closeInvoice();
       setVoidReasonPicker(emptyReasonPicker());
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['ledger'] });
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports', 'aging'] });
     },
   });
 

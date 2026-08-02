@@ -31,8 +31,17 @@ let compactColumnsAvailable: boolean | null = null;
 
 /** Strip whitespace for space-insensitive matching ("abc sd" ≡ "abcsd"). */
 export function compactText(value: string): string {
-  // Align with Postgres [[:space:]] for common cases (incl. NBSP).
   return value.replace(/[\s\u00a0\u2000-\u200b\u202f\u205f\u3000]+/g, '').toLowerCase();
+}
+
+/** Whitespace-separated search tokens (empty if nothing usable). */
+export function searchTokens(search: string): string[] {
+  return search
+    .trim()
+    .toLowerCase()
+    .split(/[\s\u00a0\u2000-\u200b\u202f\u205f\u3000]+/)
+    .map((t) => t.replace(/[%_]/g, ''))
+    .filter(Boolean);
 }
 
 function likeContainsPattern(compactTerm: string): string {
@@ -40,7 +49,35 @@ function likeContainsPattern(compactTerm: string): string {
   return `%${safe}%`;
 }
 
-/** Expression that works without generated columns. */
+/** True if every search token appears in the haystack (compact, word prefix, or in-word subsequence). */
+export function matchesSearchTokens(haystack: string, query: string): boolean {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) return true;
+  const compactHay = compactText(haystack);
+  const fullCompact = compactText(query);
+  if (fullCompact && compactHay.includes(fullCompact)) return true;
+
+  const words = haystack
+    .toLowerCase()
+    .split(/[\s\u00a0\u2000-\u200b\u202f\u205f\u3000]+/)
+    .filter(Boolean);
+
+  return tokens.every((t) => tokenMatchesAnyWord(t, words) || compactHay.includes(t));
+}
+
+function tokenMatchesAnyWord(token: string, words: string[]): boolean {
+  for (const word of words) {
+    const w = compactText(word);
+    if (w.includes(token) || w.startsWith(token)) return true;
+    let i = 0;
+    for (const ch of w) {
+      if (ch === token[i]) i++;
+      if (i >= token.length) return true;
+    }
+  }
+  return false;
+}
+
 function slowCompactExpr(column: 'name' | CompactExtraColumn): Prisma.Sql {
   if (column === 'name') {
     return Prisma.sql`regexp_replace(lower(name), '[[:space:]]+', '', 'g')`;
@@ -53,10 +90,6 @@ function matchExpr(column: 'name' | CompactExtraColumn, fast: boolean): Prisma.S
   return fast ? FAST_COMPACT_COLUMN[column] : slowCompactExpr(column);
 }
 
-/**
- * Prefer indexed `*_compact` columns when the migration has been applied;
- * otherwise fall back to regexp_replace so search never hard-fails.
- */
 export async function hasCompactSearchColumns(): Promise<boolean> {
   if (compactColumnsAvailable != null) return compactColumnsAvailable;
   try {
@@ -76,14 +109,16 @@ export async function hasCompactSearchColumns(): Promise<boolean> {
   return compactColumnsAvailable;
 }
 
-/** Test helper — reset cached capability flag. */
 export function resetCompactSearchCache(): void {
   compactColumnsAvailable = null;
 }
 
 /**
- * Returns matching row ids for a space-insensitive contains search, or null when
+ * Returns matching row ids for space-insensitive / multi-token search, or null when
  * there is no search term (caller should skip id filtering).
+ *
+ * Broad SQL candidate fetch (any token hits), then JS AND+subsequence filter so
+ * "mil fay" matches "million faayaz supreme".
  */
 export async function findIdsByCompactSearch(
   table: NamedEntityTable,
@@ -95,27 +130,46 @@ export async function findIdsByCompactSearch(
   const term = search.trim();
   if (!term) return null;
 
-  const pattern = likeContainsPattern(compactText(term));
-  if (pattern === '%%') return [];
+  const tokens = searchTokens(term);
+  const fullCompact = compactText(term);
+  if (tokens.length === 0 && !fullCompact) return [];
 
+  const effectiveTokens = tokens.length > 0 ? tokens : [fullCompact];
   const fast = await hasCompactSearchColumns();
-  const extras = extraColumns.map((col) => Prisma.sql`OR ${matchExpr(col, fast)} LIKE ${pattern}`);
-  const limitClause = limit != null && limit > 0 ? Prisma.sql`LIMIT ${limit}` : Prisma.empty;
+  const nameExpr = matchExpr('name', fast);
+
+  // Broad OR: any token in name/extras (candidates), then precise filter in JS.
+  const looseParts: Prisma.Sql[] = [];
+  for (const t of effectiveTokens) {
+    const pat = likeContainsPattern(t);
+    looseParts.push(Prisma.sql`${nameExpr} LIKE ${pat}`);
+    looseParts.push(Prisma.sql`lower(name) LIKE ${pat}`);
+    for (const col of extraColumns) {
+      looseParts.push(Prisma.sql`${matchExpr(col, fast)} LIKE ${pat}`);
+    }
+  }
+  if (fullCompact) {
+    looseParts.push(Prisma.sql`${nameExpr} LIKE ${likeContainsPattern(fullCompact)}`);
+  }
+
+  const candidateLimit = Math.max(limit ?? DEFAULT_SEARCH_ID_LIMIT, 200);
+  const predicate =
+    looseParts.length === 1 ? looseParts[0]! : Prisma.sql`(${Prisma.join(looseParts, ' OR ')})`;
 
   try {
-    const rows = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM ${TABLE_SQL[table]}
+    const rows = await prisma.$queryRaw<{ id: string; name: string }[]>`
+      SELECT id, name FROM ${TABLE_SQL[table]}
       WHERE tenant_id = ${tenantId}::uuid
         AND deleted_at IS NULL
-        AND (
-          ${matchExpr('name', fast)} LIKE ${pattern}
-          ${extras.length > 0 ? Prisma.join(extras, ' ') : Prisma.empty}
-        )
-      ${limitClause}
+        AND ${predicate}
+      LIMIT ${candidateLimit}
     `;
-    return rows.map((r) => r.id);
+
+    const matched = rows.filter((r) => matchesSearchTokens(r.name, term));
+    const ids = matched.map((r) => r.id);
+    if (limit != null && limit > 0) return ids.slice(0, limit);
+    return ids;
   } catch (err) {
-    // Migration may have been rolled back mid-flight — retry once with slow path.
     if (fast) {
       compactColumnsAvailable = false;
       return findIdsByCompactSearch(table, tenantId, search, extraColumns, limit);
@@ -124,7 +178,6 @@ export async function findIdsByCompactSearch(
   }
 }
 
-/** Block create/update when another active row has the same name ignoring spaces/case. */
 export async function assertUniqueCompactName(
   table: NamedEntityTable,
   tenantId: string,

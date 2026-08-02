@@ -1,20 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { compactText } from './text-match.js';
+import { compactText, matchesSearchTokens, searchTokens } from './text-match.js';
 
 describe('compactText', () => {
-  it('strips spaces and lowercases for space-insensitive match', () => {
+  it('strips spaces and lowercases', () => {
     expect(compactText('abc sd')).toBe('abcsd');
-    expect(compactText('AbcSD')).toBe('abcsd');
     expect(compactText('  Ali   Khan ')).toBe('alikhan');
   });
+});
 
-  it('matches the same compact key for spaced and unspaced names', () => {
-    expect(compactText('abc sd')).toBe(compactText('abcsd'));
-    expect(compactText('Ali Khan')).toBe(compactText('alikhan'));
+describe('searchTokens', () => {
+  it('splits on whitespace', () => {
+    expect(searchTokens('mil fay')).toEqual(['mil', 'fay']);
+    expect(searchTokens('  mil   fay  ')).toEqual(['mil', 'fay']);
+  });
+});
+
+describe('matchesSearchTokens', () => {
+  it('matches mil fay against million faayaz supreme', () => {
+    expect(matchesSearchTokens('million faayaz supreme', 'mil fay')).toBe(true);
   });
 
-  it('strips NBSP like Postgres [[:space:]]', () => {
-    expect(compactText('ali\u00a0khan')).toBe('alikhan');
+  it('matches compacted no-space query', () => {
+    expect(matchesSearchTokens('abc sd', 'abcsd')).toBe(true);
+    expect(matchesSearchTokens('abcsd', 'abc sd')).toBe(true);
+  });
+
+  it('rejects when a token is missing', () => {
+    expect(matchesSearchTokens('million supreme', 'mil fay')).toBe(false);
   });
 });

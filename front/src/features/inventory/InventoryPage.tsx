@@ -34,6 +34,7 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney, todayIso } from '@/lib/format';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { productMatchesSearch } from '@/lib/search-match';
 import type { Product } from '@/types/api';
 
 const PAGE_SIZE = 20;
@@ -92,7 +93,7 @@ export function InventoryPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const debouncedSearch = useDebouncedValue(search, 150);
   const [stockStatus, setStockStatus] = useState(() => parseStockParam(searchParams.get('stock')));
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -242,7 +243,12 @@ export function InventoryPage() {
     };
   }, [movementChart]);
 
-  const displayedProducts = data?.data ?? [];
+  const displayedProducts = useMemo(() => {
+    const rows = data?.data ?? [];
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((p) => productMatchesSearch(p, q));
+  }, [data?.data, search]);
   const meta = data?.meta;
   const listLoading = isLoading || (isFetching && !data);
 

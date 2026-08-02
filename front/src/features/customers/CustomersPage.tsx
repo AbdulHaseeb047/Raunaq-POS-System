@@ -132,7 +132,7 @@ export function CustomersPage() {
     if (!ledger?.length) return [];
     const byDay = new Map<string, { out: number; inn: number }>();
     const sorted = [...ledger]
-      .filter((e) => !e.voidedAt)
+      .filter((e) => !e.voidedAt && e.entryType !== 'VOID_REVERSAL')
       .filter((e) => isTimestampInLocalDateRange(e.createdAt, dates.from, dates.to))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const e of sorted) {
@@ -162,7 +162,12 @@ export function CustomersPage() {
 
   const filteredLedger = useMemo(() => {
     if (!ledger?.length) return [];
-    return ledger.filter((e) => isTimestampInLocalDateRange(e.createdAt, dates.from, dates.to));
+    return ledger.filter(
+      (e) =>
+        !e.voidedAt &&
+        e.entryType !== 'VOID_REVERSAL' &&
+        isTimestampInLocalDateRange(e.createdAt, dates.from, dates.to),
+    );
   }, [ledger, dates.from, dates.to]);
 
   const saveCustomer = useMutation({

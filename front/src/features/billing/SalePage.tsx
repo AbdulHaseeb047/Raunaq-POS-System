@@ -24,6 +24,7 @@ import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
 import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { productMatchesSearch } from '@/lib/search-match';
 import type { Customer, HeldCart, Product, SaleDetail } from '@/types/api';
 
 const SALE_SEARCH_LIMIT = 40;
@@ -126,7 +127,7 @@ export function SalePage() {
     enabled: canDiscount,
   });
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 300);
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const debouncedSearch = useDebouncedValue(search, 150);
 
   const {
     data: searchPage,
@@ -541,6 +542,26 @@ export function SalePage() {
       const detail = result.detail;
       const creditWarn = result.creditLimitWarning;
 
+      // Optimistically reduce stock in cached product lists from this cart.
+      queryClient.setQueriesData<{ data?: Product[] }>({ queryKey: ['products'] }, (prev) => {
+        if (!prev?.data) return prev;
+        const qtyById = new Map<string, number>();
+        for (const line of cart) {
+          if (!line.product.trackStock) continue;
+          qtyById.set(line.product.id, (qtyById.get(line.product.id) ?? 0) + line.quantity);
+        }
+        if (qtyById.size === 0) return prev;
+        return {
+          ...prev,
+          data: prev.data.map((p) => {
+            const sold = qtyById.get(p.id);
+            if (sold == null) return p;
+            const next = Math.max(0, parseFloat(p.stockQuantity) - sold);
+            return { ...p, stockQuantity: String(next) };
+          }),
+        };
+      });
+
       window.setTimeout(() => {
         setSaleSuccessFlash(false);
         setShowCheckout(false);
@@ -570,12 +591,15 @@ export function SalePage() {
             });
         }
 
-        void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        void queryClient.invalidateQueries({ queryKey: ['sales'] });
-        void queryClient.invalidateQueries({ queryKey: ['customers'] });
-        void queryClient.invalidateQueries({ queryKey: ['products'] });
-        void queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
-      }, 1000);
+        // Defer heavy refreshes so closing checkout feels instant.
+        window.setTimeout(() => {
+          void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+          void queryClient.invalidateQueries({ queryKey: ['sales'] });
+          void queryClient.invalidateQueries({ queryKey: ['customers'] });
+          void queryClient.invalidateQueries({ queryKey: ['products'] });
+          void queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+        }, 0);
+      }, 350);
     },
     onError: (err) => {
       const message =
@@ -684,9 +708,11 @@ export function SalePage() {
 
   const searchResults = useMemo(() => {
     const rows = searchPage?.data ?? [];
-    // On All / browse: sellable items first (in stock or untracked), then the rest.
-    if (debouncedSearch.trim() || categoryId) return rows;
-    return [...rows].sort((a, b) => {
+    const q = search.trim();
+    // Instant local filter while debounce/API catch up.
+    const filtered = q ? rows.filter((p) => productMatchesSearch(p, q)) : rows;
+    if (q || categoryId) return filtered;
+    return [...filtered].sort((a, b) => {
       const score = (p: Product) => {
         if (!p.trackStock) return 0;
         const qty = parseFloat(p.stockQuantity);
@@ -697,7 +723,7 @@ export function SalePage() {
       if (d !== 0) return d;
       return a.name.localeCompare(b.name);
     });
-  }, [searchPage?.data, debouncedSearch, categoryId]);
+  }, [searchPage?.data, search, categoryId]);
   const productsFetching = searchLoading || (searchFetching && searchResults.length === 0);
   const cashDue = useMemo(() => {
     if (paymentMode === 'CASH') {
