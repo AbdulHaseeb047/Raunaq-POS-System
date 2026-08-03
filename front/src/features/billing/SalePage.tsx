@@ -22,6 +22,7 @@ import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { printSaleReceipt } from '@/lib/print-receipt';
+import { resolveReceiptAfterSale } from '@/lib/receipt-prefs';
 import { calcSaleTotals, canAddToCart, getStockStatus } from '@/lib/sale-utils';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { productMatchesSearch, customerMatchesSearch } from '@/lib/search-match';
@@ -115,6 +116,7 @@ export function SalePage() {
   const canDiscountUnlimited = hasFeature(user, FEATURES.BILLING_DISCOUNT_UNLIMITED);
   const canPrint = hasFeature(user, FEATURES.BILLING_PRINT_RECEIPT);
   const canCustomize = hasFeature(user, FEATURES.UI_CUSTOMIZE);
+  const canUseProductImages = hasFeature(user, FEATURES.INVENTORY_PRODUCT_IMAGES);
   const [showQuickPickCustomize, setShowQuickPickCustomize] = useState(false);
 
   const { data: settings } = useQuery({
@@ -510,7 +512,12 @@ export function SalePage() {
       billDiscountAmount: billDiscount,
       appliedDiscounts: appliedDiscounts.length > 0 ? appliedDiscounts : undefined,
       notes: notes || undefined,
-      printReceipt: settings?.printReceiptsDefault ?? false,
+      printReceipt: resolveReceiptAfterSale({
+        userId: user?.id,
+        shopShow: settings?.showReceiptAfterSale,
+        shopPrint: settings?.printReceiptsDefault,
+        canPrint,
+      }).autoPrint,
     };
     if (paymentMode === 'SPLIT') {
       const cash = parseFloat(cashAmount) || 0;
@@ -598,9 +605,17 @@ export function SalePage() {
         }
 
         if (detail) {
-          setReceiptSale(detail);
-          if (canPrint && settings?.printReceiptsDefault) {
-            void printSaleReceipt(detail, settings, currency).catch((err) => {
+          const { showReceipt, autoPrint } = resolveReceiptAfterSale({
+            userId: user?.id,
+            shopShow: settings?.showReceiptAfterSale,
+            shopPrint: settings?.printReceiptsDefault,
+            canPrint,
+          });
+          if (showReceipt) {
+            setReceiptSale(detail);
+          }
+          if (autoPrint) {
+            void printSaleReceipt(detail, settings!, currency).catch((err) => {
               const msg = err instanceof Error ? err.message : 'Receipt print failed';
               setWarning(msg);
               toast.error(msg);
@@ -609,7 +624,22 @@ export function SalePage() {
         } else {
           void api.sales
             .get(result.sale.id)
-            .then(setReceiptSale)
+            .then((sale) => {
+              const { showReceipt, autoPrint } = resolveReceiptAfterSale({
+                userId: user?.id,
+                shopShow: settings?.showReceiptAfterSale,
+                shopPrint: settings?.printReceiptsDefault,
+                canPrint,
+              });
+              if (showReceipt) setReceiptSale(sale);
+              if (autoPrint && settings) {
+                void printSaleReceipt(sale, settings, currency).catch((err) => {
+                  const msg = err instanceof Error ? err.message : 'Receipt print failed';
+                  setWarning(msg);
+                  toast.error(msg);
+                });
+              }
+            })
             .catch(() => {
               setError('Sale saved, but receipt failed to load');
               toast.error('Sale saved, but receipt failed to load');
@@ -817,6 +847,51 @@ export function SalePage() {
     setMobileCartOpen(false);
     setShowCheckout(true);
   };
+
+  const authorizeCheckout = () => {
+    if (completeSale.isPending || saleSuccessFlash) return;
+    setError('');
+    if (!cashTenderOk) {
+      const msg =
+        exchangeCredit > 0
+          ? 'Enter the extra cash collected from the customer.'
+          : 'Enter the amount received from the customer.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!canAuthorize) return;
+    completeSale.mutate(buildSalePayload());
+  };
+
+  // Enter → Proceed to Payment (when not typing in product search).
+  useEffect(() => {
+    if (showCheckout || cart.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      const target = e.target;
+      if (target instanceof HTMLTextAreaElement) return;
+      if (target instanceof HTMLInputElement && target === searchRef.current) return;
+      if (target instanceof HTMLElement && target.isContentEditable) return;
+      e.preventDefault();
+      openCheckout();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showCheckout, cart.length, canOpenCheckout, paymentMode, customer]);
+
+  // Enter → Authorize Checkout while payment modal is open.
+  useEffect(() => {
+    if (!showCheckout || saleSuccessFlash) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      if (e.target instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      authorizeCheckout();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showCheckout, saleSuccessFlash, canAuthorize, cashTenderOk, completeSale.isPending]);
 
   const openHoldModal = () => {
     if (cart.length === 0) return;
@@ -1147,11 +1222,20 @@ export function SalePage() {
                         onClick={() => addToCart(p)}
                         className="flex w-full items-center justify-between border-b border-border/50 px-3 py-2 text-left hover:bg-brand-50 disabled:opacity-50"
                       >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{p.name}</p>
-                          <p className="text-[11px] text-text-muted">
-                            {p.sku ?? '—'} {p.barcode && `· ${p.barcode}`}
-                          </p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {canUseProductImages && p.imageUrl && (
+                            <img
+                              src={p.imageUrl}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded-lg border border-border bg-white object-cover"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{p.name}</p>
+                            <p className="text-[11px] text-text-muted">
+                              {p.sku ?? '—'} {p.barcode && `· ${p.barcode}`}
+                            </p>
+                          </div>
                         </div>
                         <div className="ml-3 text-right">
                           <p className="text-sm font-semibold text-brand-700">
@@ -1167,7 +1251,7 @@ export function SalePage() {
                                     : 'default'
                               }
                             >
-                              {p.stockQuantity}
+                              Qty {p.stockQuantity}
                             </Badge>
                           )}
                         </div>
@@ -1245,7 +1329,7 @@ export function SalePage() {
               </p>
             ) : (
               <div
-                className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${productsFetching ? 'opacity-70' : ''}`}
+                className={`grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-4 ${productsFetching ? 'opacity-70' : ''}`}
               >
                 {browseProducts.map((p) => {
                   const status = getStockStatus(p);
@@ -1255,24 +1339,59 @@ export function SalePage() {
                       type="button"
                       disabled={status === 'out'}
                       onClick={() => addToCart(p)}
-                      className="flex min-h-[116px] flex-col rounded-2xl border border-border bg-surface p-3 text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50"
+                      className={`flex flex-col overflow-hidden rounded-2xl border border-border bg-surface text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50 ${
+                        canUseProductImages && p.imageUrl ? 'min-h-[174px]' : 'min-h-[108px] p-2.5'
+                      }`}
                     >
-                      <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                        {p.category?.name ?? 'General'}
-                      </span>
-                      <span className="mt-2 line-clamp-2 text-sm font-semibold">{p.name}</span>
-                      <div className="mt-auto flex items-end justify-between gap-2 pt-3 text-xs">
-                        <div>
-                          <span className="block font-semibold text-brand-700">
-                            {formatMoney(p.sellPrice, currency)}
-                          </span>
-                          <span className="text-[11px] text-text-muted">/ {p.unit}</span>
+                      {canUseProductImages && p.imageUrl && (
+                        <div className="relative h-24 w-full overflow-hidden bg-surface-muted">
+                          <img
+                            src={p.imageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl saturate-150"
+                          />
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            style={{
+                              WebkitMaskImage:
+                                'radial-gradient(ellipse 68% 72% at center, black 48%, transparent 100%)',
+                              maskImage:
+                                'radial-gradient(ellipse 68% 72% at center, black 48%, transparent 100%)',
+                            }}
+                          />
                         </div>
-                        {p.trackStock && (
-                          <Badge variant={status === 'low' ? 'warning' : 'default'}>
-                            {p.stockQuantity}
-                          </Badge>
-                        )}
+                      )}
+                      <div
+                        className={
+                          canUseProductImages && p.imageUrl
+                            ? 'flex min-h-0 flex-1 flex-col px-2.5 py-2'
+                            : 'flex min-h-0 flex-1 flex-col'
+                        }
+                      >
+                        <div className="min-w-0">
+                          <span className="block text-[9px] uppercase tracking-[0.14em] text-text-muted">
+                            {p.category?.name ?? 'General'}
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 text-xs font-semibold leading-snug">
+                            {p.name}
+                          </span>
+                        </div>
+                        <div className="mt-auto flex items-end justify-between gap-1.5 pt-2 text-[11px]">
+                          <div>
+                            <span className="block font-semibold text-brand-700">
+                              {formatMoney(p.sellPrice, currency)}
+                            </span>
+                            <span className="text-[10px] text-text-muted">/ {p.unit}</span>
+                          </div>
+                          {p.trackStock && (
+                            <Badge variant={status === 'low' ? 'warning' : 'default'}>
+                              Qty {p.stockQuantity}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </button>
                   );
@@ -1507,19 +1626,7 @@ export function SalePage() {
                 variant="primary"
                 loading={completeSale.isPending}
                 disabled={!canAuthorize || completeSale.isPending}
-                onClick={() => {
-                  setError('');
-                  if (!cashTenderOk) {
-                    const msg =
-                      exchangeCredit > 0
-                        ? 'Enter the extra cash collected from the customer.'
-                        : 'Enter the amount received from the customer.';
-                    setError(msg);
-                    toast.error(msg);
-                    return;
-                  }
-                  completeSale.mutate(buildSalePayload());
-                }}
+                onClick={authorizeCheckout}
               >
                 {exchangeCredit > 0 && cashDue === 0
                   ? exchangeRemaining > 0

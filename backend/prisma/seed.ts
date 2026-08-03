@@ -25,7 +25,7 @@ async function refreshDemoSubscription(tenantId: string): Promise<void> {
     where: { id: tenantId },
     data: {
       tier: TenantTier.STANDARD,
-      trialPlanTier: TenantTier.STANDARD,
+      trialPlanTier: null,
       feeStatus: 'ACTIVE',
       isActive: true,
       accessRevokedAt: null,
@@ -146,7 +146,7 @@ async function main() {
           name: 'Demo Shop',
           slug: demoSlug,
           tier: TenantTier.STANDARD,
-          trialPlanTier: TenantTier.STANDARD,
+          trialPlanTier: null,
           feeStatus: 'ACTIVE',
           monthlyFee: 5000,
           subscriptionDays,

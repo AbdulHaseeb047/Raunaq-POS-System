@@ -32,6 +32,11 @@ export const setStaffFeaturesSchema = z.object({
   featureKeys: z.array(z.string()),
 });
 
+export const setTenantUserPasswordSchema = z.object({
+  password: z.string().min(8),
+  mustChangePassword: z.boolean().optional().default(true),
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 async function assertTenantBranch(tenantId: string, branchId: string): Promise<void> {
@@ -175,6 +180,49 @@ export async function updateTenantUser(
     branchId: updated.branchId,
     createdAt: updated.createdAt.toISOString(),
   };
+}
+
+export async function setTenantUserPassword(
+  tenantId: string,
+  userId: string,
+  input: z.infer<typeof setTenantUserPasswordSchema>,
+  changedById: string,
+  ipAddress?: string,
+) {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, tenantId, deletedAt: null },
+    select: { id: true, email: true },
+  });
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const passwordHash = await hashPassword(input.password);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: input.mustChangePassword,
+      },
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+
+  await writeAuditLog({
+    tenantId,
+    userId: changedById,
+    action: 'user.password_reset',
+    entityType: 'user',
+    entityId: userId,
+    metadata: { email: user.email, mustChangePassword: input.mustChangePassword },
+    ipAddress,
+  });
+
+  return { success: true, mustChangePassword: input.mustChangePassword };
 }
 
 export async function updateUserFeatures(

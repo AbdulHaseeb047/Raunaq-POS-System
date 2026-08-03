@@ -228,11 +228,11 @@ Feature keys live in `shared/src/features.ts` — **only implemented features** 
 
 ### Plans / entitlements
 
-| Tier                                  | Keys                                 |
-| ------------------------------------- | ------------------------------------ |
-| STARTER / STANDARD / PRO / ENTERPRISE | `shared` + `subscription.service.ts` |
+| Tier                     | Keys                                 |
+| ------------------------ | ------------------------------------ |
+| STARTER / STANDARD / PRO | `shared` + `subscription.service.ts` |
 
-- Trial / paid windows, soft-lock to Starter, hard revoke
+- Trial / paid windows; ended period hard-blocks login (pay / convert); manual revoke
 - Upgrade CTA often WhatsApp (`UPGRADE_WHATSAPP_URL`)
 - Front gates routes/UI with feature helpers + `FeatureGate`
 
@@ -273,7 +273,7 @@ Path: `backend/src/modules/`
 | `reports`     | Aggregations / summaries                         |
 | `settings`    | Business settings                                |
 | `branches`    | Multi-branch                                     |
-| `permissions` | Feature middleware / soft-lock                   |
+| `permissions` | Feature middleware / hard-expiry block           |
 | `support`     | Support queries + mail                           |
 | `sync`        | Outbox, push/pull, ingest, devices, conflicts    |
 | `printer`     | Receipt / ESC-POS helpers                        |

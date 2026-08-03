@@ -11,6 +11,7 @@ export const DASHBOARD_WIDGET_IDS = [
   'trend',
   'payments',
   'topProducts',
+  'topCategories',
   'returns',
   'lowStock',
 ] as const;
@@ -40,6 +41,7 @@ export const settingsSchema = z.object({
   taxLabel: z.string().max(50).optional(),
   defaultTaxRate: z.number().nonnegative().optional(),
   printReceiptsDefault: z.boolean().optional(),
+  showReceiptAfterSale: z.boolean().optional(),
   receiptFooter: z.string().optional().nullable(),
   receiptHeaderMode: z.enum(['NAME', 'LOGO', 'BOTH']).optional(),
   maxDiscountPercentStaff: z.number().nonnegative().optional().nullable(),
@@ -70,6 +72,7 @@ const CORE_SETTINGS_SELECT = {
   taxLabel: true,
   defaultTaxRate: true,
   printReceiptsDefault: true,
+  showReceiptAfterSale: true,
   receiptFooter: true,
   receiptHeaderMode: true,
   maxDiscountPercentStaff: true,
@@ -269,6 +272,7 @@ export async function updateSettings(
     taxLabel: input.taxLabel,
     defaultTaxRate: input.defaultTaxRate != null ? toDecimal(input.defaultTaxRate) : undefined,
     printReceiptsDefault: input.printReceiptsDefault,
+    showReceiptAfterSale: input.showReceiptAfterSale,
     receiptFooter: input.receiptFooter,
     ...(input.receiptHeaderMode ? { receiptHeaderMode: input.receiptHeaderMode } : {}),
     maxDiscountPercentStaff:
@@ -406,6 +410,7 @@ function serializeSettings(s: {
   taxLabel: string;
   defaultTaxRate: { toFixed: (n: number) => string };
   printReceiptsDefault: boolean;
+  showReceiptAfterSale?: boolean;
   receiptFooter: string | null;
   receiptHeaderMode?: string;
   maxDiscountPercentStaff: { toFixed: (n: number) => string } | null;
@@ -430,6 +435,7 @@ function serializeSettings(s: {
     taxLabel: s.taxLabel,
     defaultTaxRate: s.defaultTaxRate.toFixed(2),
     printReceiptsDefault: s.printReceiptsDefault,
+    showReceiptAfterSale: s.showReceiptAfterSale ?? true,
     receiptFooter: s.receiptFooter,
     receiptHeaderMode: (s.receiptHeaderMode === 'LOGO' || s.receiptHeaderMode === 'BOTH'
       ? s.receiptHeaderMode

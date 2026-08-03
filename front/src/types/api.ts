@@ -99,6 +99,13 @@ export interface DashboardSummary {
   topProducts?: Array<{
     name: string;
     revenue: number;
+    quantitySold: number;
+  }>;
+  topCategories?: Array<{
+    id: string;
+    name: string;
+    revenue: number;
+    quantitySold: number;
   }>;
 }
 
@@ -129,6 +136,7 @@ export interface Product {
   name: string;
   sku: string | null;
   barcode: string | null;
+  imageUrl: string | null;
   unit: string;
   costPrice: string | null;
   sellPrice: string;
@@ -419,6 +427,8 @@ export interface BusinessSettings {
   taxLabel: string;
   defaultTaxRate: string;
   printReceiptsDefault: boolean;
+  /** Open on-screen receipt after a completed sale (shop default). */
+  showReceiptAfterSale: boolean;
   receiptFooter: string | null;
   receiptHeaderMode: 'NAME' | 'LOGO' | 'BOTH';
   maxDiscountPercentStaff: string | null;
@@ -435,7 +445,7 @@ export interface BusinessSettings {
 }
 
 export type DashboardWidgetId =
-  'kpis' | 'trend' | 'payments' | 'topProducts' | 'returns' | 'lowStock';
+  'kpis' | 'trend' | 'payments' | 'topProducts' | 'topCategories' | 'returns' | 'lowStock';
 
 export interface DashboardLayoutWidget {
   id: DashboardWidgetId;
@@ -571,6 +581,8 @@ export interface TenantRow {
   daysRemaining: number | null;
   subscriptionExpired: boolean;
   accessStatus: string;
+  isTrial?: boolean;
+  billingCycle?: 'monthly' | 'yearly';
 }
 
 export interface TenantDetail {
@@ -579,6 +591,8 @@ export interface TenantDetail {
   slug: string;
   tier: string;
   trialPlanTier?: string | null;
+  isTrial?: boolean;
+  billingCycle?: 'monthly' | 'yearly';
   isActive: boolean;
   feeStatus: string;
   monthlyFee: string | null;
@@ -587,6 +601,8 @@ export interface TenantDetail {
   createdAt: string;
   updatedAt?: string;
   features: string[];
+  planFeatureKeys?: string[];
+  featureOverrides?: string[];
   subscriptionStartAt: string | null;
   subscriptionEndsAt: string | null;
   subscriptionDays: number;

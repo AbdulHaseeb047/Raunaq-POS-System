@@ -5,6 +5,7 @@ export const DASHBOARD_WIDGET_META: Array<{ id: DashboardWidgetId; label: string
   { id: 'trend', label: 'Sales trend' },
   { id: 'payments', label: 'Payment methods' },
   { id: 'topProducts', label: 'Top products' },
+  { id: 'topCategories', label: 'Top categories' },
   { id: 'returns', label: 'Returns' },
   { id: 'lowStock', label: 'Low stock alerts' },
 ];

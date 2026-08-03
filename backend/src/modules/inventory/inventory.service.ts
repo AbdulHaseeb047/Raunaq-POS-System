@@ -25,6 +25,7 @@ export const productSchema = z.object({
   supplierId: z.string().uuid().optional().nullable(),
   sku: z.string().max(100).optional().nullable(),
   barcode: z.string().max(100).optional().nullable(),
+  imageUrl: z.string().max(700_000).optional().nullable(),
   unit: z.string().max(50).optional(),
   costPrice: z.number().nonnegative().optional().nullable(),
   sellPrice: z.number().nonnegative(),
@@ -319,6 +320,7 @@ export async function createProduct(tenantId: string, input: z.infer<typeof prod
         supplierId: input.supplierId ?? null,
         sku: input.sku ?? null,
         barcode: input.barcode ?? null,
+        imageUrl: input.imageUrl ?? null,
         unit: input.unit ?? 'piece',
         costPrice: input.costPrice != null ? toDecimal(input.costPrice) : null,
         sellPrice: toDecimal(input.sellPrice),
@@ -364,6 +366,7 @@ export async function updateProduct(
         supplierId: input.supplierId,
         sku: input.sku,
         barcode: input.barcode,
+        imageUrl: input.imageUrl,
         unit: input.unit,
         costPrice: input.costPrice != null ? toDecimal(input.costPrice) : undefined,
         sellPrice: input.sellPrice != null ? toDecimal(input.sellPrice) : undefined,
@@ -455,6 +458,7 @@ function serializeProduct(p: {
   name: string;
   sku: string | null;
   barcode: string | null;
+  imageUrl: string | null;
   unit: string;
   costPrice?: { toFixed: (n: number) => string } | null;
   sellPrice: { toFixed: (n: number) => string };
@@ -473,6 +477,7 @@ function serializeProduct(p: {
     name: p.name,
     sku: p.sku,
     barcode: p.barcode,
+    imageUrl: p.imageUrl,
     unit: p.unit,
     costPrice: p.costPrice?.toFixed(2) ?? null,
     sellPrice: p.sellPrice.toFixed(2),

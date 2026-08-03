@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import type { DashboardSummary, DashboardWidgetId } from '@/types/api';
 
@@ -24,11 +24,19 @@ type KpiMetric = {
   format: 'currency' | 'number';
 };
 
+const CATEGORY_PAGE_SIZE = 5;
+
 function formatMoney(value: number, currency: string) {
   return `${currency} ${value.toLocaleString('en-PK', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })}`;
+}
+
+function formatUnits(value: number) {
+  return value.toLocaleString('en-PK', {
+    maximumFractionDigits: value % 1 === 0 ? 0 : 3,
+  });
 }
 
 function KpiCard({
@@ -106,7 +114,35 @@ function MoneyTooltip({
   );
 }
 
-const DEFAULT_CHART_ORDER: DashboardWidgetId[] = ['kpis', 'trend', 'payments', 'topProducts'];
+function UnitsTooltip({
+  active,
+  payload,
+  currency,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number; name?: string; payload?: { revenue?: number } }>;
+  currency: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0];
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="font-semibold text-slate-800">{row.name}</p>
+      <p className="mt-1 text-emerald-700">Units sold: {formatUnits(Number(row.value ?? 0))}</p>
+      {row.payload?.revenue != null && (
+        <p className="text-slate-600">Revenue: {formatMoney(row.payload.revenue, currency)}</p>
+      )}
+    </div>
+  );
+}
+
+const DEFAULT_CHART_ORDER: DashboardWidgetId[] = [
+  'kpis',
+  'trend',
+  'payments',
+  'topProducts',
+  'topCategories',
+];
 
 export function SalesDashboard({
   data,
@@ -118,6 +154,8 @@ export function SalesDashboard({
   /** When set, only render these chart widgets (order preserved). */
   visibleIds?: DashboardWidgetId[];
 }) {
+  const [categoryPage, setCategoryPage] = useState(0);
+
   const order = (visibleIds ?? DEFAULT_CHART_ORDER).filter((id) =>
     DEFAULT_CHART_ORDER.includes(id),
   );
@@ -149,10 +187,18 @@ export function SalesDashboard({
   const hourlySales = data.hourlySales ?? [];
   const paymentMethods = data.paymentMethods ?? [];
   const topProducts = data.topProducts ?? [];
+  const topCategories = data.topCategories ?? [];
   const paymentTotal = paymentMethods.reduce((s, p) => s + p.value, 0);
   const hasHourly = hourlySales.some((h) => h.revenue > 0 || h.transactions > 0);
   const compareLabel = data.compareLabel ?? 'vs prior period';
   const isHourly = (data.chartMode ?? 'hourly') === 'hourly';
+
+  const categoryPageCount = Math.max(1, Math.ceil(topCategories.length / CATEGORY_PAGE_SIZE));
+  const safeCategoryPage = Math.min(categoryPage, categoryPageCount - 1);
+  const pagedCategories = useMemo(() => {
+    const start = safeCategoryPage * CATEGORY_PAGE_SIZE;
+    return topCategories.slice(start, start + CATEGORY_PAGE_SIZE);
+  }, [safeCategoryPage, topCategories]);
 
   const kpisNode = (
     <div key="kpis" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -200,17 +246,20 @@ export function SalesDashboard({
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
+                width={48}
                 tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                width={40}
               />
-              <Tooltip content={<HourlyTooltip currency={currency} />} />
+              <Tooltip
+                content={<HourlyTooltip currency={currency} />}
+                cursor={{ stroke: '#94a3b8', strokeDasharray: '4 4' }}
+              />
               <Area
                 type="monotone"
                 dataKey="revenue"
+                name="Revenue"
                 stroke="#059669"
-                strokeWidth={2.5}
+                strokeWidth={2}
                 fill="url(#hourlyRevenueFill)"
-                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -226,57 +275,52 @@ export function SalesDashboard({
     >
       <div className="mb-4">
         <h3 className="text-base font-semibold text-slate-900">Payment methods</h3>
-        <p className="text-sm text-slate-500">Share of sales by tender type in this period</p>
+        <p className="text-sm text-slate-500">Share of collected payments in this period</p>
       </div>
-      {paymentMethods.length === 0 ? (
-        <div className="flex h-52 items-center justify-center text-sm text-slate-500">
-          No payments recorded in this period
+      {paymentTotal <= 0 ? (
+        <div className="flex h-64 items-center justify-center text-sm text-slate-500 sm:h-72">
+          No payments in this period
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
-          <div className="h-52 w-full max-w-[220px] shrink-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="mx-auto h-52 w-full max-w-[220px] sm:mx-0 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={paymentMethods}
                   dataKey="value"
                   nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="58%"
-                  outerRadius="82%"
-                  paddingAngle={3}
-                  stroke="none"
+                  innerRadius="55%"
+                  outerRadius="80%"
+                  paddingAngle={2}
                 >
-                  {paymentMethods.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
+                  {paymentMethods.map((item) => (
+                    <Cell key={item.name} fill={item.color} />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(value) => [`${Number(value)}%`, 'Share']}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: '1px solid #e2e8f0',
-                    fontSize: 12,
-                  }}
-                />
+                <Tooltip content={<MoneyTooltip currency={currency} />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <ul className="w-full flex-1 space-y-3">
-            {paymentMethods.map((method) => {
-              const pct = paymentTotal > 0 ? (method.value / paymentTotal) * 100 : 0;
+          <ul className="flex-1 space-y-2">
+            {paymentMethods.map((item) => {
+              const amount = item.amount != null ? Number(item.amount) : null;
               return (
-                <li key={method.name} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex min-w-0 items-center gap-2">
+                <li key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-slate-700">
                     <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: method.color }}
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: item.color }}
                     />
-                    <span className="truncate font-medium text-slate-700">{method.name}</span>
+                    {item.name}
                   </span>
-                  <span className="shrink-0 font-semibold tabular-nums text-slate-900">
-                    {pct.toFixed(0)}%
+                  <span className="shrink-0 font-medium text-slate-900">
+                    {item.value.toFixed(1)}%
+                    {amount != null && !Number.isNaN(amount) ? (
+                      <span className="ml-2 font-normal text-slate-500">
+                        {formatMoney(amount, currency)}
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               );
@@ -294,7 +338,7 @@ export function SalesDashboard({
     >
       <div className="mb-4">
         <h3 className="text-base font-semibold text-slate-900">Top selling products</h3>
-        <p className="text-sm text-slate-500">Top 5 items by revenue in this period</p>
+        <p className="text-sm text-slate-500">Top 5 items by units sold in this period</p>
       </div>
       <div className="h-64 w-full sm:h-72">
         {topProducts.length === 0 ? (
@@ -314,7 +358,7 @@ export function SalesDashboard({
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
+                allowDecimals={false}
               />
               <YAxis
                 type="category"
@@ -324,11 +368,8 @@ export function SalesDashboard({
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip
-                content={<MoneyTooltip currency={currency} />}
-                cursor={{ fill: '#f1f5f9' }}
-              />
-              <Bar dataKey="revenue" name="Revenue" radius={[0, 8, 8, 0]} barSize={18}>
+              <Tooltip content={<UnitsTooltip currency={currency} />} cursor={{ fill: '#f1f5f9' }} />
+              <Bar dataKey="quantitySold" name="Units sold" radius={[0, 8, 8, 0]} barSize={18}>
                 {topProducts.map((item) => (
                   <Cell key={item.name} fill="#059669" />
                 ))}
@@ -340,33 +381,113 @@ export function SalesDashboard({
     </div>
   );
 
+  const topCategoriesNode = (
+    <div
+      key="topCategories"
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Best selling categories</h3>
+          <p className="text-sm text-slate-500">Ranked by units sold in this period</p>
+        </div>
+        {topCategories.length > CATEGORY_PAGE_SIZE && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 disabled:opacity-40"
+              disabled={safeCategoryPage <= 0}
+              onClick={() => setCategoryPage((p) => Math.max(0, p - 1))}
+            >
+              Prev
+            </button>
+            <span className="text-xs text-slate-500">
+              {safeCategoryPage + 1} / {categoryPageCount}
+            </span>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 disabled:opacity-40"
+              disabled={safeCategoryPage >= categoryPageCount - 1}
+              onClick={() => setCategoryPage((p) => Math.min(categoryPageCount - 1, p + 1))}
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+      {topCategories.length === 0 ? (
+        <div className="flex h-48 items-center justify-center text-sm text-slate-500">
+          No category sales in this period
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {pagedCategories.map((cat, index) => {
+            const rank = safeCategoryPage * CATEGORY_PAGE_SIZE + index + 1;
+            return (
+              <li
+                key={cat.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    <span className="mr-2 text-slate-400">#{rank}</span>
+                    {cat.name}
+                  </p>
+                  <p className="text-xs text-slate-500">{formatMoney(cat.revenue, currency)}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-emerald-700">
+                  {formatUnits(cat.quantitySold)} sold
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+
   const byId: Record<string, ReactNode> = {
     kpis: kpisNode,
     trend: trendNode,
     payments: paymentsNode,
     topProducts: topProductsNode,
+    topCategories: topCategoriesNode,
   };
 
   const nodes: ReactNode[] = [];
   for (let i = 0; i < order.length; i++) {
     const id = order[i]!;
     const next = order[i + 1];
-    // Keep payments + top products side-by-side when adjacent.
+    // Keep top products + categories side-by-side when adjacent.
     if (
-      (id === 'payments' && next === 'topProducts') ||
+      (id === 'topProducts' && next === 'topCategories') ||
+      (id === 'topCategories' && next === 'topProducts')
+    ) {
+      nodes.push(
+        <div key={`${id}-${next}`} className="grid gap-4 lg:grid-cols-2">
+          {byId[id]}
+          {byId[next!]}
+        </div>,
+      );
+      i += 1;
+      continue;
+    }
+    // Keep payments + top products side-by-side when adjacent (and categories not next).
+    if (
+      (id === 'payments' && next === 'topProducts' && order[i + 2] !== 'topCategories') ||
       (id === 'topProducts' && next === 'payments')
     ) {
       nodes.push(
-        <div key={`${id}-${next}`} className="grid gap-6 lg:grid-cols-2">
+        <div key={`${id}-${next}`} className="grid gap-4 lg:grid-cols-2">
           {byId[id]}
-          {byId[next]}
+          {byId[next!]}
         </div>,
       );
-      i++;
+      i += 1;
       continue;
     }
-    nodes.push(byId[id]);
+    if (byId[id]) nodes.push(byId[id]);
   }
 
-  return <div className="space-y-6">{nodes}</div>;
+  return <div className="space-y-4">{nodes}</div>;
 }

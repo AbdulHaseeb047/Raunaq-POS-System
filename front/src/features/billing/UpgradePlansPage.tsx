@@ -103,7 +103,7 @@ export function UpgradePlansPage() {
             <span className="font-semibold text-text">
               {planLabel(currentPlan)} · {billingCycleLabel(currentCycle)}
             </span>
-            {softLocked ? ' (Starter features while subscription/trial is ended)' : ''}.
+            {softLocked ? ' (access paused — renew to continue)' : ''}.
           </p>
           {fromFeature && (
             <p className="mt-2 text-xs font-medium text-brand-800">
@@ -116,11 +116,11 @@ export function UpgradePlansPage() {
 
       {softLocked && (
         <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950">
-          Your paid features are paused. Upgrade or renew to restore{' '}
+          Your access period has ended. Renew or convert to paid to restore{' '}
           <strong>
             {planLabel(currentPlan)} ({billingCycleLabel(currentCycle)})
-          </strong>{' '}
-          access.
+          </strong>
+          .
           <Button
             size="sm"
             variant="secondary"

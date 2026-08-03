@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PageLoader } from '@/components/ui/Spinner';
 import { api } from '@/lib/api-client';
+import { useDateRangeFilter } from '@/lib/date-range';
 import { FEATURES, hasFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { formatDateShort, formatMoney, todayIso } from '@/lib/format';
@@ -61,29 +63,10 @@ function HorizontalBar({
 export function ReportsPage() {
   const { user, branchId } = useAuth();
   const [date, setDate] = useState(todayIso());
-  const [from, setFrom] = useState(todayIso());
-  const [to, setTo] = useState(todayIso());
-  const [range, setRange] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, dates } =
+    useDateRangeFilter('today');
 
   const canStaffPerf = hasFeature(user, FEATURES.USERS_MANAGE);
-
-  const dates = useMemo(() => {
-    const now = new Date();
-    if (range === 'today') {
-      const d = todayIso();
-      return { from: d, to: d };
-    }
-    if (range === 'week') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 7);
-      return { from: start.toISOString().slice(0, 10), to: todayIso() };
-    }
-    if (range === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: start.toISOString().slice(0, 10), to: todayIso() };
-    }
-    return { from, to };
-  }, [range, from, to]);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -166,35 +149,17 @@ export function ReportsPage() {
 
       <Card className="mb-6">
         <CardHeader title="Date range" subtitle="Applies to summary, stock, and staff reports" />
-        <div className="mb-4 flex flex-wrap gap-2">
-          {(['today', 'week', 'month', 'custom'] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRange(r)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${range === r ? 'bg-brand-600 text-white' : 'bg-surface-muted'}`}
-            >
-              {r === 'today'
-                ? 'Today'
-                : r === 'week'
-                  ? 'This week'
-                  : r === 'month'
-                    ? 'This month'
-                    : 'Custom'}
-            </button>
-          ))}
-        </div>
-        {range === 'custom' && (
-          <div className="mb-4 flex gap-2">
-            <Input
-              label="From"
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-            <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
-        )}
+        <DateRangeFilter
+          range={range}
+          onRangeChange={setRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+          from={dates.from}
+          to={dates.to}
+          className="mb-0"
+        />
       </Card>
 
       <Card className="mb-6">

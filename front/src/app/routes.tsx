@@ -17,7 +17,7 @@ import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage';
 import { AccountPasswordPage } from '@/features/auth/AccountPasswordPage';
 import { AdminAccountPasswordPage } from '@/features/auth/AdminAccountPasswordPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
-import { hasFeature, featureLabel } from '@/lib/features';
+import { hasPlanFeature, featureLabel } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 
 const DashboardPage = lazy(() =>
@@ -77,7 +77,7 @@ const SalesRepsPage = lazy(() =>
 
 function FeatureRoute({ feature, children }: { feature: FeatureKey | null; children: ReactNode }) {
   const { user } = useAuth();
-  if (feature && !hasFeature(user, feature)) {
+  if (feature && !hasPlanFeature(user, feature)) {
     return <Navigate to="/upgrade" replace state={{ fromFeature: featureLabel(feature) }} />;
   }
   return <>{children}</>;
@@ -240,7 +240,7 @@ export function AppRoutes() {
             <Route
               path="sales"
               element={
-                <FeatureRoute feature={FEATURES.BILLING_CREATE_SALE}>
+                <FeatureRoute feature={null}>
                   <LazyPage>
                     <SalesHistoryPage />
                   </LazyPage>

@@ -56,6 +56,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Full udhaar ledger + statements',
       'Sales & growth reports, CSV import/export',
       'Customize Sale Quick pick & Dashboard layout',
+      'Product images in Inventory & Sales Register',
     ],
     excluded: ['Multi-branch / FBR invoicing'],
   },
@@ -88,7 +89,7 @@ const PLAN_RANK: Record<PlanId, number> = {
 
 export function toPlanId(tier?: string | null): PlanId {
   if (tier === TENANT_TIERS.STANDARD) return 'STANDARD';
-  if (tier === TENANT_TIERS.PRO || tier === TENANT_TIERS.ENTERPRISE) return 'PRO';
+  if (tier === TENANT_TIERS.PRO) return 'PRO';
   return 'STARTER';
 }
 

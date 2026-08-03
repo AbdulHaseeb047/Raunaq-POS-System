@@ -25,7 +25,13 @@ function formatQty(value: string) {
   return n.toLocaleString('en-PK', { maximumFractionDigits: 3 });
 }
 
-const CHART_IDS: DashboardWidgetId[] = ['kpis', 'trend', 'payments', 'topProducts'];
+const CHART_IDS: DashboardWidgetId[] = [
+  'kpis',
+  'trend',
+  'payments',
+  'topProducts',
+  'topCategories',
+];
 
 export function DashboardPage() {
   const { user, branchId } = useAuth();

@@ -11,14 +11,14 @@ export class AppError extends Error {
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message = 'Unauthorized', code = 'UNAUTHORIZED') {
-    super(401, message, code);
+  constructor(message = 'Unauthorized', code = 'UNAUTHORIZED', details?: unknown) {
+    super(401, message, code, details);
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message = 'Forbidden', code = 'FORBIDDEN') {
-    super(403, message, code);
+  constructor(message = 'Forbidden', code = 'FORBIDDEN', details?: unknown) {
+    super(403, message, code, details);
   }
 }
 

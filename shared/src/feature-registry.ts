@@ -82,6 +82,12 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
     description: 'Supplier catalog and purchases',
   },
   {
+    key: FEATURES.INVENTORY_PRODUCT_IMAGES,
+    module: 'inventory',
+    label: 'Product Images',
+    description: 'Upload product images and show them on the sale register',
+  },
+  {
     key: FEATURES.CUSTOMERS_VIEW,
     module: 'customers',
     label: 'View Customers',
@@ -191,6 +197,7 @@ const STANDARD_FEATURES: FeatureKey[] = [
   FEATURES.INVENTORY_CATEGORIES,
   FEATURES.INVENTORY_BRANDS,
   FEATURES.INVENTORY_SUPPLIERS,
+  FEATURES.INVENTORY_PRODUCT_IMAGES,
   FEATURES.CUSTOMERS_LEDGER_EDIT,
   FEATURES.REPORTS_VIEW,
   FEATURES.USERS_MANAGE,
@@ -206,15 +213,11 @@ const PRO_FEATURES: FeatureKey[] = [
   FEATURES.MULTI_BRANCH_ACCESS,
 ];
 
-/**
- * Single source of truth: plan → feature keys.
- * ENTERPRISE is an alias of PRO for now.
- */
+/** Single source of truth: plan → feature keys. */
 export const PLAN_FEATURES: Record<TenantTier, FeatureKey[]> = {
   [TENANT_TIERS.STARTER]: STARTER_FEATURES,
   [TENANT_TIERS.STANDARD]: STANDARD_FEATURES,
   [TENANT_TIERS.PRO]: PRO_FEATURES,
-  [TENANT_TIERS.ENTERPRISE]: PRO_FEATURES,
 };
 
 /** @deprecated Prefer PLAN_FEATURES — kept for existing imports. */
@@ -224,9 +227,8 @@ export function getTierFeaturePreset(tier: TenantTier): FeatureKey[] {
   return [...(PLAN_FEATURES[tier] ?? PLAN_FEATURES[TENANT_TIERS.STARTER])];
 }
 
-/** Normalize ENTERPRISE → PRO for effective-plan logic. */
 export function normalizePlanTier(tier: TenantTier): TenantTier {
-  return tier === TENANT_TIERS.ENTERPRISE ? TENANT_TIERS.PRO : tier;
+  return tier;
 }
 
 export function planHasFeature(tier: TenantTier, feature: FeatureKey): boolean {

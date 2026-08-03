@@ -18,6 +18,7 @@ import {
   toDatetimeLocalValue,
 } from '@/features/admin/admin-utils';
 import { ApiError, api } from '@/lib/api-client';
+import { PRICING_PLANS, type BillingCycle } from '@/lib/pricing-plans';
 
 const emptyForm = {
   name: '',
@@ -27,19 +28,19 @@ const emptyForm = {
   adminPassword: '',
   adminFullName: '',
   acquiredById: '',
+  isTrial: true,
+  billingCycle: 'monthly' as BillingCycle,
   feeStatus: 'TRIAL',
-  monthlyFee: '',
+  monthlyFee: '4500',
   feeDueDate: '',
   subscriptionStartAt: toDatetimeLocalValue(),
   subscriptionDays: '30',
 };
 
-const feeStatusOptions = ['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => ({
-  value: s,
-  label: s,
-}));
-
-const tierOptions = Object.values(TENANT_TIERS).map((t) => ({ value: t, label: t }));
+function planPrice(tier: string, cycle: BillingCycle): string {
+  const plan = PRICING_PLANS.find((item) => item.id === tier);
+  return String(cycle === 'yearly' ? (plan?.yearlyPrice ?? 0) : (plan?.monthlyPrice ?? 0));
+}
 
 export function ClientsPage() {
   const queryClient = useQueryClient();
@@ -78,13 +79,18 @@ export function ClientsPage() {
         adminPassword: form.adminPassword,
         adminFullName: form.adminFullName,
         acquiredById: form.acquiredById || null,
-        feeStatus: form.feeStatus,
+        isTrial: form.isTrial,
+        feeStatus: form.isTrial ? 'TRIAL' : 'ACTIVE',
         monthlyFee: form.monthlyFee ? Number(form.monthlyFee) : null,
         feeDueDate: form.feeDueDate || null,
         featureKeys: selectedFeatures,
         subscriptionStartAt: new Date(form.subscriptionStartAt).toISOString(),
-        subscriptionDays: Number(form.subscriptionDays) || 30,
-        trialPlanTier: form.tier,
+        subscriptionDays: form.isTrial
+          ? Number(form.subscriptionDays) || 30
+          : form.billingCycle === 'yearly'
+            ? 365
+            : 30,
+        trialPlanTier: form.isTrial ? form.tier : null,
       }),
     onSuccess: () => {
       setCreateOpen(false);
@@ -101,6 +107,12 @@ export function ClientsPage() {
     { value: '', label: 'None' },
     ...(salesReps ?? []).map((r) => ({ value: r.id, label: r.fullName })),
   ];
+  const selectedPreset = getTierFeaturePreset(form.tier as TenantTier);
+  const presetSet = new Set<string>(selectedPreset);
+  const extraFeatures = selectedFeatures.filter((key) => !presetSet.has(key));
+  const optionalFeatureDefinitions = FEATURE_REGISTRY.filter(
+    (feature) => !presetSet.has(feature.key),
+  );
 
   if (isLoading) return <PageLoader />;
 
@@ -220,71 +232,170 @@ export function ClientsPage() {
               }
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Select
-              label="Plan pack (Starter / Standard / Pro)"
-              value={form.tier}
-              options={tierOptions}
-              onChange={(e) => {
-                const tier = e.target.value as TenantTier;
-                setForm({ ...form, tier });
-                setSelectedFeatures(getTierFeaturePreset(tier));
-              }}
-            />
-            <Select
-              label="Sales rep"
-              value={form.acquiredById}
-              options={salesRepOptions}
-              onChange={(e) => setForm({ ...form, acquiredById: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Select
-              label="Fee status"
-              value={form.feeStatus}
-              options={feeStatusOptions}
-              onChange={(e) => setForm({ ...form, feeStatus: e.target.value })}
-            />
-            <Input
-              label="Monthly fee (Rs)"
-              type="number"
-              value={form.monthlyFee}
-              onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })}
-            />
-            <Input
-              label="Fee due date"
-              type="date"
-              value={form.feeDueDate}
-              onChange={(e) => setForm({ ...form, feeDueDate: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Subscription start"
-              type="datetime-local"
-              value={form.subscriptionStartAt}
-              onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
-            />
-            <Input
-              label="Access period (days)"
-              type="number"
-              min={1}
-              max={365}
-              value={form.subscriptionDays}
-              onChange={(e) => setForm({ ...form, subscriptionDays: e.target.value })}
-            />
-          </div>
-          <p className="text-xs text-text-muted">
-            Trial lasts {form.subscriptionDays || 30} day(s) from the start above. When it ends the
-            shop soft-locks to Starter (billing still works) — not a full lockout.
-          </p>
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Plan</p>
+              <p className="text-sm text-text-muted">
+                Included features are enabled automatically and cannot be removed.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {PRICING_PLANS.map((plan) => {
+                const active = form.tier === plan.id;
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => {
+                      const tier = plan.id as TenantTier;
+                      setForm({
+                        ...form,
+                        tier,
+                        monthlyFee: planPrice(tier, form.billingCycle),
+                      });
+                      setSelectedFeatures(getTierFeaturePreset(tier));
+                    }}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      active
+                        ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600'
+                        : 'border-border bg-white hover:border-brand-300'
+                    }`}
+                  >
+                    <span className="block font-semibold">{plan.name}</span>
+                    <span className="mt-1 block text-xs text-text-muted">{plan.tagline}</span>
+                    <span className="mt-2 block text-sm font-semibold text-brand-700">
+                      Rs {plan.monthlyPrice.toLocaleString('en-PK')} / month
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
-          <FeaturePicker
-            features={FEATURE_REGISTRY}
-            selected={selectedFeatures}
-            onChange={setSelectedFeatures}
-            minFeatures={1}
+          <section className="rounded-xl border border-border bg-surface-muted/30 p-4">
+            <p className="text-sm font-semibold">Access type</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, isTrial: true, feeStatus: 'TRIAL' })}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                  form.isTrial ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-border'
+                }`}
+              >
+                Trial
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    isTrial: false,
+                    feeStatus: 'ACTIVE',
+                    monthlyFee: planPrice(form.tier, form.billingCycle),
+                  })
+                }
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                  !form.isTrial ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-border'
+                }`}
+              >
+                Paid subscription
+              </button>
+            </div>
+          </section>
+
+          {form.isTrial ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Trial starts"
+                type="datetime-local"
+                value={form.subscriptionStartAt}
+                onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
+              />
+              <Input
+                label="Trial length (days)"
+                type="number"
+                min={1}
+                max={365}
+                value={form.subscriptionDays}
+                onChange={(e) => setForm({ ...form, subscriptionDays: e.target.value })}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Select
+                  label="Billing cycle"
+                  value={form.billingCycle}
+                  options={[
+                    { value: 'monthly', label: 'Monthly' },
+                    { value: 'yearly', label: 'Yearly' },
+                  ]}
+                  onChange={(e) => {
+                    const billingCycle = e.target.value as BillingCycle;
+                    setForm({
+                      ...form,
+                      billingCycle,
+                      monthlyFee: planPrice(form.tier, billingCycle),
+                    });
+                  }}
+                />
+                <Input
+                  label="Agreed fee (Rs)"
+                  type="number"
+                  min={0}
+                  value={form.monthlyFee}
+                  onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })}
+                />
+                <Input
+                  label="Next payment due"
+                  type="date"
+                  value={form.feeDueDate}
+                  onChange={(e) => setForm({ ...form, feeDueDate: e.target.value })}
+                />
+              </div>
+              <Input
+                label="Subscription starts"
+                type="datetime-local"
+                value={form.subscriptionStartAt}
+                onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
+              />
+            </>
+          )}
+
+          <Select
+            label="Sales rep"
+            value={form.acquiredById}
+            options={salesRepOptions}
+            onChange={(e) => setForm({ ...form, acquiredById: e.target.value })}
           />
+
+          <div className="rounded-xl border border-border p-3">
+            <p className="text-sm font-semibold">
+              {selectedPreset.length} features included with {form.tier}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {FEATURE_REGISTRY.filter((feature) => presetSet.has(feature.key)).map((feature) => (
+                <Badge key={feature.key} variant="default">
+                  {feature.label}
+                </Badge>
+              ))}
+            </div>
+            {optionalFeatureDefinitions.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-semibold text-brand-700">
+                  Advanced feature overrides ({extraFeatures.length})
+                </summary>
+                <div className="mt-3">
+                  <FeaturePicker
+                    features={optionalFeatureDefinitions}
+                    selected={extraFeatures}
+                    onChange={(extras) => setSelectedFeatures([...selectedPreset, ...extras])}
+                    minFeatures={0}
+                  />
+                </div>
+              </details>
+            )}
+          </div>
 
           <hr />
           <p className="text-xs font-semibold uppercase text-text-muted">

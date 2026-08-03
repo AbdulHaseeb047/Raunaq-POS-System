@@ -5,7 +5,11 @@ export type PlanAccessStatus =
   | 'trial_active'
   | 'active_paid'
   | 'expiring_soon'
+  | 'trial_expired'
+  | 'subscription_expired'
+  /** @deprecated Prefer trial_expired — kept for older clients */
   | 'trial_expired_starter'
+  /** @deprecated Prefer subscription_expired — kept for older clients */
   | 'subscription_expired_starter'
   | 'access_revoked';
 
@@ -59,10 +63,13 @@ export function getSubscriptionDaysRemaining(
 }
 
 /**
- * Single source of truth for plan + trial soft-lock.
+ * Single source of truth for plan + trial/paid window.
  * - Trial / paid window active → assigned trial or paid plan features
- * - Window ended → Starter only (never hard-block)
+ * - Window ended → no features; portal must hard-block login (pay / convert)
  * - Manual revoke → blocked (caller must reject login)
+ *
+ * `isSoftLocked` means the period ended and payment/conversion is required
+ * (legacy name; access is hard-blocked, not Starter fallback).
  */
 export function getEffectivePlan(tenant: TenantPlanInput, now = new Date()): EffectivePlanResult {
   const assignedPlan = normalizePlanTier(tenant.tier);
@@ -93,7 +100,9 @@ export function getEffectivePlan(tenant: TenantPlanInput, now = new Date()): Eff
   }
 
   const isTrialActive = tenant.feeStatus === 'TRIAL' && windowOpen;
-  const isPaidActive = tenant.feeStatus === 'ACTIVE' && paidWindowOk;
+  // OVERDUE is ops visibility only — access follows the subscription end date.
+  const isPaidActive =
+    (tenant.feeStatus === 'ACTIVE' || tenant.feeStatus === 'OVERDUE') && paidWindowOk;
 
   if (isTrialActive || isPaidActive) {
     const plan = isTrialActive ? trialPlan : assignedPlan;
@@ -117,7 +126,7 @@ export function getEffectivePlan(tenant: TenantPlanInput, now = new Date()): Eff
     };
   }
 
-  // Soft-lock: trial or paid window ended (or overdue / suspended without revoke).
+  // Period ended: no product access until admin renews / converts to paid.
   const wasTrial = tenant.feeStatus === 'TRIAL';
   return {
     effectivePlan: TENANT_TIERS.STARTER,
@@ -127,11 +136,11 @@ export function getEffectivePlan(tenant: TenantPlanInput, now = new Date()): Eff
     isPaidActive: false,
     isSoftLocked: true,
     isAccessRevoked: false,
-    accessStatus: wasTrial ? 'trial_expired_starter' : 'subscription_expired_starter',
+    accessStatus: wasTrial ? 'trial_expired' : 'subscription_expired',
     daysRemaining: 0,
     subscriptionEndsAt: endsAt?.toISOString() ?? null,
     trialStartAt: startAt?.toISOString() ?? null,
-    featureKeys: getTierFeaturePreset(TENANT_TIERS.STARTER),
+    featureKeys: [],
   };
 }
 

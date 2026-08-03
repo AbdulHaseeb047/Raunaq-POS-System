@@ -1,4 +1,10 @@
-import { FEATURES, USER_ROLES, type FeatureKey } from '@pos/shared';
+import {
+  FEATURES,
+  USER_ROLES,
+  getTierFeaturePreset,
+  type FeatureKey,
+  type TenantTier,
+} from '@pos/shared';
 
 import type { AuthUser } from '@/types/api';
 
@@ -18,6 +24,7 @@ export const FEATURE_LABELS: Partial<Record<FeatureKey, string>> = {
   [FEATURES.INVENTORY_CATEGORIES]: 'Categories',
   [FEATURES.INVENTORY_BRANDS]: 'Brands',
   [FEATURES.INVENTORY_SUPPLIERS]: 'Suppliers',
+  [FEATURES.INVENTORY_PRODUCT_IMAGES]: 'Product images',
   [FEATURES.CUSTOMERS_VIEW]: 'Udhaar / customers',
   [FEATURES.CUSTOMERS_EDIT]: 'Edit customers',
   [FEATURES.CUSTOMERS_LEDGER_VIEW]: 'Udhaar ledger',
@@ -40,6 +47,23 @@ export function featureLabel(feature: FeatureKey | string): string {
 export function hasFeature(user: AuthUser | null | undefined, feature: FeatureKey): boolean {
   if (!user) return false;
   return user.features.includes(feature);
+}
+
+/** Live grant, or included in the shop’s current plan (covers stale feature lists). */
+export function hasPlanFeature(user: AuthUser | null | undefined, feature: FeatureKey): boolean {
+  if (hasFeature(user, feature)) return true;
+  if (
+    !user?.planEntitlement ||
+    user.planEntitlement.isSoftLocked ||
+    user.planEntitlement.accessStatus === 'access_revoked'
+  ) {
+    return false;
+  }
+  const plan = (user.planEntitlement.effectivePlan ??
+    user.planEntitlement.assignedPlan ??
+    user.planEntitlement.trialPlan) as TenantTier | undefined;
+  if (!plan) return false;
+  return getTierFeaturePreset(plan).includes(feature);
 }
 
 export function isPlatformAdmin(user: AuthUser | null | undefined): boolean {

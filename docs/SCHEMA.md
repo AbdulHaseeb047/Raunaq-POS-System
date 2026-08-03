@@ -48,16 +48,16 @@ tenants ────────────────────────
 
 The business account. One row per cloud tenant; one row per offline install.
 
-| Column       | Type                | Notes                                                             |
-| ------------ | ------------------- | ----------------------------------------------------------------- |
-| `id`         | UUID PK             |                                                                   |
-| `name`       | VARCHAR(255)        | Business display name                                             |
-| `slug`       | VARCHAR(100) UNIQUE | URL-safe identifier (cloud)                                       |
-| `tier`       | ENUM                | `STARTER`, `STANDARD`, `PRO`, `ENTERPRISE` — informational preset |
-| `is_active`  | BOOLEAN             | Soft disable                                                      |
-| `created_at` | TIMESTAMPTZ         |                                                                   |
-| `updated_at` | TIMESTAMPTZ         |                                                                   |
-| `deleted_at` | TIMESTAMPTZ NULL    |                                                                   |
+| Column       | Type                | Notes                                      |
+| ------------ | ------------------- | ------------------------------------------ |
+| `id`         | UUID PK             |                                            |
+| `name`       | VARCHAR(255)        | Business display name                      |
+| `slug`       | VARCHAR(100) UNIQUE | URL-safe identifier (cloud)                |
+| `tier`       | ENUM                | `STARTER`, `STANDARD`, `PRO` — plan preset |
+| `is_active`  | BOOLEAN             | Soft disable                               |
+| `created_at` | TIMESTAMPTZ         |                                            |
+| `updated_at` | TIMESTAMPTZ         |                                            |
+| `deleted_at` | TIMESTAMPTZ NULL    |                                            |
 
 ### `users`
 
@@ -152,10 +152,10 @@ Features granted to an individual staff user (subset of tenant features).
 
 Maps tier name to default feature set. Used when creating tenant or applying preset.
 
-| Column        | Type                               | Notes                                      |
-| ------------- | ---------------------------------- | ------------------------------------------ |
-| `tier`        | ENUM PK                            | `STARTER`, `STANDARD`, `PRO`, `ENTERPRISE` |
-| `feature_key` | VARCHAR(100) FK → feature_registry |                                            |
+| Column        | Type                               | Notes                        |
+| ------------- | ---------------------------------- | ---------------------------- |
+| `tier`        | ENUM PK                            | `STARTER`, `STANDARD`, `PRO` |
+| `feature_key` | VARCHAR(100) FK → feature_registry |                              |
 
 **PK:** `(tier, feature_key)`
 

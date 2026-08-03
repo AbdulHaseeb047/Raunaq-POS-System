@@ -144,6 +144,18 @@ export interface TenantRow {
   feeDueDate: string | null;
   acquiredBy: { id: string; name: string } | null;
   createdAt: string;
+  subscriptionStartAt: string | null;
+  subscriptionEndsAt: string | null;
+  subscriptionDays: number;
+  accessRevokedAt: string | null;
+  accessRevokeReason: string | null;
+  daysRemaining: number | null;
+  subscriptionExpired: boolean;
+  isTrial?: boolean;
+  billingCycle?: 'monthly' | 'yearly';
+  isTrialActive?: boolean;
+  isPaidActive?: boolean;
+  accessStatus: string;
 }
 
 export interface TenantDetail {
@@ -151,6 +163,9 @@ export interface TenantDetail {
   name: string;
   slug: string;
   tier: string;
+  trialPlanTier?: string | null;
+  isTrial?: boolean;
+  billingCycle?: 'monthly' | 'yearly';
   isActive: boolean;
   featureCount?: number;
   userCount?: number;
@@ -159,8 +174,24 @@ export interface TenantDetail {
   feeDueDate: string | null;
   acquiredBy: { id: string; name: string; email?: string } | null;
   createdAt: string;
+  updatedAt?: string;
   features: string[];
-  users?: { id: string; email: string; fullName: string; role: string; isActive: boolean }[];
+  planFeatureKeys?: string[];
+  featureOverrides?: string[];
+  subscriptionStartAt: string | null;
+  subscriptionEndsAt: string | null;
+  subscriptionDays: number;
+  accessRevokedAt: string | null;
+  accessRevokeReason: string | null;
+  daysRemaining: number | null;
+  subscriptionExpired: boolean;
+  isTrialActive?: boolean;
+  isPaidActive?: boolean;
+  isSoftLocked?: boolean;
+  effectivePlan?: string;
+  assignedPlan?: string;
+  trialPlan?: string;
+  accessStatus: string;
 }
 
 export interface SalesRep {
@@ -186,6 +217,9 @@ export interface TenantUser {
   role: string;
   isActive: boolean;
   features: string[];
+  branchId: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
 }
 
 export const api = {
@@ -229,6 +263,19 @@ export const api = {
       apiRequest<TenantDetail>('/tenants', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       apiRequest<TenantDetail>(`/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    revokeAccess: (id: string, reason?: string) =>
+      apiRequest<TenantDetail>(`/tenants/${id}/revoke-access`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    restoreAccess: (
+      id: string,
+      body: { subscriptionStartAt?: string; subscriptionDays?: number; feeStatus?: string },
+    ) =>
+      apiRequest<TenantDetail>(`/tenants/${id}/restore-access`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
     setFeatures: (id: string, featureKeys: string[]) =>
       apiRequest<TenantDetail>(`/tenants/${id}/features`, {
         method: 'PUT',
@@ -241,6 +288,32 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+    updateUser: (tenantId: string, userId: string, body: Record<string, unknown>) =>
+      apiRequest<TenantUser>(`/tenants/${tenantId}/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    setUserFeatures: (tenantId: string, userId: string, featureKeys: string[]) =>
+      apiRequest<TenantUser>(`/tenants/${tenantId}/users/${userId}/features`, {
+        method: 'PUT',
+        body: JSON.stringify({ featureKeys }),
+      }),
+    deleteUser: (tenantId: string, userId: string) =>
+      apiRequest<{ success: boolean }>(`/tenants/${tenantId}/users/${userId}`, {
+        method: 'DELETE',
+      }),
+    setUserPassword: (
+      tenantId: string,
+      userId: string,
+      body: { password: string; mustChangePassword?: boolean },
+    ) =>
+      apiRequest<{ success: boolean; mustChangePassword: boolean }>(
+        `/tenants/${tenantId}/users/${userId}/set-password`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      ),
   },
   features: {
     list: () => apiRequest<FeatureRegistryItem[]>('/features'),

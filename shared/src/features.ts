@@ -19,6 +19,7 @@ export const FEATURES = {
   INVENTORY_STOCK_ADJUST: 'inventory.stock_adjust',
   INVENTORY_BRANDS: 'inventory.brands',
   INVENTORY_SUPPLIERS: 'inventory.suppliers',
+  INVENTORY_PRODUCT_IMAGES: 'inventory.product_images',
 
   // Customers & Udhaar
   CUSTOMERS_VIEW: 'customers.view',
@@ -80,7 +81,6 @@ export const TENANT_TIERS = {
   STARTER: 'STARTER',
   STANDARD: 'STANDARD',
   PRO: 'PRO',
-  ENTERPRISE: 'ENTERPRISE',
 } as const;
 
 export type TenantTier = (typeof TENANT_TIERS)[keyof typeof TENANT_TIERS];

@@ -40,6 +40,8 @@ import type { Product } from '@/types/api';
 const PAGE_SIZE = 20;
 const STOCK_FILTERS = new Set(['all', 'healthy', 'low', 'out']);
 const MOVEMENT_DAYS = 14;
+const PRODUCT_IMAGE_MAX_BYTES = 500_000;
+const PRODUCT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 function parseStockParam(value: string | null): string {
   if (value && STOCK_FILTERS.has(value)) return value;
@@ -106,6 +108,7 @@ export function InventoryPage() {
     costPrice: '',
     barcode: '',
     sku: '',
+    imageUrl: '',
     unit: 'pcs',
     categoryId: '',
     brandId: '',
@@ -136,6 +139,7 @@ export function InventoryPage() {
 
   const canEdit = hasFeature(user, FEATURES.INVENTORY_EDIT);
   const canAdjust = hasFeature(user, FEATURES.INVENTORY_STOCK_ADJUST);
+  const canUseProductImages = hasFeature(user, FEATURES.INVENTORY_PRODUCT_IMAGES);
 
   useEffect(() => {
     const next = parseStockParam(searchParams.get('stock'));
@@ -166,11 +170,17 @@ export function InventoryPage() {
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.categories.list(),
+    enabled: hasFeature(user, FEATURES.INVENTORY_CATEGORIES),
   });
-  const { data: brands } = useQuery({ queryKey: ['brands'], queryFn: () => api.brands.list() });
+  const { data: brands } = useQuery({
+    queryKey: ['brands'],
+    queryFn: () => api.brands.list(),
+    enabled: hasFeature(user, FEATURES.INVENTORY_BRANDS),
+  });
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
     queryFn: () => api.suppliers.list(),
+    enabled: hasFeature(user, FEATURES.INVENTORY_SUPPLIERS),
   });
 
   const { data, isLoading, isFetching } = useQuery({
@@ -198,10 +208,11 @@ export function InventoryPage() {
 
   const movementFrom = daysAgoIso(MOVEMENT_DAYS - 1);
   const movementTo = todayIso();
+  const canViewReports = hasFeature(user, FEATURES.REPORTS_VIEW);
   const { data: stockMovement } = useQuery({
     queryKey: ['reports', 'stock', 'inventory-card', movementFrom, movementTo],
     queryFn: () => api.reports.stockMovement(movementFrom, movementTo, 500),
-    enabled: Boolean(data),
+    enabled: Boolean(data) && canViewReports,
     staleTime: 60_000,
   });
 
@@ -272,6 +283,7 @@ export function InventoryPage() {
         costPrice: form.costPrice ? parseFloat(form.costPrice) : null,
         barcode: form.barcode || null,
         sku: form.sku || null,
+        ...(canUseProductImages ? { imageUrl: form.imageUrl || null } : {}),
         unit: form.unit,
         categoryId: form.categoryId || null,
         brandId: form.brandId || null,
@@ -525,6 +537,7 @@ export function InventoryPage() {
       costPrice: '',
       barcode: '',
       sku: '',
+      imageUrl: '',
       unit: 'pcs',
       categoryId: '',
       brandId: '',
@@ -546,6 +559,7 @@ export function InventoryPage() {
       costPrice: p.costPrice ?? '',
       barcode: p.barcode ?? '',
       sku: p.sku ?? '',
+      imageUrl: canUseProductImages ? (p.imageUrl ?? '') : '',
       unit: p.unit,
       categoryId: p.category?.id ?? '',
       brandId: p.brand?.id ?? '',
@@ -808,21 +822,23 @@ export function InventoryPage() {
           <option value="low">Low stock</option>
           <option value="out">Out of stock</option>
         </select>
-        <select
-          className="min-h-[44px] w-full shrink-0 rounded-xl border border-border bg-white px-3 py-2 text-sm sm:w-auto sm:min-w-[160px]"
-          value={categoryFilter}
-          onChange={(e) => {
-            setCategoryFilter(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">All categories</option>
-          {(categories ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        {hasFeature(user, FEATURES.INVENTORY_CATEGORIES) && (
+          <select
+            className="min-h-[44px] w-full shrink-0 rounded-xl border border-border bg-white px-3 py-2 text-sm sm:w-auto sm:min-w-[160px]"
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All categories</option>
+            {(categories ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {displayedProducts.length === 0 ? (
@@ -1007,17 +1023,17 @@ export function InventoryPage() {
         title={modal === 'edit' ? 'Edit product' : 'New product'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModal(null)}>
+            <Button variant="ghost" type="button" onClick={() => setModal(null)}>
               Cancel
             </Button>
             <Button
+              type="submit"
+              form="inventory-product-form"
               loading={saveProduct.isPending}
               onClick={() => {
                 if (!canSaveProduct) {
                   setFormErrorVisible(true);
-                  return;
                 }
-                saveProduct.mutate();
               }}
             >
               Save
@@ -1025,7 +1041,34 @@ export function InventoryPage() {
           </>
         }
       >
-        <div className="space-y-4">
+        <form
+          id="inventory-product-form"
+          className="space-y-4"
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            if (e.target instanceof HTMLTextAreaElement) return;
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'BUTTON') return;
+            const fields = Array.from(
+              e.currentTarget.querySelectorAll<HTMLElement>(
+                'input:not([type="hidden"]):not([type="checkbox"]):not([type="file"]):not([disabled]), select:not([disabled])',
+              ),
+            );
+            const index = fields.indexOf(e.target as HTMLElement);
+            if (index >= 0 && index < fields.length - 1) {
+              e.preventDefault();
+              fields[index + 1]?.focus();
+            }
+          }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!canSaveProduct) {
+              setFormErrorVisible(true);
+              return;
+            }
+            saveProduct.mutate();
+          }}
+        >
           <Input
             label="Name"
             value={form.name}
@@ -1059,48 +1102,119 @@ export function InventoryPage() {
             value={form.sku}
             onChange={(e) => setForm({ ...form, sku: e.target.value })}
           />
+          {canUseProductImages && (
+            <div className="rounded-xl border border-border bg-surface-muted/40 p-3">
+              <p className="mb-1.5 text-xs font-medium text-text">Product image</p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="block w-full text-sm text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-800"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (!PRODUCT_IMAGE_TYPES.has(file.type)) {
+                    toast.error('Choose a PNG, JPEG, or WebP image.');
+                    e.target.value = '';
+                    return;
+                  }
+                  if (file.size > PRODUCT_IMAGE_MAX_BYTES) {
+                    toast.error('Product image must be under 500KB.');
+                    e.target.value = '';
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () =>
+                    setForm((current) => ({
+                      ...current,
+                      imageUrl: String(reader.result ?? ''),
+                    }));
+                  reader.onerror = () => toast.error('Could not read the selected image.');
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                }}
+              />
+              {form.imageUrl && (
+                <div className="mt-3 flex items-center gap-3">
+                  <img
+                    src={form.imageUrl}
+                    alt="Product preview"
+                    className="h-20 w-20 rounded-xl border border-border bg-white object-cover"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger"
+                    onClick={() => setForm({ ...form, imageUrl: '' })}
+                  >
+                    Clear image
+                  </Button>
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-text-muted">PNG, JPEG, or WebP · max 500KB</p>
+            </div>
+          )}
           <Input
             label="Expiry date"
             type="date"
             value={form.expiryDate}
             onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
           />
-          <select
-            className="w-full rounded-xl border border-border px-3 py-2 text-sm"
-            value={form.categoryId}
-            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-          >
-            <option value="">No category</option>
-            {(categories ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="w-full rounded-xl border border-border px-3 py-2 text-sm"
-            value={form.brandId}
-            onChange={(e) => setForm({ ...form, brandId: e.target.value })}
-          >
-            <option value="">No brand</option>
-            {(brands ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="w-full rounded-xl border border-border px-3 py-2 text-sm"
-            value={form.supplierId}
-            onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-          >
-            <option value="">No supplier</option>
-            {(suppliers ?? []).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          {hasFeature(user, FEATURES.INVENTORY_CATEGORIES) && (
+            <select
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            >
+              <option value="">No category</option>
+              {(categories ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {hasFeature(user, FEATURES.INVENTORY_BRANDS) && (
+            <select
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              value={form.brandId}
+              onChange={(e) => setForm({ ...form, brandId: e.target.value })}
+            >
+              <option value="">No brand</option>
+              {(brands ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {hasFeature(user, FEATURES.INVENTORY_SUPPLIERS) && (
+            <select
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              value={form.supplierId}
+              onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+            >
+              <option value="">No supplier</option>
+              {(suppliers ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <Input
+            label="Unit"
+            value={form.unit}
+            onChange={(e) => setForm({ ...form, unit: e.target.value })}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.trackStock}
+              onChange={(e) => setForm({ ...form, trackStock: e.target.checked })}
+            />
+            Track stock
+          </label>
           <Input
             label="Low stock threshold"
             type="number"
@@ -1110,9 +1224,10 @@ export function InventoryPage() {
             error={formErrorVisible ? productFormErrors.lowStockThreshold || undefined : undefined}
           />
           <p className="text-xs text-text-muted">
-            Required: name, sell price, cost price, and low stock threshold.
+            Required: name, sell price, cost price, and low stock threshold. Enter moves to the next
+            field; Enter on the last field saves.
           </p>
-        </div>
+        </form>
       </Modal>
 
       <Modal
@@ -1121,29 +1236,37 @@ export function InventoryPage() {
         title={`Adjust stock — ${selected?.name}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModal(null)}>
+            <Button variant="ghost" type="button" onClick={() => setModal(null)}>
               Cancel
             </Button>
             <Button
+              type="submit"
+              form="inventory-stock-form"
               loading={adjustStock.isPending}
-              onClick={() => {
-                if (!stockDelta.trim() || !Number.isFinite(parseFloat(stockDelta))) return;
-                adjustStock.mutate();
-              }}
             >
               Apply
             </Button>
           </>
         }
       >
-        <p className="mb-3 text-sm text-text-muted">Current: {selected?.stockQuantity}</p>
-        <Input
-          label="Quantity change (+/-)"
-          type="number"
-          value={stockDelta}
-          onChange={(e) => setStockDelta(e.target.value)}
-          required
-        />
+        <form
+          id="inventory-stock-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!stockDelta.trim() || !Number.isFinite(parseFloat(stockDelta))) return;
+            adjustStock.mutate();
+          }}
+        >
+          <p className="mb-3 text-sm text-text-muted">Current: {selected?.stockQuantity}</p>
+          <Input
+            label="Quantity change (+/-)"
+            type="number"
+            value={stockDelta}
+            onChange={(e) => setStockDelta(e.target.value)}
+            required
+            hint="Press Enter to save"
+          />
+        </form>
       </Modal>
 
       {canEdit && (data?.meta.total ?? 0) > 0 && (

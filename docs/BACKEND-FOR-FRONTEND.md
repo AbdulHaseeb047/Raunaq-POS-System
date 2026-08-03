@@ -955,7 +955,7 @@ PUT   /tenants/:tenantId/users/:userId/features
 }
 ```
 
-`tier`: `STARTER` | `STANDARD` | `PRO` | `ENTERPRISE` — applies feature preset.
+`tier`: `STARTER` | `STANDARD` | `PRO` — applies feature preset.
 
 **Tenant detail:**
 
@@ -1126,7 +1126,7 @@ Response when online:
 
 ### Tenant `tier`
 
-`STARTER` | `STANDARD` | `PRO` | `ENTERPRISE`
+`STARTER` | `STANDARD` | `PRO`
 
 ---
 

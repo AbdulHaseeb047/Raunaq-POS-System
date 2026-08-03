@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { FEATURES } from '@pos/shared';
 
 import { ValidationError } from '../core/errors.js';
@@ -24,6 +24,18 @@ import {
   updateCategory,
   updateProduct,
 } from './inventory.service.js';
+
+const requireProductImages = requireFeature(FEATURES.INVENTORY_PRODUCT_IMAGES);
+
+async function requireProductImagesForWrite(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const body = request.body as Record<string, unknown> | null | undefined;
+  if (body && Object.prototype.hasOwnProperty.call(body, 'imageUrl')) {
+    await requireProductImages(request, reply);
+  }
+}
 
 export async function registerInventoryRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -130,7 +142,13 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
 
   app.post(
     '/products',
-    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] },
+    {
+      preHandler: [
+        authenticate,
+        requireFeature(FEATURES.INVENTORY_EDIT),
+        requireProductImagesForWrite,
+      ],
+    },
     async (request) => {
       const parsed = productSchema.safeParse(request.body);
       if (!parsed.success)
@@ -141,7 +159,13 @@ export async function registerInventoryRoutes(app: FastifyInstance): Promise<voi
 
   app.patch(
     '/products/:id',
-    { preHandler: [authenticate, requireFeature(FEATURES.INVENTORY_EDIT)] },
+    {
+      preHandler: [
+        authenticate,
+        requireFeature(FEATURES.INVENTORY_EDIT),
+        requireProductImagesForWrite,
+      ],
+    },
     async (request) => {
       const { id } = request.params as { id: string };
       const parsed = productSchema.partial().safeParse(request.body);

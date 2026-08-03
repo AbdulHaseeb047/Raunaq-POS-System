@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '@/lib/auth';
-import { featureLabel, hasFeature } from '@/lib/features';
+import { featureLabel, hasPlanFeature } from '@/lib/features';
 
 type FeatureGateProps = {
   feature: FeatureKey;
@@ -15,7 +15,7 @@ type FeatureGateProps = {
 /** Locked features redirect to the pricing / upgrade page. */
 export function FeatureGate({ feature, children, featureLabel: labelOverride }: FeatureGateProps) {
   const { user } = useAuth();
-  if (hasFeature(user, feature)) {
+  if (hasPlanFeature(user, feature)) {
     return <>{children}</>;
   }
   return (

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { BRAND } from '@pos/shared';
 
 import { writeAuditLog } from '../audit/audit.service.js';
+import { resolvePkDateRange } from '../core/date-bounds.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
@@ -858,25 +859,10 @@ export async function partialReturn(
   });
 }
 
-function startOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
 function dateRangeBounds(from?: string, to?: string): { gte: Date; lte: Date } | undefined {
   if (!from && !to) return undefined;
-  const rangeStart = startOfLocalDay(from ? new Date(from) : new Date());
-  const rangeEnd = endOfLocalDay(to ? new Date(to) : new Date());
-  const gte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
-  const lte = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
-  return { gte, lte };
+  const { start, end } = resolvePkDateRange(from, to);
+  return { gte: start, lte: end };
 }
 
 export async function listSales(

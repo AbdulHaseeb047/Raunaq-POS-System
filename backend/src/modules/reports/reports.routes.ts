@@ -28,16 +28,14 @@ async function optionalBranchId(
 }
 
 export async function registerReportRoutes(app: FastifyInstance): Promise<void> {
-  app.get(
-    '/reports/dashboard',
-    { preHandler: [authenticate, requireFeature(FEATURES.REPORTS_VIEW)] },
-    async (request) => {
-      const tenantId = resolveTenantId(request);
-      const q = request.query as { branchId?: string; from?: string; to?: string };
-      const branchId = await optionalBranchId(request, tenantId, q.branchId);
-      return getDashboardSummary(tenantId, branchId, q.from, q.to);
-    },
-  );
+  // Home dashboard is available on every active plan (including Starter).
+  // Full Reports pages stay behind REPORTS_VIEW / REPORTS_ADVANCED.
+  app.get('/reports/dashboard', { preHandler: [authenticate] }, async (request) => {
+    const tenantId = resolveTenantId(request);
+    const q = request.query as { branchId?: string; from?: string; to?: string };
+    const branchId = await optionalBranchId(request, tenantId, q.branchId);
+    return getDashboardSummary(tenantId, branchId, q.from, q.to);
+  });
 
   app.get(
     '/reports/daily-sales',

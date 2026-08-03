@@ -11,11 +11,10 @@ export const DATE_RANGE_BUTTONS: Array<{ key: DateRangeKey; label: string }> = [
   { key: 'custom', label: 'Custom' },
 ];
 
+/** Inclusive start of the last 7 local calendar days (today and 6 days before). */
 export function startOfWeekIso(d = new Date()): string {
   const x = new Date(d);
-  const day = x.getDay();
-  const diff = day === 0 ? 6 : day - 1;
-  x.setDate(x.getDate() - diff);
+  x.setDate(x.getDate() - 6);
   return localDateIso(x);
 }
 

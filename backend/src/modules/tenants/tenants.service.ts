@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { TENANT_TIERS, SHIPPED_FEATURE_KEYS } from '@pos/shared';
-import type { FeatureKey } from '@pos/shared';
+import { TENANT_TIERS, SHIPPED_FEATURE_KEYS, getTierFeaturePreset } from '@pos/shared';
+import type { FeatureKey, TenantTier } from '@pos/shared';
 
 import { ConflictError, NotFoundError, ValidationError } from '../core/errors.js';
 import { hashPassword } from '../auth/auth.service.js';
@@ -9,12 +9,14 @@ import { prisma } from '../core/prisma.js';
 import {
   applyTierPreset,
   getTenantFeatures,
+  mergePlanWithFeatureOverrides,
   setTenantFeatures,
 } from '../permissions/permissions.service.js';
 import { writeAuditLog } from '../audit/audit.service.js';
 import { ensureBusinessSettings } from '../settings/settings.service.js';
 import { createDefaultBranch } from '../core/branch.js';
 import { ensureMiscProduct } from '../billing/misc-product.js';
+import { invalidateAccessCaches } from '../permissions/access-cache.js';
 import {
   computeSubscriptionEndsAt,
   restoreTenantAccess,
@@ -29,16 +31,12 @@ export const createTenantSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
-  tier: z.enum([
-    TENANT_TIERS.STARTER,
-    TENANT_TIERS.STANDARD,
-    TENANT_TIERS.PRO,
-    TENANT_TIERS.ENTERPRISE,
-  ]),
+  tier: z.enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO]),
   adminEmail: z.string().email(),
   adminPassword: z.string().min(8),
   adminFullName: z.string().min(1).max(255),
   acquiredById: z.string().uuid().optional().nullable(),
+  isTrial: z.boolean().optional(),
   feeStatus: z.enum(['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED']).optional(),
   monthlyFee: z.number().nonnegative().optional().nullable(),
   feeDueDate: z.string().optional().nullable(),
@@ -46,19 +44,19 @@ export const createTenantSchema = z.object({
   subscriptionStartAt: z.string().datetime().optional(),
   subscriptionDays: z.number().int().min(1).max(365).optional(),
   trialPlanTier: z
-    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
-    .optional(),
+    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO])
+    .optional()
+    .nullable(),
 });
 
 export const updateTenantSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  tier: z
-    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
-    .optional(),
+  tier: z.enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO]).optional(),
   trialPlanTier: z
-    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO, TENANT_TIERS.ENTERPRISE])
+    .enum([TENANT_TIERS.STARTER, TENANT_TIERS.STANDARD, TENANT_TIERS.PRO])
     .optional()
     .nullable(),
+  isTrial: z.boolean().optional(),
   feeStatus: z.enum(['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED']).optional(),
   monthlyFee: z.number().nonnegative().optional().nullable(),
   feeDueDate: z.string().optional().nullable(),
@@ -141,6 +139,9 @@ export async function getTenantById(tenantId: string) {
   if (!tenant) {
     throw new NotFoundError('Tenant not found');
   }
+  const features = tenant.tenantFeatures.map((f) => f.featureKey);
+  const planFeatureKeys = getTierFeaturePreset(tenant.tier as TenantTier);
+  const planFeatureSet = new Set<string>(planFeatureKeys);
 
   return {
     id: tenant.id,
@@ -148,7 +149,9 @@ export async function getTenantById(tenantId: string) {
     slug: tenant.slug,
     tier: tenant.tier,
     isActive: tenant.isActive,
-    features: tenant.tenantFeatures.map((f) => f.featureKey),
+    features,
+    planFeatureKeys,
+    featureOverrides: features.filter((key) => !planFeatureSet.has(key)),
     feeStatus: tenant.feeStatus,
     monthlyFee: tenant.monthlyFee?.toFixed(2) ?? null,
     feeDueDate: tenant.feeDueDate?.toISOString().slice(0, 10) ?? null,
@@ -178,6 +181,12 @@ export async function createTenant(input: CreateTenantInput, createdById: string
     ? new Date(input.subscriptionStartAt)
     : new Date();
   const subscriptionEndsAt = computeSubscriptionEndsAt(subscriptionStartAt, subscriptionDays);
+  const isTrial = input.isTrial ?? (input.feeStatus === 'TRIAL' || input.feeStatus === undefined);
+  const feeStatus = isTrial
+    ? 'TRIAL'
+    : input.feeStatus === 'TRIAL'
+      ? 'ACTIVE'
+      : (input.feeStatus ?? 'ACTIVE');
 
   const tenant = await prisma.$transaction(async (tx) => {
     const created = await tx.tenant.create({
@@ -185,8 +194,8 @@ export async function createTenant(input: CreateTenantInput, createdById: string
         name: input.name,
         slug: input.slug,
         tier: input.tier,
-        trialPlanTier: input.trialPlanTier ?? input.tier,
-        feeStatus: input.feeStatus ?? 'TRIAL',
+        trialPlanTier: isTrial ? (input.trialPlanTier ?? input.tier) : null,
+        feeStatus,
         monthlyFee: input.monthlyFee ?? null,
         feeDueDate: input.feeDueDate ? new Date(input.feeDueDate) : null,
         acquiredById: input.acquiredById ?? null,
@@ -211,9 +220,8 @@ export async function createTenant(input: CreateTenantInput, createdById: string
 
   if (input.featureKeys && input.featureKeys.length > 0) {
     const allowed = new Set(SHIPPED_FEATURE_KEYS);
-    const keys = [
-      ...new Set(input.featureKeys.filter((k) => allowed.has(k as FeatureKey))),
-    ] as FeatureKey[];
+    const requested = input.featureKeys.filter((k) => allowed.has(k as FeatureKey)) as FeatureKey[];
+    const keys = mergePlanWithFeatureOverrides(input.tier, requested);
     if (keys.length === 0) {
       throw new ValidationError('At least one valid feature must be selected');
     }
@@ -241,6 +249,14 @@ export async function updateTenant(
   }
 
   const subscriptionDays = input.subscriptionDays ?? tenant.subscriptionDays;
+  const nextTier = input.tier ?? tenant.tier;
+  const isTrial =
+    input.isTrial ?? (input.feeStatus ? input.feeStatus === 'TRIAL' : tenant.feeStatus === 'TRIAL');
+  const feeStatus = isTrial
+    ? ('TRIAL' as const)
+    : input.feeStatus === 'TRIAL'
+      ? ('ACTIVE' as const)
+      : (input.feeStatus ?? (tenant.feeStatus === 'TRIAL' ? 'ACTIVE' : tenant.feeStatus));
   let subscriptionStartAt = tenant.subscriptionStartAt;
   let subscriptionEndsAt = tenant.subscriptionEndsAt;
 
@@ -255,36 +271,45 @@ export async function updateTenant(
     }
   }
 
-  await prisma.tenant.update({
-    where: { id: tenantId },
-    data: {
-      name: input.name,
-      tier: input.tier,
-      trialPlanTier:
-        input.trialPlanTier === undefined
-          ? undefined
-          : (input.trialPlanTier ?? input.tier ?? tenant.tier),
-      feeStatus: input.feeStatus,
-      monthlyFee: input.monthlyFee,
-      feeDueDate: input.feeDueDate
-        ? new Date(input.feeDueDate)
-        : input.feeDueDate === null
-          ? null
-          : undefined,
-      acquiredById: input.acquiredById,
-      subscriptionStartAt:
-        input.subscriptionStartAt !== undefined ? subscriptionStartAt : undefined,
-      subscriptionEndsAt:
-        input.subscriptionStartAt !== undefined || input.subscriptionDays !== undefined
-          ? subscriptionEndsAt
-          : undefined,
-      subscriptionDays: input.subscriptionDays,
-    },
+  const resetToPlan = Boolean(
+    input.tier && (input.tier !== tenant.tier || input.resetFeaturesToPlan),
+  );
+
+  await prisma.$transaction(async (tx) => {
+    await tx.tenant.update({
+      where: { id: tenantId },
+      data: {
+        name: input.name,
+        tier: input.tier,
+        trialPlanTier: isTrial ? (input.trialPlanTier ?? nextTier) : null,
+        feeStatus,
+        monthlyFee: input.monthlyFee,
+        feeDueDate: input.feeDueDate
+          ? new Date(input.feeDueDate)
+          : input.feeDueDate === null
+            ? null
+            : undefined,
+        acquiredById: input.acquiredById,
+        subscriptionStartAt:
+          input.subscriptionStartAt !== undefined ? subscriptionStartAt : undefined,
+        subscriptionEndsAt:
+          input.subscriptionStartAt !== undefined || input.subscriptionDays !== undefined
+            ? subscriptionEndsAt
+            : undefined,
+        subscriptionDays: input.subscriptionDays,
+      },
+    });
+
+    if (resetToPlan) {
+      const keys = getTierFeaturePreset(nextTier);
+      await tx.tenantFeature.deleteMany({ where: { tenantId } });
+      await tx.tenantFeature.createMany({
+        data: keys.map((featureKey) => ({ tenantId, featureKey, enabledById: updatedById })),
+      });
+    }
   });
 
-  if (input.resetFeaturesToPlan && input.tier && updatedById) {
-    await applyTierPreset(tenantId, input.tier, updatedById);
-  }
+  invalidateAccessCaches(tenantId);
 
   return getTenantById(tenantId);
 }
@@ -310,13 +335,15 @@ export async function updateTenantFeatures(
   });
 
   const allowed = new Set(SHIPPED_FEATURE_KEYS);
-  const newKeys = validKeys.map((k) => k.key as FeatureKey).filter((k) => allowed.has(k));
+  const requestedKeys = validKeys.map((k) => k.key as FeatureKey).filter((k) => allowed.has(k));
+  const newKeys = mergePlanWithFeatureOverrides(tenant.tier as TenantTier, requestedKeys);
 
   if (newKeys.length === 0) {
     throw new ValidationError('At least one feature must remain enabled');
   }
 
   await setTenantFeatures(tenantId, newKeys, enabledById);
+  invalidateAccessCaches(tenantId);
 
   await writeAuditLog({
     tenantId,
@@ -345,6 +372,7 @@ export async function revokeTenantPortalAccess(
   }
 
   await revokeTenantAccess(tenantId, reason, revokedById, ipAddress);
+  invalidateAccessCaches(tenantId);
   return getTenantById(tenantId);
 }
 
@@ -378,6 +406,7 @@ export async function restoreTenantPortalAccess(
     restoredById,
     ipAddress,
   );
+  invalidateAccessCaches(tenantId);
 
   return getTenantById(tenantId);
 }

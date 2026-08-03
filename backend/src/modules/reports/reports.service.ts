@@ -1,5 +1,6 @@
 import { Decimal } from '@prisma/client/runtime/library';
 
+import { pkDayKey, resolvePkDateRange, startOfPkDay, endOfPkDay } from '../core/date-bounds.js';
 import { prisma } from '../core/prisma.js';
 import { getUdhaarAging } from '../customers/ledger.service.js';
 
@@ -33,25 +34,8 @@ function hourLabel(hour: number): string {
   return `${hour - 12} PM`;
 }
 
-function startOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
 function dayKeyInPk(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: PK_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
+  return pkDayKey(d);
 }
 
 function shortDayLabel(isoDate: string): string {
@@ -66,18 +50,11 @@ export async function getDashboardSummary(
   to?: string,
 ) {
   const now = new Date();
-  const rangeStart = startOfLocalDay(from ? new Date(from) : now);
-  const rangeEnd = endOfLocalDay(to ? new Date(to) : now);
-  const start = rangeStart.getTime() <= rangeEnd.getTime() ? rangeStart : rangeEnd;
-  const end = rangeStart.getTime() <= rangeEnd.getTime() ? rangeEnd : rangeStart;
+  const { start, end, fromIso, toIso, isSingleDay } = resolvePkDateRange(from, to, now);
 
   const durationMs = Math.max(end.getTime() - start.getTime(), 24 * 60 * 60 * 1000 - 1);
   const prevEnd = new Date(start.getTime() - 1);
   const prevStart = new Date(prevEnd.getTime() - durationMs);
-
-  const fromIso = start.toISOString().slice(0, 10);
-  const toIso = end.toISOString().slice(0, 10);
-  const isSingleDay = fromIso === toIso;
 
   const saleWherePeriod = {
     tenantId,
@@ -195,6 +172,12 @@ export async function getDashboardSummary(
             productName: true,
             lineTotal: true,
             quantity: true,
+            product: {
+              select: {
+                categoryId: true,
+                category: { select: { id: true, name: true } },
+              },
+            },
           },
         },
       },
@@ -224,9 +207,48 @@ export async function getDashboardSummary(
   const prevAov = prevCount > 0 ? prevRevenue / prevCount : 0;
 
   const paymentMap = new Map<string, number>();
-  const productMap = new Map<string, { name: string; revenue: number }>();
+  const productMap = new Map<string, { name: string; revenue: number; quantity: number }>();
+  const categoryMap = new Map<string, { name: string; quantity: number; revenue: number }>();
 
   let hourlySales: Array<{ hour: string; revenue: number; transactions: number }> = [];
+
+  const accumulateSaleItems = (
+    items: Array<{
+      productId: string;
+      productName: string;
+      lineTotal: { toString(): string } | number | string;
+      quantity: { toString(): string } | number | string;
+      product?: {
+        categoryId: string | null;
+        category: { id: string; name: string } | null;
+      } | null;
+    }>,
+  ) => {
+    for (const item of items) {
+      const qty = Number(item.quantity);
+      const revenue = Number(item.lineTotal);
+      const existing = productMap.get(item.productId) ?? {
+        name: item.productName,
+        revenue: 0,
+        quantity: 0,
+      };
+      existing.revenue += revenue;
+      existing.quantity += qty;
+      productMap.set(item.productId, existing);
+
+      const cat = item.product?.category;
+      if (cat) {
+        const catRow = categoryMap.get(cat.id) ?? {
+          name: cat.name,
+          quantity: 0,
+          revenue: 0,
+        };
+        catRow.quantity += qty;
+        catRow.revenue += revenue;
+        categoryMap.set(cat.id, catRow);
+      }
+    }
+  };
 
   if (isSingleDay) {
     const hourlyMap = new Map<number, { revenue: number; transactions: number }>();
@@ -250,14 +272,7 @@ export async function getDashboardSummary(
       for (const p of sale.payments) {
         paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
       }
-      for (const item of sale.items) {
-        const existing = productMap.get(item.productId) ?? {
-          name: item.productName,
-          revenue: 0,
-        };
-        existing.revenue += Number(item.lineTotal);
-        productMap.set(item.productId, existing);
-      }
+      accumulateSaleItems(sale.items);
     }
 
     hourlySales = [...hourlyMap.entries()]
@@ -283,14 +298,7 @@ export async function getDashboardSummary(
       for (const p of sale.payments) {
         paymentMap.set(p.paymentMethod, (paymentMap.get(p.paymentMethod) ?? 0) + Number(p.amount));
       }
-      for (const item of sale.items) {
-        const existing = productMap.get(item.productId) ?? {
-          name: item.productName,
-          revenue: 0,
-        };
-        existing.revenue += Number(item.lineTotal);
-        productMap.set(item.productId, existing);
-      }
+      accumulateSaleItems(sale.items);
     }
 
     hourlySales = [...dailyMap.entries()]
@@ -319,9 +327,19 @@ export async function getDashboardSummary(
     .map(([, data]) => ({
       name: data.name,
       revenue: Math.round(data.revenue * 100) / 100,
+      quantitySold: Math.round(data.quantity * 1000) / 1000,
     }))
-    .sort((a, b) => b.revenue - a.revenue)
+    .sort((a, b) => b.quantitySold - a.quantitySold || b.revenue - a.revenue)
     .slice(0, 5);
+
+  const topCategories = [...categoryMap.entries()]
+    .map(([id, data]) => ({
+      id,
+      name: data.name,
+      revenue: Math.round(data.revenue * 100) / 100,
+      quantitySold: Math.round(data.quantity * 1000) / 1000,
+    }))
+    .sort((a, b) => b.quantitySold - a.quantitySold || b.revenue - a.revenue);
 
   return {
     from: fromIso,
@@ -346,21 +364,21 @@ export async function getDashboardSummary(
     hourlySales,
     paymentMethods,
     topProducts,
+    topCategories,
   };
 }
 
 export async function getDailySalesReport(tenantId: string, date?: string, branchId?: string) {
-  const day = date ? new Date(date) : new Date();
-  day.setHours(0, 0, 0, 0);
-  const nextDay = new Date(day);
-  nextDay.setDate(nextDay.getDate() + 1);
+  const dayKey = date?.trim() || pkDayKey(new Date());
+  const day = startOfPkDay(dayKey);
+  const dayEnd = endOfPkDay(dayKey);
 
   const [sales, returnsAgg] = await Promise.all([
     prisma.sale.findMany({
       where: {
         tenantId,
         status: 'COMPLETED',
-        createdAt: { gte: day, lt: nextDay },
+        createdAt: { gte: day, lte: dayEnd },
         ...(branchId ? { branchId } : {}),
       },
       orderBy: { createdAt: 'asc' },
@@ -376,7 +394,7 @@ export async function getDailySalesReport(tenantId: string, date?: string, branc
     prisma.saleReturn.aggregate({
       where: {
         tenantId,
-        createdAt: { gte: day, lt: nextDay },
+        createdAt: { gte: day, lte: dayEnd },
         ...(branchId ? { sale: { branchId } } : {}),
       },
       _sum: { totalAmount: true },
@@ -389,7 +407,7 @@ export async function getDailySalesReport(tenantId: string, date?: string, branc
   const netTotal = Decimal.max(0, grossTotal.minus(returnsAmount));
 
   return {
-    date: day.toISOString().slice(0, 10),
+    date: dayKey,
     total: netTotal.toFixed(2),
     grossTotal: grossTotal.toFixed(2),
     returnsTotal: returnsAmount.toFixed(2),
@@ -416,10 +434,7 @@ export async function getSalesSummary(
   to?: string,
   branchId?: string,
 ) {
-  const start = from ? new Date(from) : new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = to ? new Date(to) : new Date();
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = resolvePkDateRange(from, to);
 
   const saleWhere = {
     tenantId,
@@ -511,7 +526,7 @@ export async function getSalesSummary(
       revenue: data.revenue.toFixed(2),
     }))
     .filter((p) => p.quantitySold > 0 || Number(p.revenue) > 0)
-    .sort((a, b) => Number(b.revenue) - Number(a.revenue))
+    .sort((a, b) => b.quantitySold - a.quantitySold || Number(b.revenue) - Number(a.revenue))
     .slice(0, 10);
 
   return {
@@ -627,10 +642,7 @@ export async function getStockMovementReport(
   to?: string,
   limit = 100,
 ) {
-  const start = from ? new Date(from) : new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = to ? new Date(to) : new Date();
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = resolvePkDateRange(from, to);
   const take = Math.min(Math.max(limit, 1), 1000);
 
   const movements = await prisma.stockMovement.findMany({
@@ -652,10 +664,7 @@ export async function getStockMovementReport(
 }
 
 export async function getStaffPerformanceReport(tenantId: string, from?: string, to?: string) {
-  const start = from ? new Date(from) : new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = to ? new Date(to) : new Date();
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = resolvePkDateRange(from, to);
 
   const sales = await prisma.sale.groupBy({
     by: ['cashierId'],

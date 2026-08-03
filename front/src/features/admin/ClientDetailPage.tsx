@@ -20,14 +20,18 @@ import {
   toDatetimeLocalValue,
 } from '@/features/admin/admin-utils';
 import { ApiError, api } from '@/lib/api-client';
+import { PRICING_PLANS, resolveBillingCycle, type BillingCycle } from '@/lib/pricing-plans';
 import type { TenantDetail, TenantUser } from '@/types/api';
 
-const feeStatusOptions = ['TRIAL', 'ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => ({
+const feeStatusOptions = ['ACTIVE', 'OVERDUE', 'SUSPENDED'].map((s) => ({
   value: s,
   label: s,
 }));
 
-const tierOptions = Object.values(TENANT_TIERS).map((t) => ({ value: t, label: t }));
+function planPrice(tier: string, cycle: BillingCycle): string {
+  const plan = PRICING_PLANS.find((item) => item.id === tier);
+  return String(cycle === 'yearly' ? (plan?.yearlyPrice ?? 0) : (plan?.monthlyPrice ?? 0));
+}
 
 function accessAccent(status: TenantDetail['accessStatus']): 'default' | 'warning' | 'danger' {
   if (
@@ -38,14 +42,27 @@ function accessAccent(status: TenantDetail['accessStatus']): 'default' | 'warnin
   ) {
     return 'default';
   }
-  if (
-    status === 'payment_overdue' ||
-    status === 'trial_expired_starter' ||
-    status === 'subscription_expired_starter'
-  ) {
+  if (status === 'payment_overdue') {
     return 'warning';
   }
   return 'danger';
+}
+
+function isPortalOpen(tenant: {
+  isActive: boolean;
+  accessStatus?: string | null;
+  isSoftLocked?: boolean;
+}): boolean {
+  if (!tenant.isActive) return false;
+  if (tenant.isSoftLocked) return false;
+  const status = tenant.accessStatus ?? '';
+  return ![
+    'access_revoked',
+    'trial_expired',
+    'subscription_expired',
+    'trial_expired_starter',
+    'subscription_expired_starter',
+  ].includes(status);
 }
 
 export function ClientDetailPage() {
@@ -56,6 +73,8 @@ export function ClientDetailPage() {
     name: '',
     tier: TENANT_TIERS.STANDARD as string,
     trialPlanTier: TENANT_TIERS.STANDARD as string,
+    isTrial: true,
+    billingCycle: 'monthly' as BillingCycle,
     feeStatus: 'TRIAL',
     monthlyFee: '',
     feeDueDate: '',
@@ -74,6 +93,9 @@ export function ClientDetailPage() {
 
   const [userModal, setUserModal] = useState<{ user: TenantUser; activate: boolean } | null>(null);
   const [deleteUserModal, setDeleteUserModal] = useState<TenantUser | null>(null);
+  const [passwordUser, setPasswordUser] = useState<TenantUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [mustChangePassword, setMustChangePassword] = useState(true);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const [newUser, setNewUser] = useState({
@@ -107,6 +129,8 @@ export function ClientDetailPage() {
       name: tenant.name,
       tier: tenant.tier,
       trialPlanTier: tenant.trialPlanTier ?? tenant.tier,
+      isTrial: tenant.isTrial ?? tenant.feeStatus === 'TRIAL',
+      billingCycle: resolveBillingCycle(tenant.subscriptionDays, tenant.billingCycle),
       feeStatus: tenant.feeStatus,
       monthlyFee: tenant.monthlyFee ?? '',
       feeDueDate: tenant.feeDueDate ?? '',
@@ -129,18 +153,28 @@ export function ClientDetailPage() {
       return api.platform.updateTenant(tenantId, {
         name: form.name,
         tier,
-        trialPlanTier: opts?.tier ?? form.trialPlanTier,
-        feeStatus: form.feeStatus,
+        isTrial: form.isTrial,
+        trialPlanTier: form.isTrial ? (opts?.tier ?? form.trialPlanTier) : null,
+        feeStatus: form.isTrial ? 'TRIAL' : form.feeStatus === 'TRIAL' ? 'ACTIVE' : form.feeStatus,
         monthlyFee: form.monthlyFee ? Number(form.monthlyFee) : null,
         feeDueDate: form.feeDueDate || null,
         subscriptionStartAt: new Date(form.subscriptionStartAt).toISOString(),
-        subscriptionDays: Number(form.subscriptionDays),
+        subscriptionDays: form.isTrial
+          ? Number(form.subscriptionDays)
+          : form.billingCycle === 'yearly'
+            ? 365
+            : 30,
         resetFeaturesToPlan: opts?.resetFeaturesToPlan ?? false,
       });
     },
     onSuccess: (_data, vars) => {
       if (vars?.tier) {
-        setForm((f) => ({ ...f, tier: vars.tier!, trialPlanTier: vars.tier! }));
+        setForm((f) => ({
+          ...f,
+          tier: vars.tier!,
+          trialPlanTier: vars.tier!,
+          monthlyFee: f.isTrial ? f.monthlyFee : planPrice(vars.tier!, f.billingCycle),
+        }));
       }
       if (vars?.resetFeaturesToPlan && vars.tier) {
         setFeatureKeys(getTierFeaturePreset(vars.tier as TenantTier));
@@ -177,7 +211,7 @@ export function ClientDetailPage() {
     mutationFn: () =>
       api.platform.restoreTenantAccess(tenantId, {
         subscriptionDays: Number(restoreDays) || 30,
-        feeStatus: 'ACTIVE',
+        feeStatus: tenant?.isTrial || tenant?.feeStatus === 'TRIAL' ? 'TRIAL' : 'ACTIVE',
       }),
     onSuccess: () => {
       setRestoreOpen(false);
@@ -220,20 +254,40 @@ export function ClientDetailPage() {
     onError: (e) => setActionError(e instanceof ApiError ? e.message : 'Delete user failed'),
   });
 
+  const setUserPassword = useMutation({
+    mutationFn: () =>
+      api.platform.setTenantUserPassword(tenantId, passwordUser!.id, {
+        password: newPassword,
+        mustChangePassword,
+      }),
+    onSuccess: () => {
+      setPasswordUser(null);
+      setNewPassword('');
+      setMustChangePassword(true);
+      setActionError('');
+    },
+    onError: (e) => setActionError(e instanceof ApiError ? e.message : 'Password reset failed'),
+  });
+
   const assignSalesRep = useMutation({
     mutationFn: (acquiredById: string | null) =>
       api.platform.updateTenant(tenantId, { acquiredById: acquiredById || null }),
     onSuccess: invalidate,
   });
 
-  const portalOpen =
-    tenant?.isActive && tenant.accessStatus !== 'revoked' && tenant.accessStatus !== 'expired';
+  const portalOpen = tenant ? isPortalOpen(tenant) : false;
 
   if (isLoading || !tenant) return <PageLoader />;
 
   const accessSummary = `${accessStatusLabel(tenant.accessStatus)}${
     tenant.daysRemaining != null && portalOpen ? ` · ${tenant.daysRemaining} day(s) left` : ''
   }`;
+  const selectedPreset = getTierFeaturePreset(form.tier as TenantTier);
+  const presetSet = new Set<string>(selectedPreset);
+  const extraFeatures = featureKeys.filter((key) => !presetSet.has(key));
+  const optionalFeatureDefinitions = FEATURE_REGISTRY.filter(
+    (feature) => !presetSet.has(feature.key),
+  );
 
   return (
     <div className="space-y-6">
@@ -267,7 +321,7 @@ export function ClientDetailPage() {
       )}
 
       <CollapsibleSection
-        title="Portal access"
+        title="Overview & access"
         summary={accessSummary}
         defaultOpen={!portalOpen}
         accent={accessAccent(tenant.accessStatus)}
@@ -308,9 +362,10 @@ export function ClientDetailPage() {
           )}
 
           <p className="text-xs text-text-muted">
-            Trial/subscription end soft-locks the shop to Starter (sales still work). Only{' '}
-            <strong>Revoke portal access</strong> fully blocks login — use that for non-payment or
-            abuse.
+            When the {tenant.isTrial ? 'trial' : 'subscription'} end date passes, login is blocked
+            automatically until you renew (or convert trial to paid). Use{' '}
+            <strong>Revoke portal access</strong> only for abuse or manual cut-off before the end
+            date.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -328,8 +383,8 @@ export function ClientDetailPage() {
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Shop settings"
-        summary={`${form.name} · ${form.tier}`}
+        title="Plan & billing"
+        summary={`${form.tier} · ${form.isTrial ? 'Trial' : form.billingCycle === 'yearly' ? 'Yearly' : 'Monthly'}`}
         defaultOpen={false}
       >
         <div className="grid gap-4 md:grid-cols-2">
@@ -337,59 +392,6 @@ export function ClientDetailPage() {
             label="Shop name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <Select
-            label="Plan pack"
-            value={form.tier}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (next !== tenant.tier && featureKeys.length > 0) {
-                setPendingPlanReset(next);
-                return;
-              }
-              setForm({ ...form, tier: next, trialPlanTier: next });
-            }}
-            options={tierOptions}
-          />
-          <Select
-            label="Trial plan (features during trial)"
-            value={form.trialPlanTier}
-            onChange={(e) => setForm({ ...form, trialPlanTier: e.target.value })}
-            options={tierOptions}
-          />
-          <Select
-            label="Fee status"
-            value={form.feeStatus}
-            onChange={(e) => setForm({ ...form, feeStatus: e.target.value })}
-            options={feeStatusOptions}
-          />
-          <Input
-            label="Monthly fee (Rs)"
-            type="number"
-            min={0}
-            value={form.monthlyFee}
-            onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })}
-          />
-          <Input
-            label="Fee due date"
-            type="date"
-            value={form.feeDueDate}
-            onChange={(e) => setForm({ ...form, feeDueDate: e.target.value })}
-          />
-          <Input
-            label="Trial / subscription start"
-            type="datetime-local"
-            value={form.subscriptionStartAt}
-            onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
-          />
-          <Input
-            label="Trial length (days)"
-            type="number"
-            min={1}
-            max={365}
-            value={form.subscriptionDays}
-            onChange={(e) => setForm({ ...form, subscriptionDays: e.target.value })}
-            hint={`Ends ${tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).toLocaleString() : '—'}`}
           />
           <Select
             label="Sales rep"
@@ -401,39 +403,179 @@ export function ClientDetailPage() {
             ]}
           />
         </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {PRICING_PLANS.map((plan) => {
+            const active = form.tier === plan.id;
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => {
+                  if (plan.id !== form.tier) setPendingPlanReset(plan.id);
+                }}
+                className={`rounded-xl border p-3 text-left ${
+                  active
+                    ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600'
+                    : 'border-border hover:border-brand-300'
+                }`}
+              >
+                <span className="font-semibold">{plan.name}</span>
+                <span className="mt-1 block text-xs text-text-muted">{plan.tagline}</span>
+                <span className="mt-2 block text-sm font-semibold text-brand-700">
+                  Rs {plan.monthlyPrice.toLocaleString('en-PK')} / month
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 rounded-xl border border-border bg-surface-muted/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">{form.isTrial ? 'Trial access' : 'Paid subscription'}</p>
+              <p className="text-xs text-text-muted">
+                {form.isTrial
+                  ? 'Trial controls are shown only while this client is on a trial.'
+                  : 'This client has no trial controls or trial status.'}
+              </p>
+            </div>
+            {form.isTrial && (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    isTrial: false,
+                    feeStatus: 'ACTIVE',
+                    monthlyFee: planPrice(form.tier, form.billingCycle),
+                    subscriptionStartAt: toDatetimeLocalValue(),
+                  })
+                }
+              >
+                Convert to paid
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {form.isTrial ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Input
+              label="Trial starts"
+              type="datetime-local"
+              value={form.subscriptionStartAt}
+              onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
+            />
+            <Input
+              label="Trial length (days)"
+              type="number"
+              min={1}
+              max={365}
+              value={form.subscriptionDays}
+              onChange={(e) => setForm({ ...form, subscriptionDays: e.target.value })}
+              hint={`Ends ${tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).toLocaleString() : '—'}`}
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Select
+              label="Billing cycle"
+              value={form.billingCycle}
+              onChange={(e) => {
+                const billingCycle = e.target.value as BillingCycle;
+                setForm({
+                  ...form,
+                  billingCycle,
+                  monthlyFee: planPrice(form.tier, billingCycle),
+                });
+              }}
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'yearly', label: 'Yearly' },
+              ]}
+            />
+            <Select
+              label="Billing status"
+              value={form.feeStatus === 'TRIAL' ? 'ACTIVE' : form.feeStatus}
+              onChange={(e) => setForm({ ...form, feeStatus: e.target.value })}
+              options={feeStatusOptions}
+            />
+            <Input
+              label="Agreed fee (Rs)"
+              type="number"
+              min={0}
+              value={form.monthlyFee}
+              onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })}
+            />
+            <Input
+              label="Next payment due"
+              type="date"
+              value={form.feeDueDate}
+              onChange={(e) => setForm({ ...form, feeDueDate: e.target.value })}
+            />
+            <Input
+              label="Subscription starts"
+              type="datetime-local"
+              value={form.subscriptionStartAt}
+              onChange={(e) => setForm({ ...form, subscriptionStartAt: e.target.value })}
+            />
+          </div>
+        )}
+
+        <div className="mt-5 rounded-xl border border-border p-3">
+          <p className="text-sm font-semibold">
+            Included with {form.tier} ({selectedPreset.length})
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {FEATURE_REGISTRY.filter((feature) => presetSet.has(feature.key)).map((feature) => (
+              <Badge key={feature.key} variant="default">
+                {feature.label}
+              </Badge>
+            ))}
+          </div>
+          {optionalFeatureDefinitions.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm font-semibold text-brand-700">
+                Advanced feature overrides ({extraFeatures.length})
+              </summary>
+              <div className="mt-3">
+                <FeaturePicker
+                  features={optionalFeatureDefinitions}
+                  selected={extraFeatures}
+                  onChange={(extras) => setFeatureKeys([...selectedPreset, ...extras])}
+                />
+                <Button
+                  className="mt-3"
+                  loading={saveFeatures.isPending}
+                  onClick={() => saveFeatures.mutate()}
+                >
+                  Save overrides
+                </Button>
+              </div>
+            </details>
+          )}
+        </div>
+
         <div className="mt-4 flex flex-wrap gap-2">
           <Button loading={saveSettings.isPending} onClick={() => saveSettings.mutate({})}>
-            Save settings
+            {tenant.isTrial && !form.isTrial ? 'Convert & save billing' : 'Save plan & billing'}
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const start = new Date();
-              setForm({
-                ...form,
-                feeStatus: 'TRIAL',
-                subscriptionStartAt: toDatetimeLocalValue(start.toISOString()),
-              });
-            }}
-          >
-            Restart trial from now
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const ended = new Date(Date.now() - 60_000);
-              setForm({
-                ...form,
-                subscriptionStartAt: toDatetimeLocalValue(
-                  new Date(
-                    ended.getTime() - Number(form.subscriptionDays || 30) * 86400000,
-                  ).toISOString(),
-                ),
-              });
-            }}
-          >
-            End trial early (set dates past)
-          </Button>
+          {form.isTrial && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const start = new Date();
+                setForm({
+                  ...form,
+                  feeStatus: 'TRIAL',
+                  subscriptionStartAt: toDatetimeLocalValue(start.toISOString()),
+                });
+              }}
+            >
+              Restart trial from now
+            </Button>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -453,24 +595,6 @@ export function ClientDetailPage() {
         }
         confirmLabel="Change plan & reset features"
       />
-
-      <CollapsibleSection
-        title="POS features"
-        summary={`${featureKeys.length} of ${FEATURE_REGISTRY.length} enabled`}
-        defaultOpen={false}
-      >
-        <FeaturePicker
-          features={FEATURE_REGISTRY}
-          selected={featureKeys}
-          onChange={setFeatureKeys}
-          minFeatures={1}
-        />
-        <div className="mt-4">
-          <Button loading={saveFeatures.isPending} onClick={() => saveFeatures.mutate()}>
-            Save features
-          </Button>
-        </div>
-      </CollapsibleSection>
 
       <CollapsibleSection
         title="Users"
@@ -504,6 +628,17 @@ export function ClientDetailPage() {
                     <p className="truncate text-xs text-text-muted">{u.email}</p>
                   </div>
                   <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setPasswordUser(u);
+                        setNewPassword('');
+                        setMustChangePassword(true);
+                      }}
+                    >
+                      Set password
+                    </Button>
                     {u.isActive ? (
                       <Button
                         variant="ghost"
@@ -731,6 +866,67 @@ export function ClientDetailPage() {
           value={restoreDays}
           onChange={(e) => setRestoreDays(e.target.value)}
         />
+      </Modal>
+
+      <Modal
+        open={passwordUser != null}
+        onClose={() => {
+          setPasswordUser(null);
+          setNewPassword('');
+          setMustChangePassword(true);
+        }}
+        title="Set user password"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setPasswordUser(null);
+                setNewPassword('');
+                setMustChangePassword(true);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              loading={setUserPassword.isPending}
+              disabled={newPassword.length < 8}
+              onClick={() => {
+                if (newPassword.length < 8) {
+                  setActionError('Password must be at least 8 characters');
+                  return;
+                }
+                setActionError('');
+                setUserPassword.mutate();
+              }}
+            >
+              Set password
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-muted">
+            Set a new password for <strong className="text-text">{passwordUser?.fullName}</strong>.
+            Existing sessions will be signed out.
+          </p>
+          <Input
+            label="New password (min 8 characters)"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <label className="flex items-start gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={mustChangePassword}
+              onChange={(e) => setMustChangePassword(e.target.checked)}
+            />
+            Require password change on next login
+          </label>
+        </div>
       </Modal>
 
       <Modal

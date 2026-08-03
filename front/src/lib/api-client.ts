@@ -191,10 +191,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       );
     }
     const err = (await res.json().catch(() => ({ message: res.statusText }))) as ApiErrorBody;
-    // Soft-lock uses UPGRADE_REQUIRED — do not log the user out.
-    // Only hard-revoke / missing tenant / deactivated user clear the session.
-    const blockedCodes = new Set(['TENANT_ACCESS_REVOKED', 'TENANT_NOT_FOUND', 'USER_DEACTIVATED']);
-    if (res.status === 403 && err.code && blockedCodes.has(err.code)) {
+    // Hard-block clears the session: revoke, missing tenant, deactivated user, or ended period.
+    const blockedCodes = new Set([
+      'TENANT_ACCESS_REVOKED',
+      'TENANT_NOT_FOUND',
+      'USER_DEACTIVATED',
+      'TENANT_TRIAL_EXPIRED',
+      'TENANT_SUBSCRIPTION_EXPIRED',
+    ]);
+    if ((res.status === 403 || res.status === 401) && err.code && blockedCodes.has(err.code)) {
       clearTokens();
     }
     throw new ApiError(err.message ?? 'Request failed', res.status, err.code, err.details);
@@ -637,5 +642,17 @@ export const api = {
       apiRequest<{ success: boolean }>(`/tenants/${tenantId}/users/${userId}`, {
         method: 'DELETE',
       }),
+    setTenantUserPassword: (
+      tenantId: string,
+      userId: string,
+      body: { password: string; mustChangePassword?: boolean },
+    ) =>
+      apiRequest<{ success: boolean; mustChangePassword: boolean }>(
+        `/tenants/${tenantId}/users/${userId}/set-password`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      ),
   },
 };

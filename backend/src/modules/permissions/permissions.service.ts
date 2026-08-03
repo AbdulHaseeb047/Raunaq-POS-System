@@ -5,12 +5,20 @@ import type { UserRole } from '@pos/shared';
 import { ValidationError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toPlanInput } from '../tenants/subscription.service.js';
+import { invalidateAccessCaches } from './access-cache.js';
 
 const ALL_FEATURE_KEYS = Object.values(FEATURES) as FeatureKey[];
 
+export function mergePlanWithFeatureOverrides(
+  tier: TenantTier,
+  requested: FeatureKey[],
+): FeatureKey[] {
+  return [...new Set([...getTierFeaturePreset(tier), ...requested])];
+}
+
 /**
  * Resolve features for a user.
- * Soft-locked tenants get Starter features only (ignores custom overrides).
+ * Expired periods grant no features (portal login is hard-blocked separately).
  * Active trial/paid uses stored TenantFeature rows (plan defaults + admin overrides).
  */
 export async function resolveUserFeatures(
@@ -48,12 +56,7 @@ export async function resolveTenantEffectiveFeatureKeys(tenantId: string): Promi
   if (!tenant) return [];
 
   const effective = getEffectivePlan(toPlanInput(tenant));
-  if (effective.isAccessRevoked) return [];
-
-  // Soft-lock: Starter only — ignore per-client overrides above Starter.
-  if (effective.isSoftLocked) {
-    return effective.featureKeys;
-  }
+  if (effective.isAccessRevoked || effective.isSoftLocked) return [];
 
   const stored = await getTenantFeatures(tenantId);
   if (stored.length === 0) {
@@ -100,6 +103,7 @@ export async function setTenantFeatures(
       });
     }
   });
+  invalidateAccessCaches(tenantId);
 }
 
 export async function applyTierPreset(
@@ -134,6 +138,7 @@ export async function setStaffFeatures(
       });
     }
   });
+  invalidateAccessCaches(tenantId);
 }
 
 export function userHasFeature(userFeatures: FeatureKey[], required: FeatureKey): boolean {

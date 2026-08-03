@@ -24,7 +24,7 @@ import { Select } from '@/components/ui/Select';
 import { SyncBanner } from '@/components/layout/SyncBanner';
 import { TrialBanner } from '@/components/billing/TrialBanner';
 import { SettingsDialogProvider } from '@/features/settings/settings-dialog-context';
-import { FEATURES, hasFeature } from '@/lib/features';
+import { FEATURES, hasPlanFeature } from '@/lib/features';
 import { useAuth } from '@/lib/auth';
 import { useSidebarCollapsed } from '@/lib/use-sidebar-collapsed';
 import { RaunaqMark } from '@/components/brand/RaunaqMark';
@@ -47,7 +47,8 @@ const navSections: NavSection[] = [
     title: 'Billing',
     items: [
       { to: '/sale', label: 'Register', icon: IconSale, feature: FEATURES.BILLING_CREATE_SALE },
-      { to: '/sales', label: 'History', icon: IconHistory, feature: FEATURES.BILLING_CREATE_SALE },
+      // Sales history is a basic need on every plan (including Starter).
+      { to: '/sales', label: 'History', icon: IconHistory, feature: null },
       { to: '/discounts', label: 'Discounts', icon: IconTag, feature: FEATURES.BILLING_DISCOUNT },
     ],
   },
@@ -211,11 +212,14 @@ export function AppShell() {
       items: section.items
         .filter(
           (item) =>
-            !item.feature || hasFeature(user, item.feature) || assignedKeys.has(item.feature),
+            !item.feature || hasPlanFeature(user, item.feature) || assignedKeys.has(item.feature),
         )
         .map((item) => ({
           ...item,
-          locked: Boolean(item.feature && !hasFeature(user, item.feature)),
+          // Only lock features that are outside the shop’s assigned plan (upsell teasers).
+          locked: Boolean(
+            item.feature && !hasPlanFeature(user, item.feature) && !assignedKeys.has(item.feature),
+          ),
         })),
     }))
     .filter((section) => section.items.length > 0);

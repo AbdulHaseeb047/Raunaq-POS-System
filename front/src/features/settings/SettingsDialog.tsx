@@ -22,6 +22,12 @@ import { api, ApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { downloadCsv, INVENTORY_CSV_HEADERS, productToCsvRow } from '@/lib/csv-utils';
 import { FEATURES, hasFeature } from '@/lib/features';
+import {
+  clearReceiptPrefs,
+  loadReceiptPrefs,
+  saveReceiptPrefs,
+  type ReceiptAfterSalePrefs,
+} from '@/lib/receipt-prefs';
 import { downloadSalesReportPdf } from '@/lib/sales-pdf';
 
 export type SettingsTabId =
@@ -170,7 +176,10 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
           formValue('receiptHeaderMode', data?.receiptHeaderMode ?? 'NAME'),
         ) as 'NAME' | 'LOGO' | 'BOTH',
         printReceiptsDefault: Boolean(
-          formValue('printReceiptsDefault', data?.printReceiptsDefault ?? true),
+          formValue('printReceiptsDefault', data?.printReceiptsDefault ?? false),
+        ),
+        showReceiptAfterSale: Boolean(
+          formValue('showReceiptAfterSale', data?.showReceiptAfterSale ?? true),
         ),
         maxDiscountPercentStaff: formValue(
           'maxDiscountPercentStaff',
@@ -389,6 +398,22 @@ export function SettingsDialog({ open, tab, onTabChange, onClose }: SettingsDial
 
 function AccountPanel({ onChangePassword }: { onChangePassword: () => void }) {
   const { user } = useAuth();
+  const canPrint = hasFeature(user, FEATURES.BILLING_PRINT_RECEIPT);
+  const [prefs, setPrefs] = useState(() => loadReceiptPrefs(user?.id));
+  const [savedMsg, setSavedMsg] = useState('');
+
+  useEffect(() => {
+    setPrefs(loadReceiptPrefs(user?.id));
+  }, [user?.id]);
+
+  const persist = (next: ReceiptAfterSalePrefs) => {
+    if (!user?.id) return;
+    setPrefs(next);
+    saveReceiptPrefs(user.id, next);
+    setSavedMsg('Saved for this login');
+    window.setTimeout(() => setSavedMsg(''), 2500);
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -413,6 +438,112 @@ function AccountPanel({ onChangePassword }: { onChangePassword: () => void }) {
         </span>
         <span className="text-text-muted">›</span>
       </button>
+
+      <div className="space-y-3 rounded-2xl border border-border px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-text">My receipt preferences</p>
+          <p className="mt-0.5 text-xs text-text-muted">
+            Applies only to this login on this device. Leave unchecked options to use the shop
+            default from Settings → Receipts.
+          </p>
+        </div>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded"
+            checked={prefs.showReceiptAfterSale === true}
+            onChange={(e) =>
+              persist({
+                ...prefs,
+                showReceiptAfterSale: e.target.checked ? true : undefined,
+              })
+            }
+          />
+          <span>
+            <span className="font-medium text-text">Always show receipt after sale</span>
+            <span className="mt-0.5 block text-xs text-text-muted">
+              Force the on-screen receipt for this user.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded"
+            checked={prefs.showReceiptAfterSale === false}
+            onChange={(e) =>
+              persist({
+                ...prefs,
+                showReceiptAfterSale: e.target.checked ? false : undefined,
+              })
+            }
+          />
+          <span>
+            <span className="font-medium text-text">Skip receipt screen after sale</span>
+            <span className="mt-0.5 block text-xs text-text-muted">
+              Close checkout and keep selling — open History when you need a reprint.
+            </span>
+          </span>
+        </label>
+        {canPrint && (
+          <>
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded"
+                checked={prefs.printReceiptsDefault === true}
+                onChange={(e) =>
+                  persist({
+                    ...prefs,
+                    printReceiptsDefault: e.target.checked ? true : undefined,
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium text-text">Always auto-print</span>
+                <span className="mt-0.5 block text-xs text-text-muted">
+                  Print immediately when a sale is saved.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded"
+                checked={prefs.printReceiptsDefault === false}
+                onChange={(e) =>
+                  persist({
+                    ...prefs,
+                    printReceiptsDefault: e.target.checked ? false : undefined,
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium text-text">Never auto-print</span>
+                <span className="mt-0.5 block text-xs text-text-muted">
+                  Only print when you press Print on the receipt.
+                </span>
+              </span>
+            </label>
+          </>
+        )}
+        {(prefs.showReceiptAfterSale !== undefined || prefs.printReceiptsDefault !== undefined) && (
+          <button
+            type="button"
+            className="text-xs font-medium text-brand-700 hover:underline"
+            onClick={() => {
+              if (!user?.id) return;
+              clearReceiptPrefs(user.id);
+              setPrefs({});
+              setSavedMsg('Using shop defaults');
+              window.setTimeout(() => setSavedMsg(''), 2500);
+            }}
+          >
+            Clear my overrides (use shop defaults)
+          </button>
+        )}
+        {savedMsg && <p className="text-xs font-medium text-emerald-700">{savedMsg}</p>}
+      </div>
     </div>
   );
 }
@@ -566,18 +697,47 @@ function ReceiptsPanel({
             <span className="font-medium text-text">03462734539</span>
           </div>
         </div>
-        {canPrint && (
-          <label className="flex items-center gap-3 text-sm">
+        <div className="space-y-3 rounded-xl border border-border bg-surface-muted/40 px-3 py-3">
+          <div>
+            <p className="text-sm font-semibold text-text">After each sale (shop default)</p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              Staff can override these for their own login under Account.
+            </p>
+          </div>
+          <label className="flex items-start gap-3 text-sm">
             <input
               type="checkbox"
-              checked={Boolean(formValue('printReceiptsDefault', true))}
-              onChange={(e) => setForm({ ...form, printReceiptsDefault: e.target.checked })}
+              checked={Boolean(formValue('showReceiptAfterSale', true))}
+              onChange={(e) => setForm({ ...form, showReceiptAfterSale: e.target.checked })}
               disabled={!canEdit}
-              className="h-4 w-4 rounded"
+              className="mt-0.5 h-4 w-4 rounded"
             />
-            Print receipts by default
+            <span>
+              <span className="font-medium text-text">Show receipt on screen</span>
+              <span className="mt-0.5 block text-xs text-text-muted">
+                Open the receipt preview after checkout so you can review or print.
+              </span>
+            </span>
           </label>
-        )}
+          {canPrint && (
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(formValue('printReceiptsDefault', false))}
+                onChange={(e) => setForm({ ...form, printReceiptsDefault: e.target.checked })}
+                disabled={!canEdit}
+                className="mt-0.5 h-4 w-4 rounded"
+              />
+              <span>
+                <span className="font-medium text-text">Auto-print receipt</span>
+                <span className="mt-0.5 block text-xs text-text-muted">
+                  Send to the printer as soon as the sale is saved (works with or without the
+                  on-screen preview).
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
       </section>
     </div>
   );

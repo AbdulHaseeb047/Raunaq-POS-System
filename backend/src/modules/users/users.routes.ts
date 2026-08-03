@@ -17,6 +17,8 @@ import {
   deleteTenantUser,
   listTenantUsers,
   setStaffFeaturesSchema,
+  setTenantUserPassword,
+  setTenantUserPasswordSchema,
   updateTenantUser,
   updateUserFeatures,
   updateUserSchema,
@@ -123,6 +125,22 @@ function registerSuperAdminUserRoutes(app: FastifyInstance): void {
       throw new ValidationError('Invalid request body', parsed.error.flatten());
     }
     return updateTenantUser(tenantId, userId, parsed.data);
+  });
+
+  app.post('/tenants/:tenantId/users/:userId/set-password', writeGuard, async (request) => {
+    const { tenantId, userId } = request.params as { tenantId: string; userId: string };
+    resolveTenantId(request, tenantId);
+    const parsed = setTenantUserPasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid request body', parsed.error.flatten());
+    }
+    return setTenantUserPassword(
+      tenantId,
+      userId,
+      parsed.data,
+      request.user!.id,
+      clientIp(request),
+    );
   });
 
   app.put('/tenants/:tenantId/users/:userId/features', writeGuard, async (request) => {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { resolvePkDateRange } from '../core/date-bounds.js';
 import { NotFoundError } from '../core/errors.js';
 import { prisma } from '../core/prisma.js';
 import { toDecimal } from '../core/money.js';
@@ -43,10 +44,7 @@ export async function listDiscounts(tenantId: string, includeInactive = false) {
 }
 
 export async function getDiscountUsageReport(tenantId: string, from?: string, to?: string) {
-  const start = from ? new Date(from) : new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = to ? new Date(to) : new Date();
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = resolvePkDateRange(from, to);
 
   const usages = await prisma.discountUsage.groupBy({
     by: ['discountRuleId'],
