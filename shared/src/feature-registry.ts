@@ -228,7 +228,11 @@ export function getTierFeaturePreset(tier: TenantTier): FeatureKey[] {
 }
 
 export function normalizePlanTier(tier: TenantTier | string | null | undefined): TenantTier {
-  if (tier === TENANT_TIERS.STANDARD || tier === TENANT_TIERS.PRO || tier === TENANT_TIERS.STARTER) {
+  if (
+    tier === TENANT_TIERS.STANDARD ||
+    tier === TENANT_TIERS.PRO ||
+    tier === TENANT_TIERS.STARTER
+  ) {
     return tier;
   }
   // Legacy Enterprise (and any unknown value) maps to Pro.
