@@ -227,8 +227,13 @@ export function getTierFeaturePreset(tier: TenantTier): FeatureKey[] {
   return [...(PLAN_FEATURES[tier] ?? PLAN_FEATURES[TENANT_TIERS.STARTER])];
 }
 
-export function normalizePlanTier(tier: TenantTier): TenantTier {
-  return tier;
+export function normalizePlanTier(tier: TenantTier | string | null | undefined): TenantTier {
+  if (tier === TENANT_TIERS.STANDARD || tier === TENANT_TIERS.PRO || tier === TENANT_TIERS.STARTER) {
+    return tier;
+  }
+  // Legacy Enterprise (and any unknown value) maps to Pro.
+  if (tier === 'ENTERPRISE') return TENANT_TIERS.PRO;
+  return TENANT_TIERS.STARTER;
 }
 
 export function planHasFeature(tier: TenantTier, feature: FeatureKey): boolean {

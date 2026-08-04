@@ -58,9 +58,19 @@ export function registerErrorHandler(app: FastifyInstance): void {
     ) {
       message =
         'Database is missing search indexes. Redeploy API after migrate deploy completes, then retry.';
+    } else if (
+      /TenantTier|ENTERPRISE|invalid.*enum|Value '.*' not found in enum/i.test(error.message)
+    ) {
+      message =
+        'Database plan enum is out of date. Redeploy the API so prisma migrate deploy can finish (three_tenant_plans).';
     } else if (prismaCode === 'P2010' || /column .* does not exist/i.test(error.message)) {
       message =
         'Database schema is out of date. Run prisma migrate deploy, redeploy API, then retry.';
+    } else if (
+      /show_receipt_after_sale|showReceiptAfterSale/i.test(error.message)
+    ) {
+      message =
+        'Database is missing receipt settings columns. Redeploy API after migrate deploy completes.';
     } else if (
       prismaCode.startsWith('P') ||
       /row-level security|RLS|set_config/i.test(error.message)
