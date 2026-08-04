@@ -1239,11 +1239,7 @@ export function InventoryPage() {
             <Button variant="ghost" type="button" onClick={() => setModal(null)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              form="inventory-stock-form"
-              loading={adjustStock.isPending}
-            >
+            <Button type="submit" form="inventory-stock-form" loading={adjustStock.isPending}>
               Apply
             </Button>
           </>

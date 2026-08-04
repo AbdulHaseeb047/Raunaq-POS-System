@@ -8,17 +8,10 @@ import { Input } from '@/components/ui/Input';
 import { ApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { getHomePath } from '@/lib/features';
-import {
-  SUPPORT_EMAIL,
-  SUPPORT_WHATSAPP_DISPLAY,
-  supportWhatsappUrl,
-} from '@/lib/support';
+import { SUPPORT_EMAIL, SUPPORT_WHATSAPP_DISPLAY, supportWhatsappUrl } from '@/lib/support';
 
 type AccessGate =
-  | { kind: 'subscription' }
-  | { kind: 'trial' }
-  | { kind: 'revoked'; message: string }
-  | null;
+  { kind: 'subscription' } | { kind: 'trial' } | { kind: 'revoked'; message: string } | null;
 
 const PAYMENT_CODES = new Set(['TENANT_SUBSCRIPTION_EXPIRED', 'TENANT_TRIAL_EXPIRED']);
 
@@ -137,7 +130,10 @@ export function LoginPage() {
                   </p>
                   <p className="mt-1">
                     Email:{' '}
-                    <a className="font-medium text-brand-800 underline" href={`mailto:${SUPPORT_EMAIL}`}>
+                    <a
+                      className="font-medium text-brand-800 underline"
+                      href={`mailto:${SUPPORT_EMAIL}`}
+                    >
                       {SUPPORT_EMAIL}
                     </a>
                   </p>
@@ -230,10 +226,11 @@ export function LoginPage() {
                     </p>
                     <p className="border-t border-brand-200/80 pt-2 text-xs leading-relaxed text-brand-800">
                       These passwords are stored <strong>hashed in PostgreSQL</strong> when you run{' '}
-                      <code className="rounded bg-white/60 px-1">npm run db:seed</code> — not checked
-                      in app code. After you change your password, the new hash replaces the old one
-                      in the database, so the seed password will <strong>never work again</strong>{' '}
-                      unless you re-run the seed or reset the account.
+                      <code className="rounded bg-white/60 px-1">npm run db:seed</code> — not
+                      checked in app code. After you change your password, the new hash replaces the
+                      old one in the database, so the seed password will{' '}
+                      <strong>never work again</strong> unless you re-run the seed or reset the
+                      account.
                     </p>
                   </div>
                 )}

@@ -21,8 +21,7 @@ export function TrialBanner() {
         <span className="font-semibold">
           {isTrial ? 'Trial ending soon' : 'Subscription ending soon'}
         </span>
-        {days != null ? ` — ${days} day(s) left.` : '.'}{' '}
-        Renew on time to avoid losing access.
+        {days != null ? ` — ${days} day(s) left.` : '.'} Renew on time to avoid losing access.
       </p>
       <Button size="sm" variant="secondary" onClick={() => navigate('/upgrade')}>
         {isTrial ? 'Convert to paid' : 'Renew / upgrade'}

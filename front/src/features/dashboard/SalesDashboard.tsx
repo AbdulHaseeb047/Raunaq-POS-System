@@ -368,7 +368,10 @@ export function SalesDashboard({
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip content={<UnitsTooltip currency={currency} />} cursor={{ fill: '#f1f5f9' }} />
+              <Tooltip
+                content={<UnitsTooltip currency={currency} />}
+                cursor={{ fill: '#f1f5f9' }}
+              />
               <Bar dataKey="quantitySold" name="Units sold" radius={[0, 8, 8, 0]} barSize={18}>
                 {topProducts.map((item) => (
                   <Cell key={item.name} fill="#059669" />
