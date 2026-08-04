@@ -66,9 +66,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     } else if (prismaCode === 'P2010' || /column .* does not exist/i.test(error.message)) {
       message =
         'Database schema is out of date. Run prisma migrate deploy, redeploy API, then retry.';
-    } else if (
-      /show_receipt_after_sale|showReceiptAfterSale/i.test(error.message)
-    ) {
+    } else if (/show_receipt_after_sale|showReceiptAfterSale/i.test(error.message)) {
       message =
         'Database is missing receipt settings columns. Redeploy API after migrate deploy completes.';
     } else if (
